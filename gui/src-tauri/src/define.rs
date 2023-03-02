@@ -1,0 +1,11 @@
+//pub const CRATE_UPDATE_DATE: &str = "2022-12-31";
+//pub const CRATE_REPOSITORY: &str = "https://github.com/shellrow/enmap";
+//pub const DEFAULT_SRC_PORT: u16 = 53443;
+pub const ENMAP_OUI: &str = include_str!("../../../data/enmap-oui.json");
+pub const ENMAP_TCP_PORT: &str = include_str!("../../../data/enmap-tcp-port.json");
+pub const ENMAP_DEFAULT_PORTS: &str = include_str!("../../../data/enmap-default-ports.txt");
+pub const ENMAP_WELLKNOWN_PORTS: &str = include_str!("../../../data/enmap-wellknown-ports.txt");
+pub const ENMAP_HTTP: &str = include_str!("../../../data/enmap-http.txt");
+pub const ENMAP_HTTPS: &str = include_str!("../../../data/enmap-https.txt");
+pub const ENMAP_OSDB: &str = include_str!("../../../data/enmap-osdb-min.json");
+pub const ENMAP_OS_TTL: &str = include_str!("../../../data/enmap-os-ttl.json");
