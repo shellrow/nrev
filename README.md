@@ -1,5 +1,5 @@
 # enmap
-Cross-platform network mapper
+Simple, but enhanced network mapper.
 
 ## Features
 - Port Scan

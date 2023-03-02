@@ -1,4 +1,5 @@
 # enmap-desktop
-Cross-platform network mapper
+Simple, but enhanced network mapper.  
+Graphical enmap frontend.
 
 **Under development**
