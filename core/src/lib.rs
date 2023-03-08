@@ -8,3 +8,4 @@ pub mod scan;
 pub mod model;
 pub mod define;
 pub mod validator;
+pub mod db;

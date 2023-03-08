@@ -22,6 +22,17 @@ pub enum CommandType {
 }
 
 impl CommandType {
+    pub fn id(&self) -> String {
+        match *self {
+            CommandType::PortScan => String::from("port_scan"),
+            CommandType::HostScan => String::from("host_scan"),
+            CommandType::Ping => String::from("ping"),
+            CommandType::Traceroute => String::from("traceroute"),
+            CommandType::DomainScan => String::from("domain_scan"),
+            CommandType::BatchScan => String::from("batch_scan"),
+            CommandType::PassiveScan => String::from("passive_scan"),
+        }
+    }
     pub fn name(&self) -> String {
         match *self {
             CommandType::PortScan => String::from("Port scan"),
@@ -55,6 +66,14 @@ pub enum Protocol {
 }
 
 impl Protocol {
+    pub fn id(&self) -> String {
+        match *self {
+            Protocol::TCP => String::from("TCP"),
+            Protocol::UDP => String::from("UDP"),
+            Protocol::ICMPv4 => String::from("ICMPv4"),
+            Protocol::ICMPv6 => String::from("ICMPv6"),
+        }
+    }
     pub fn name(&self) -> String {
         match *self {
             Protocol::TCP => String::from("TCP"),

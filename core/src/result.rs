@@ -2,6 +2,8 @@ use std::{time::Duration, vec};
 use std::net::IpAddr;
 use serde::{Serialize, Deserialize};
 
+use crate::option::Protocol;
+
 /// Exit status of probe
 #[derive(Clone, Debug ,Serialize, Deserialize)]
 pub enum ProbeStatus {
@@ -123,6 +125,8 @@ impl PortScanResult {
 #[derive(Clone, Debug ,Serialize, Deserialize)]
 pub struct HostScanResult {
     pub hosts: Vec<HostInfo>,
+    pub protocol: Protocol,
+    pub port_number: u16,
     pub host_scan_time: Duration,
     pub lookup_time: Duration,
     pub total_scan_time: Duration,
@@ -132,6 +136,8 @@ impl HostScanResult {
     pub fn new() -> HostScanResult {
         HostScanResult { 
             hosts: vec![], 
+            protocol: Protocol::ICMPv4,
+            port_number: 0,
             host_scan_time: Duration::from_millis(0), 
             lookup_time: Duration::from_millis(0), 
             total_scan_time: Duration::from_millis(0),

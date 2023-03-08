@@ -19,6 +19,7 @@ fn main() {
         show_app_desc();
         std::process::exit(0);
     }
+    enmap_core::db::init_db().unwrap();
     let app = get_app_settings();
     let matches = app.get_matches();
     let opt: option::ScanOption = parser::parse_args(matches);

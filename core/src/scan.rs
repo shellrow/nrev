@@ -265,6 +265,10 @@ pub async fn run_service_scan(opt: ScanOption, msg_tx: &mpsc::Sender<String>) ->
 
 pub async fn run_node_scan(opt: ScanOption, msg_tx: &mpsc::Sender<String>) -> HostScanResult {
     let mut result: HostScanResult = HostScanResult::new();
+    result.protocol = opt.protocol;
+    if opt.targets.len() > 0 {
+        result.port_number = opt.targets[0].ports[0];
+    }
     // Host Scan
     match msg_tx.send(String::from(define::MESSAGE_START_HOSTSCAN)) {
         Ok(_) => {},

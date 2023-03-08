@@ -23,3 +23,5 @@ Cargo.lock
 
 # mac
 .DS_Store
+# DB 
+emdb.DB

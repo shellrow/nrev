@@ -1,4 +1,4 @@
-pub const CRATE_UPDATE_DATE: &str = "2022-10-29";
+pub const CRATE_UPDATE_DATE: &str = "2023-03-03";
 pub const CRATE_REPOSITORY: &str = "https://github.com/shellrow/enmap";
 pub const DEFAULT_SRC_PORT: u16 = 53443;
 pub const ENMAP_OUI: &str = include_str!("../../data/enmap-oui.json");
