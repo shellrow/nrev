@@ -54,6 +54,15 @@ pub async fn exec_portscan(opt: models::PortArg) -> PortScanResult {
         })
     });
     let result: PortScanResult = handle.join().unwrap();
+    // DB Insert
+    let probe_id = enmap_core::db::get_probe_id();
+    let conn = enmap_core::db::connect_db().unwrap();
+    match enmap_core::db::insert_port_scan_result(&conn, probe_id, result.clone(), String::new()) {
+        Ok(_affected_rows) => {},
+        Err(e) => {
+            println!("{}", e);
+        }
+    }
     result
 }
 
@@ -68,6 +77,15 @@ pub async fn exec_hostscan(opt: models::HostArg) -> HostScanResult {
         })
     });
     let result: HostScanResult = handle.join().unwrap();
+    // DB Insert
+    let probe_id = enmap_core::db::get_probe_id();
+    let conn = enmap_core::db::connect_db().unwrap();
+    match enmap_core::db::insert_host_scan_result(&conn, probe_id, result.clone(), String::new()) {
+        Ok(_affected_rows) => {},
+        Err(e) => {
+            println!("{}", e);
+        }
+    }
     result
 }
 
@@ -86,6 +104,15 @@ pub async fn exec_ping(opt: models::PingArg, app_handle: tauri::AppHandle) -> Pi
         app_handle.emit_all("ping_progress", format!("{}", msg)).unwrap();
     } 
     let result: PingStat = handle.join().unwrap();
+    // DB Insert
+    let probe_id = enmap_core::db::get_probe_id();
+    let conn = enmap_core::db::connect_db().unwrap();
+    match enmap_core::db::insert_ping_result(&conn, probe_id, result.clone(), String::new()) {
+        Ok(_affected_rows) => {},
+        Err(e) => {
+            println!("{}", e);
+        }
+    }
     result
 }
 
@@ -104,6 +131,15 @@ pub async fn exec_traceroute(opt: models::TracerouteArg, app_handle: tauri::AppH
         app_handle.emit_all("trace_progress", format!("{}", msg)).unwrap();
     } 
     let result: TraceResult = handle.join().unwrap();
+    // DB Insert
+    let probe_id = enmap_core::db::get_probe_id();
+    let conn = enmap_core::db::connect_db().unwrap();
+    match enmap_core::db::insert_trace_result(&conn, probe_id, result.clone(), String::new()) {
+        Ok(_affected_rows) => {},
+        Err(e) => {
+            println!("{}", e);
+        }
+    }
     result
 }
 
