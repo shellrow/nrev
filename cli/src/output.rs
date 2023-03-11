@@ -330,7 +330,7 @@ pub fn show_ping_result(result: PingStat) {
             TableCell::new_with_alignment(format!("{:?}", r.port_number), 1, Alignment::Left),
             TableCell::new_with_alignment(r.ttl, 1, Alignment::Left),
             TableCell::new_with_alignment(r.hop, 1, Alignment::Left),
-            TableCell::new_with_alignment(format!("{:?}", r.rtt), 1, Alignment::Left),
+            TableCell::new_with_alignment(format!("{:?}ms", r.rtt / 1000), 1, Alignment::Left),
         ]));
     }
     println!("{}", table.render());
@@ -349,12 +349,12 @@ pub fn show_ping_result(result: PingStat) {
         TableCell::new_with_alignment("Max", 1, Alignment::Left),
     ]));
     table.add_row(Row::new(vec![
-        TableCell::new_with_alignment(format!("{:?}", result.probe_time), 1, Alignment::Left),
+        TableCell::new_with_alignment(format!("{:?}ms", result.probe_time / 1000), 1, Alignment::Left),
         TableCell::new_with_alignment(result.transmitted_count, 1, Alignment::Left),
         TableCell::new_with_alignment(result.received_count, 1, Alignment::Left),
-        TableCell::new_with_alignment(format!("{:?}", result.min), 1, Alignment::Left),
-        TableCell::new_with_alignment(format!("{:?}", result.avg), 1, Alignment::Left),
-        TableCell::new_with_alignment(format!("{:?}", result.max), 1, Alignment::Left),
+        TableCell::new_with_alignment(format!("{:?}ms", result.min / 1000), 1, Alignment::Left),
+        TableCell::new_with_alignment(format!("{:?}ms", result.avg / 1000), 1, Alignment::Left),
+        TableCell::new_with_alignment(format!("{:?}ms", result.max / 1000), 1, Alignment::Left),
     ]));
     println!("{}", table.render());
 }
@@ -387,7 +387,7 @@ pub fn show_trace_result(result: TraceResult) {
         ]));
     }
     println!("{}", table.render());
-    println!("Probe Time: {:?}", result.probe_time);
+    println!("Probe Time: {:?}ms", result.probe_time / 1000);
     println!();
 }
 
