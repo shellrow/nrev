@@ -80,12 +80,6 @@ fn main() {
         option::CommandType::DomainScan => {
             handler::handle_domain_scan(opt);
         },
-        option::CommandType::BatchScan => {
-            
-        },
-        option::CommandType::PassiveScan => {
-            
-        },
     }
 }
 
@@ -135,21 +129,6 @@ fn get_app_settings<'a>() -> Command<'a> {
             .value_name("target")
             .validator(validator::validate_domain_opt)
         )
-       /*  .arg(Arg::new("batch")
-            .help("Batch scan with config. \nExamples: \n--batch <path_to_config_file>")
-            .short('b')
-            .long("batch")
-            .takes_value(true)
-            .value_name("target")
-            .validator(validator::validate_filepath)
-        ) */
-        /* .arg(Arg::new("passive")
-            .help("Passive scan. \nExamples: \n--passive shodan")
-            .long("passive")
-            .takes_value(true)
-            .value_name("target")
-            .validator(validator::validate_domain_opt)
-        ) */
         .arg(Arg::new("interface")
             .help("Specify the network interface")
             .short('i')

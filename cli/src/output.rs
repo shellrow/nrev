@@ -170,8 +170,6 @@ pub fn show_options(opt: ScanOption) {
             }
             println!("{}", table.render());
         },
-        CommandType::BatchScan => {},
-        CommandType::PassiveScan => {},
     }
     
 }

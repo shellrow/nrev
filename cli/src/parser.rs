@@ -199,10 +199,6 @@ pub fn parse_args(matches: ArgMatches) -> option::ScanOption {
         opt.protocol = Protocol::UDP;
         let base_domain: &str = matches.value_of("domain").unwrap();
         opt.targets.push(TargetInfo::new_with_base_domain(base_domain.to_string()));
-    }else if matches.contains_id("batch") {
-        opt.command_type = option::CommandType::BatchScan;
-    }else if matches.contains_id("passive") {
-        opt.command_type = option::CommandType::PassiveScan;
     }
     // Flags
     if matches.contains_id("interface") {

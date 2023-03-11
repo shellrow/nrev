@@ -16,9 +16,7 @@ pub enum CommandType {
     HostScan,
     Ping,
     Traceroute,
-    DomainScan,
-    BatchScan,
-    PassiveScan
+    DomainScan
 }
 
 impl CommandType {
@@ -29,8 +27,6 @@ impl CommandType {
             CommandType::Ping => String::from("ping"),
             CommandType::Traceroute => String::from("traceroute"),
             CommandType::DomainScan => String::from("domain_scan"),
-            CommandType::BatchScan => String::from("batch_scan"),
-            CommandType::PassiveScan => String::from("passive_scan"),
         }
     }
     pub fn name(&self) -> String {
@@ -40,8 +36,6 @@ impl CommandType {
             CommandType::Ping => String::from("Ping"),
             CommandType::Traceroute => String::from("Traceroute"),
             CommandType::DomainScan => String::from("Domain scan"),
-            CommandType::BatchScan => String::from("Batch scan"),
-            CommandType::PassiveScan => String::from("Passive scan"),
         }
     }
     pub fn description(&self) -> String {
@@ -51,8 +45,6 @@ impl CommandType {
             CommandType::Ping => String::from("Ping"),
             CommandType::Traceroute => String::from("Traceroute"),
             CommandType::DomainScan => String::from("Domain scan"),
-            CommandType::BatchScan => String::from("Batch scan"),
-            CommandType::PassiveScan => String::from("Passive scan"),
         }
     }
 }
