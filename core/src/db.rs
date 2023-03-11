@@ -1,10 +1,15 @@
+use std::env;
+use std::path::{PathBuf};
 use rusqlite::{Connection, Result, params};
 use uuid::Uuid;
 use crate::{define, option};
 use crate::result::{PortScanResult, HostScanResult, PingStat, PingResult, TraceResult, Node};
 
 pub fn connect_db() -> Result<Connection,rusqlite::Error> {
-    let conn = Connection::open(define::DB_NAME)?;
+    let mut path: PathBuf = env::current_exe().unwrap();
+    path.pop();
+    path.push(define::DB_NAME);
+    let conn = Connection::open(path)?;
     Ok(conn)
 }
 
