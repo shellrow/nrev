@@ -19,7 +19,6 @@ pub fn init_db() -> Result<usize, rusqlite::Error> {
         Ok(c)=> c, 
         Err(e) => return Err(e),
     };
-    println!("Scan hash: {}", get_probe_id());
     // NOTE
     // This DB is intended to store and search results and is not relational aware.
     // datetime(CURRENT_TIMESTAMP, 'localtime')

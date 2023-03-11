@@ -58,9 +58,7 @@ pub async fn handle_port_scan(opt: option::ScanOption) {
     let probe_id = enmap_core::db::get_probe_id();
     let conn = enmap_core::db::connect_db().unwrap();
     match enmap_core::db::insert_port_scan_result(&conn, probe_id, result.clone(), String::new()) {
-        Ok(affected_rows) => {
-            println!("{} row(s) affected.", affected_rows);
-        },
+        Ok(_affected_rows) => {},
         Err(e) => {
             println!("{}", e);
         }
@@ -103,9 +101,7 @@ pub async fn handle_host_scan(opt: option::ScanOption) {
     let probe_id = enmap_core::db::get_probe_id();
     let conn = enmap_core::db::connect_db().unwrap();
     match enmap_core::db::insert_host_scan_result(&conn, probe_id, result.clone(), String::new()) {
-        Ok(affected_rows) => {
-            println!("{} row(s) affected.", affected_rows);
-        },
+        Ok(_affected_rows) => {},
         Err(e) => {
             println!("{}", e);
         }
@@ -134,9 +130,7 @@ pub fn handle_ping(opt: option::ScanOption) {
     let probe_id = enmap_core::db::get_probe_id();
     let conn = enmap_core::db::connect_db().unwrap();
     match enmap_core::db::insert_ping_result(&conn, probe_id, result.clone(), String::new()) {
-        Ok(affected_rows) => {
-            println!("{} row(s) affected.", affected_rows);
-        },
+        Ok(_affected_rows) => {},
         Err(e) => {
             println!("{}", e);
         }
@@ -165,9 +159,7 @@ pub fn handle_trace(opt: option::ScanOption) {
     let probe_id = enmap_core::db::get_probe_id();
     let conn = enmap_core::db::connect_db().unwrap();
     match enmap_core::db::insert_trace_result(&conn, probe_id, result.clone(), String::new()) {
-        Ok(affected_rows) => {
-            println!("{} row(s) affected.", affected_rows);
-        },
+        Ok(_affected_rows) => {},
         Err(e) => {
             println!("{}", e);
         }
