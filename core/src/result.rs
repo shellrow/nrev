@@ -36,6 +36,16 @@ pub enum NodeType {
     Destination,
 }
 
+impl NodeType {
+    pub fn name(&self) -> String {
+        match *self {
+            NodeType::DefaultGateway => String::from("DefaultGateway"),
+            NodeType::Relay => String::from("Relay"),
+            NodeType::Destination => String::from("Destination"),
+        }
+    }
+}
+
 /// Node structure
 #[derive(Clone, Debug ,Serialize, Deserialize)]
 pub struct Node {

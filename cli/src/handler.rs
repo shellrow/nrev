@@ -161,6 +161,18 @@ pub fn handle_trace(opt: option::ScanOption) {
     let result: TraceResult = handle.join().unwrap();
     output::show_trace_result(result.clone());
 
+    // DB Insert
+    let probe_id = enmap_core::db::get_probe_id();
+    let conn = enmap_core::db::connect_db().unwrap();
+    match enmap_core::db::insert_trace_result(&conn, probe_id, result.clone(), String::new()) {
+        Ok(affected_rows) => {
+            println!("{} row(s) affected.", affected_rows);
+        },
+        Err(e) => {
+            println!("{}", e);
+        }
+    }
+
     if !opt.save_file_path.is_empty() {
         output::save_json(serde_json::to_string_pretty(&result).unwrap_or(String::from("Serialize Error")), opt.save_file_path.clone());
         println!("Probe result saved to: {}", opt.save_file_path);
