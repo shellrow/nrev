@@ -11,7 +11,5 @@ pub const MESSAGE_START_LOOKUP: &str = "START_LOOKUP";
 pub const MESSAGE_END_LOOKUP: &str = "END_LOOKUP";
 pub const MESSAGE_START_DOMAINSCAN: &str = "START_DOMAINSCAN";
 pub const MESSAGE_END_DOMAINSCAN: &str = "END_DOMAINSCAN";
-// Passive Scan URL
-pub const URL_SHODAN: &str = "https://internetdb.shodan.io/";
 // Database
 pub const DB_NAME: &str = "emdb.db";
