@@ -1,7 +1,7 @@
 <script setup>
 import {ref ,onMounted, onUnmounted} from 'vue';
 import {debounce} from 'lodash';
-import {Document, Menu as IconMenu, Setting, Sunny, Moon, Expand, Fold, View} from '@element-plus/icons-vue';
+import {Document, Menu as IconMenu, Setting, Sunny, Moon, Expand, Fold, View, Histogram} from '@element-plus/icons-vue';
 
 //import EnMapLogo from "../assets/enmap_icon.png";
 
@@ -101,6 +101,7 @@ onUnmounted(() => {
                 <el-aside id="side-menu" :width="isCollapse ? '80px' : '200px'" class="duration-300" >
                     <el-menu default-active="1" :collapse="isCollapse" :style="'min-height:'+ innerHeight + 'px'" @open="handleOpen" @close="handleClose">
                         <el-menu-item index="0">
+                            <el-icon><Histogram /></el-icon>
                             <template #title><router-link to="/">Dashboard</router-link></template>
                         </el-menu-item>
                         <el-menu-item index="1">

@@ -125,3 +125,49 @@ impl TCPFingerprint {
         }
     }
 }
+
+// DB Models
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ProbeResult {
+    pub id: u32,
+    pub probe_id: String,
+    pub probe_type: String,
+    pub probe_target_addr: String,
+    pub probe_target_name: String,
+    pub protocol_id: String,
+    pub probe_option: Option<String>,
+    pub scan_time: Option<u64>,
+    pub service_detection_time: Option<u64>,
+    pub os_detection_time: Option<u64>,
+    pub probe_time: Option<u64>,
+    pub transmitted_count: Option<u64>,
+    pub received_count: Option<u64>,
+    pub min_value: Option<u64>,
+    pub avg_value: Option<u64>,
+    pub max_value: Option<u64>,
+    pub issued_at: String,
+}
+
+impl ProbeResult {
+    pub fn new() -> ProbeResult {
+        ProbeResult { 
+            id: 0, 
+            probe_id: String::new(), 
+            probe_type: String::new(), 
+            probe_target_addr: String::new(), 
+            probe_target_name: String::new(), 
+            protocol_id: String::new(), 
+            probe_option: None, 
+            scan_time: None, 
+            service_detection_time: None, 
+            os_detection_time: None, 
+            probe_time: None, 
+            transmitted_count: None, 
+            received_count: None, 
+            min_value: None, 
+            avg_value: None, 
+            max_value: None, 
+            issued_at: String::new() 
+        }
+    }
+}
