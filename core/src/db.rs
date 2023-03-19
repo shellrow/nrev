@@ -4,7 +4,7 @@ use rusqlite::{Connection, Result, params};
 use uuid::Uuid;
 use crate::{define, option};
 use crate::result::{PortScanResult, HostScanResult, PingStat, PingResult, TraceResult, Node};
-use crate::model::{ProbeResult};
+use crate::model::{ProbeLog};
 
 pub fn connect_db() -> Result<Connection,rusqlite::Error> {
     let mut path: PathBuf = env::current_exe().unwrap();
@@ -368,31 +368,36 @@ pub fn insert_trace_result(conn:&Connection, probe_id: String, trace_result: Tra
     Ok(affected_row_count)
 }
 
-pub fn get_probe_result() -> Vec<ProbeResult> {
-    let mut results: Vec<ProbeResult> = vec![];
+pub fn get_probe_result() -> Vec<ProbeLog> {
+    let mut results: Vec<ProbeLog> = vec![];
     let conn = connect_db().unwrap();
-    let sql: &str = "SELECT id, probe_id, probe_type_id, probe_target_addr, probe_target_name, protocol_id, probe_option, scan_time, service_detection_time, os_detection_time, probe_time, transmitted_count, received_count, min_value, avg_value, max_value, issued_at
-    FROM probe_result ORDER BY issued_at DESC;";
+    let sql: &str = "SELECT 
+    A.id, 
+    A.probe_id, 
+    A.probe_type_id, 
+    B.probe_type_name,
+    A.probe_target_addr, 
+    A.probe_target_name, 
+    A.protocol_id, 
+    A.probe_option, 
+    A.issued_at 
+    FROM 
+    probe_result AS A 
+    INNER JOIN probe_type AS B 
+    WHERE A.probe_type_id = B.probe_type_id 
+    ORDER BY A.issued_at DESC;";
     let mut stmt = conn.prepare(sql).unwrap();
     let result_iter = stmt.query_map([], |row| {
-        Ok(ProbeResult {
+        Ok(ProbeLog {
             id: row.get(0).unwrap(), 
             probe_id: row.get(1).unwrap(), 
             probe_type_id: row.get(2).unwrap(), 
-            probe_target_addr: row.get(3).unwrap(), 
-            probe_target_name: row.get(4).unwrap(), 
-            protocol_id: row.get(5).unwrap(), 
-            probe_option: row.get(6).unwrap(), 
-            scan_time: row.get(7).unwrap(), 
-            service_detection_time: row.get(8).unwrap(), 
-            os_detection_time: row.get(9).unwrap(), 
-            probe_time: row.get(10).unwrap(), 
-            transmitted_count: row.get(11).unwrap(), 
-            received_count: row.get(12).unwrap(), 
-            min_value: row.get(13).unwrap(), 
-            avg_value: row.get(14).unwrap(), 
-            max_value: row.get(15).unwrap(), 
-            issued_at: row.get(16).unwrap() 
+            probe_type_name: row.get(3).unwrap(), 
+            probe_target_addr: row.get(4).unwrap(), 
+            probe_target_name: row.get(5).unwrap(), 
+            protocol_id: row.get(6).unwrap(), 
+            probe_option: row.get(7).unwrap(), 
+            issued_at: row.get(8).unwrap() 
         })
     }).unwrap();
     for result in result_iter {

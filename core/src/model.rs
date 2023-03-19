@@ -171,3 +171,32 @@ impl ProbeResult {
         }
     }
 }
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ProbeLog {
+    pub id: u32,
+    pub probe_id: String,
+    pub probe_type_id: String,
+    pub probe_type_name: String,
+    pub probe_target_addr: String,
+    pub probe_target_name: String,
+    pub protocol_id: String,
+    pub probe_option: Option<String>,
+    pub issued_at: String 
+}
+
+impl ProbeLog {
+    pub fn new() -> ProbeLog {
+        ProbeLog { 
+            id: 0, 
+            probe_id: String::new(), 
+            probe_type_id: String::new(), 
+            probe_type_name: String::new(), 
+            probe_target_addr: String::new(), 
+            probe_target_name: String::new(), 
+            protocol_id: String::new(), 
+            probe_option: None, 
+            issued_at: String::new() 
+        }
+    }
+}
