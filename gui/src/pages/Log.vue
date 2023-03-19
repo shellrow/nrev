@@ -74,6 +74,11 @@ const searchLog = async () => {
 }
 
 const clickSearch = (event) => {
+    if (optionDateRange.value.length > 0) {
+      searchOption.start_date = optionDateRange.value[0].toISOString()
+      searchOption.end_date = optionDateRange.value[1].toISOString();
+    }
+    console.log(searchOption);
     searchLog();
 }
 
@@ -203,7 +208,7 @@ onUnmounted(() => {
                         </el-popover>
                     </template>
                 </el-table-column>
-                <el-table-column prop="probe_type_id" label="Probe Type"  />
+                <el-table-column prop="probe_type_name" label="Probe Type"  />
                 <el-table-column prop="probe_target_addr" label="Target Addr" />
                 <el-table-column prop="probe_target_name" label="Target Name" />
                 <el-table-column prop="protocol_id" label="Protocol" />

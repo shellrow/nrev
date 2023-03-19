@@ -1,6 +1,6 @@
 use std::sync::mpsc::{channel ,Sender, Receiver};
 use std::thread;
-use enmap_core::model::ProbeResult;
+use enmap_core::model::ProbeLog;
 use tauri::Manager;
 use enmap_core::option::{ScanOption};
 use enmap_core::result::{PortScanResult, HostScanResult, PingStat, TraceResult};
@@ -159,6 +159,6 @@ pub fn lookup_ipaddr(ipaddr: String) -> String {
 }
 
 #[tauri::command]
-pub fn get_probe_log() -> Vec<ProbeResult> {
+pub fn get_probe_log() -> Vec<ProbeLog> {
     enmap_core::db::get_probe_result()
 }
