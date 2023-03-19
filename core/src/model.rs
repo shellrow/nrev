@@ -131,7 +131,7 @@ impl TCPFingerprint {
 pub struct ProbeResult {
     pub id: u32,
     pub probe_id: String,
-    pub probe_type: String,
+    pub probe_type_id: String,
     pub probe_target_addr: String,
     pub probe_target_name: String,
     pub protocol_id: String,
@@ -153,7 +153,7 @@ impl ProbeResult {
         ProbeResult { 
             id: 0, 
             probe_id: String::new(), 
-            probe_type: String::new(), 
+            probe_type_id: String::new(), 
             probe_target_addr: String::new(), 
             probe_target_name: String::new(), 
             protocol_id: String::new(), 

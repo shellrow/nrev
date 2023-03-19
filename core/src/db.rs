@@ -27,7 +27,7 @@ pub fn init_db() -> Result<usize, rusqlite::Error> {
     let sql: &str = "CREATE TABLE IF NOT EXISTS probe_result (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         probe_id TEXT NOT NULL,
-        probe_type TEXT NOT NULL,
+        probe_type_id TEXT NOT NULL,
         probe_target_addr TEXT NOT NULL,
         probe_target_name TEXT NOT NULL,
         protocol_id TEXT NOT NULL,
@@ -120,6 +120,31 @@ pub fn init_db() -> Result<usize, rusqlite::Error> {
         },
         Err(e) => return Err(e),
     };
+    // probe_type
+    let sql: &str = "CREATE TABLE IF NOT EXISTS probe_type (
+            probe_type_id TEXT PRIMARY KEY,
+            probe_type_name TEXT NULL 
+        );";
+    match conn.execute(sql, params![]){
+        Ok(row_count) => {
+            affected_row_count += row_count;
+        },
+        Err(e) => return Err(e),
+    };
+    // probe type records
+    let sql: &str = "INSERT OR IGNORE INTO probe_type (probe_type_id, probe_type_name) VALUES (?1, ?2);";
+    let params_1: &[&dyn rusqlite::ToSql] = params![option::CommandType::PortScan.id(),option::CommandType::PortScan.name()];
+    let params_2: &[&dyn rusqlite::ToSql] = params![option::CommandType::HostScan.id(),option::CommandType::HostScan.name()];
+    let params_3: &[&dyn rusqlite::ToSql] = params![option::CommandType::Ping.id(),option::CommandType::Ping.name()];
+    let params_4: &[&dyn rusqlite::ToSql] = params![option::CommandType::Traceroute.id(),option::CommandType::Traceroute.name()];
+    for params in vec![params_1,params_2,params_3,params_4] {
+        match conn.execute(sql, params) {
+            Ok(row_count) => {
+                affected_row_count += row_count;
+            },
+            Err(e) => return Err(e),
+        };
+    }
     Ok(affected_row_count)
 }
 
@@ -132,7 +157,7 @@ pub fn insert_port_scan_result(conn:&Connection, probe_id: String, scan_result: 
     let mut affected_row_count: usize = 0;
     let sql: &str = "INSERT INTO probe_result (
         probe_id, 
-        probe_type,
+        probe_type_id,
         probe_target_addr,
         probe_target_name,
         protocol_id,
@@ -188,7 +213,7 @@ pub fn insert_host_scan_result(conn:&Connection, probe_id: String, scan_result: 
     let mut affected_row_count: usize = 0;
     let sql: &str = "INSERT INTO probe_result (
         probe_id, 
-        probe_type,
+        probe_type_id,
         probe_target_addr,
         probe_target_name,
         protocol_id,
@@ -239,7 +264,7 @@ pub fn insert_ping_result(conn:&Connection, probe_id: String, ping_stat: PingSta
     let ping_result: PingResult = ping_stat.ping_results[0].clone();
     let sql: &str = "INSERT INTO probe_result (
         probe_id, 
-        probe_type,
+        probe_type_id,
         probe_target_addr,
         probe_target_name,
         protocol_id,
@@ -297,7 +322,7 @@ pub fn insert_trace_result(conn:&Connection, probe_id: String, trace_result: Tra
     let first_node: Node = trace_result.nodes[0].clone();
     let sql: &str = "INSERT INTO probe_result (
         probe_id, 
-        probe_type,
+        probe_type_id,
         probe_target_addr,
         probe_target_name,
         protocol_id,
@@ -346,14 +371,14 @@ pub fn insert_trace_result(conn:&Connection, probe_id: String, trace_result: Tra
 pub fn get_probe_result() -> Vec<ProbeResult> {
     let mut results: Vec<ProbeResult> = vec![];
     let conn = connect_db().unwrap();
-    let sql: &str = "SELECT id, probe_id, probe_type, probe_target_addr, probe_target_name, protocol_id, probe_option, scan_time, service_detection_time, os_detection_time, probe_time, transmitted_count, received_count, min_value, avg_value, max_value, issued_at
+    let sql: &str = "SELECT id, probe_id, probe_type_id, probe_target_addr, probe_target_name, protocol_id, probe_option, scan_time, service_detection_time, os_detection_time, probe_time, transmitted_count, received_count, min_value, avg_value, max_value, issued_at
     FROM probe_result ORDER BY issued_at DESC;";
     let mut stmt = conn.prepare(sql).unwrap();
     let result_iter = stmt.query_map([], |row| {
         Ok(ProbeResult {
             id: row.get(0).unwrap(), 
             probe_id: row.get(1).unwrap(), 
-            probe_type: row.get(2).unwrap(), 
+            probe_type_id: row.get(2).unwrap(), 
             probe_target_addr: row.get(3).unwrap(), 
             probe_target_name: row.get(4).unwrap(), 
             protocol_id: row.get(5).unwrap(), 
