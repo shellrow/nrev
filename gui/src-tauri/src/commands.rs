@@ -159,6 +159,7 @@ pub fn lookup_ipaddr(ipaddr: String) -> String {
 }
 
 #[tauri::command]
-pub fn get_probe_log() -> Vec<ProbeLog> {
-    enmap_core::db::get_probe_result()
+pub fn get_probe_log(opt: models::LogSearchArg) -> Vec<ProbeLog> {
+    println!("{:?}", opt);
+    enmap_core::db::get_probe_result(opt.target_host, opt.probe_types, opt.start_date, opt.end_date)
 }

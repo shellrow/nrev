@@ -368,26 +368,37 @@ pub fn insert_trace_result(conn:&Connection, probe_id: String, trace_result: Tra
     Ok(affected_row_count)
 }
 
-pub fn get_probe_result() -> Vec<ProbeLog> {
+pub fn get_probe_result(target_host: String, probe_types: Vec<String>, start_date: String, end_date: String) -> Vec<ProbeLog> {
+    let target_host = if crate::validator::is_valid_hostname(target_host.clone()) {target_host} else {String::from("%")};
     let mut results: Vec<ProbeLog> = vec![];
     let conn = connect_db().unwrap();
-    let sql: &str = "SELECT 
-    A.id, 
-    A.probe_id, 
-    A.probe_type_id, 
-    B.probe_type_name,
-    A.probe_target_addr, 
-    A.probe_target_name, 
-    A.protocol_id, 
-    A.probe_option, 
-    A.issued_at 
-    FROM 
-    probe_result AS A 
-    INNER JOIN probe_type AS B 
-    WHERE A.probe_type_id = B.probe_type_id 
-    ORDER BY A.issued_at DESC;";
-    let mut stmt = conn.prepare(sql).unwrap();
-    let result_iter = stmt.query_map([], |row| {
+    let mut in_params: String = String::new();
+    let mut pram_index: usize = 4;
+    for _t in probe_types.clone() {
+        pram_index += 1;
+        if pram_index == 5 {
+            in_params = format!("?{}", pram_index);
+        }else{
+            in_params = format!("{}, ?{}", in_params, pram_index);
+        }
+    }
+    let mut sql: String = "SELECT A.id, A.probe_id, A.probe_type_id, B.probe_type_name, A.probe_target_addr, A.probe_target_name, A.protocol_id, A.probe_option, A.issued_at 
+    FROM probe_result AS A INNER JOIN probe_type AS B ON A.probe_type_id = B.probe_type_id ".to_string();
+    sql = format!("{} WHERE A.issued_at BETWEEN ?1 AND ?2 ", sql);
+    sql = format!("{} AND (A.probe_target_addr LIKE ?3 OR A.probe_target_name LIKE ?4) ", sql);
+    sql = format!("{} AND A.probe_type_id IN ({}) ", sql, in_params);
+    sql = format!("{} ORDER BY A.issued_at DESC;", sql);
+    let mut stmt = conn.prepare(sql.as_str()).unwrap();
+    let mut params_vec: Vec<&dyn rusqlite::ToSql> = vec![
+            &start_date,
+            &end_date,
+            &target_host,
+            &target_host
+        ]; 
+    for t in &probe_types {
+        params_vec.push(t);
+    }
+    let result_iter = stmt.query_map(&params_vec[..], |row| {
         Ok(ProbeLog {
             id: row.get(0).unwrap(), 
             probe_id: row.get(1).unwrap(), 

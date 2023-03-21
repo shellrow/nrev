@@ -221,3 +221,11 @@ impl TracerouteArg {
         opt
     }
 }
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct LogSearchArg {
+    pub target_host: String,
+    pub probe_types: Vec<String>,
+    pub start_date: String,
+    pub end_date: String,
+}

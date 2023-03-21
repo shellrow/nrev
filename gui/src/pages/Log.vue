@@ -24,6 +24,17 @@ const probeTypes = [
   },
 ];
 
+const getLastWeekDateTime = () => {
+    const d = new Date();
+    d.setTime(d.getTime() - 3600 * 1000 * 24 * 7);
+    return d;
+}
+
+const defaultDateRange = [
+  getLastWeekDateTime(),  
+  new Date()
+];
+
 const optionDateRange = ref('');
 
 const shortcuts = [
@@ -58,7 +69,7 @@ const shortcuts = [
 
 const searchOption = reactive({
     target_host: "",
-    probe_types: [],
+    probe_types: ["port_scan","host_scan","ping","traceroute"],
     start_date: "",
     end_date: ""
 });
@@ -67,16 +78,24 @@ const searchResult = ref([]);
 
 const searchLog = async () => {
     searching.value = true;
-    invoke('get_probe_log').then((results) => {
-        searchResult.value = results;
-        searching.value = false;
+    invoke('get_probe_log', { "opt": searchOption }).then((results) => {
+      searchResult.value = results;
+      searching.value = false;
     });
 }
 
 const clickSearch = (event) => {
-    if (optionDateRange.value.length > 0) {
-      searchOption.start_date = optionDateRange.value[0].toISOString()
-      searchOption.end_date = optionDateRange.value[1].toISOString();
+    if (optionDateRange.value) {
+      if (optionDateRange.value.length > 0 && (optionDateRange.value[0] && optionDateRange.value[1])) {
+        searchOption.start_date = optionDateRange.value[0].toISOString();
+        searchOption.end_date = optionDateRange.value[1].toISOString();
+      }else {
+        searchOption.start_date = defaultDateRange[0].toISOString();
+        searchOption.end_date = defaultDateRange[1].toISOString();
+      }
+    }else{
+      searchOption.start_date = defaultDateRange[0].toISOString();
+      searchOption.end_date = defaultDateRange[1].toISOString();
     }
     console.log(searchOption);
     searchLog();
@@ -176,7 +195,8 @@ onUnmounted(() => {
                     unlink-panels
                     range-separator="To"
                     start-placeholder="Start date"
-                    end-placeholder="End date"
+                    end-placeholder="End date" 
+                    :default-time="defaultDateRange"
                     :shortcuts="shortcuts"
                     size="default"
                 />
