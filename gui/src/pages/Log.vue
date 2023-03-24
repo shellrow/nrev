@@ -24,6 +24,12 @@ const probeTypes = [
   },
 ];
 
+const getLocalTime = (date) => {
+    const d = new Date(date);
+    const offset = d.getTimezoneOffset() * 60000;
+    return new Date(d.getTime() - offset);
+}
+
 const getLastWeekDateTime = () => {
     const d = new Date();
     d.setTime(d.getTime() - 3600 * 1000 * 24 * 7);
@@ -31,9 +37,11 @@ const getLastWeekDateTime = () => {
 }
 
 const defaultDateRange = [
-  getLastWeekDateTime(),  
-  new Date()
+  getLocalTime(getLastWeekDateTime()),  
+  getLocalTime(new Date())
 ];
+
+
 
 const optionDateRange = ref('');
 
@@ -87,8 +95,8 @@ const searchLog = async () => {
 const clickSearch = (event) => {
     if (optionDateRange.value) {
       if (optionDateRange.value.length > 0 && (optionDateRange.value[0] && optionDateRange.value[1])) {
-        searchOption.start_date = optionDateRange.value[0].toISOString();
-        searchOption.end_date = optionDateRange.value[1].toISOString();
+        searchOption.start_date = getLocalTime(optionDateRange.value[0]).toISOString();
+        searchOption.end_date = getLocalTime(optionDateRange.value[1]).toISOString();
       }else {
         searchOption.start_date = defaultDateRange[0].toISOString();
         searchOption.end_date = defaultDateRange[1].toISOString();
