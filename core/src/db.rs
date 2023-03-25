@@ -4,7 +4,7 @@ use rusqlite::{Connection, Result, params};
 use uuid::Uuid;
 use crate::{define, option};
 use crate::result::{PortScanResult, HostScanResult, PingStat, PingResult, TraceResult, Node};
-use crate::model::{ProbeLog};
+use crate::model::{ProbeLog, DataSetItem};
 
 pub fn connect_db() -> Result<Connection,rusqlite::Error> {
     let mut path: PathBuf = env::current_exe().unwrap();
@@ -413,6 +413,27 @@ pub fn get_probe_result(target_host: String, probe_types: Vec<String>, start_dat
     }).unwrap();
     for result in result_iter {
         results.push(result.unwrap());
+    }
+    return results;
+}
+
+pub fn get_probed_hosts() -> Vec<DataSetItem> {
+    let mut results: Vec<DataSetItem> = vec![];
+    let conn = connect_db().unwrap();
+    let sql: &str = "SELECT DISTINCT probe_target_addr, probe_target_name FROM probe_result WHERE probe_target_addr IS NOT NULL AND probe_target_addr <> '' ORDER BY probe_target_addr ASC;";
+    let mut stmt = conn.prepare(sql).unwrap();
+    let result_iter = stmt.query_map([], |row| {
+        Ok(DataSetItem{id: row.get(0).unwrap(), name: row.get(1).unwrap()})
+    }).unwrap();
+    for result in result_iter {
+        match result {
+            Ok(r) => {
+                results.push(r);
+            },
+            Err(e) => {
+                println!("Error: {}", e);
+            }
+        }
     }
     return results;
 }

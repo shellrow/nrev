@@ -200,3 +200,15 @@ impl ProbeLog {
         }
     }
 }
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct DataSetItem {
+    pub id: String,
+    pub name: String,
+}
+
+impl DataSetItem {
+    pub fn new() -> DataSetItem {
+        DataSetItem { id: String::new(), name: String::new() }
+    }
+}
