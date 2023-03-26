@@ -7,24 +7,73 @@ import { Nodes, Edges, Layouts, defineConfigs} from "v-network-graph";
 const nodeLabelColor = ref("#ffffff");
 const darkBgThemes = ["","dark", "night", "dracula", "halloween"];
 
+type DataSetItem = {
+  id: string;
+  name: string;
+}
+
+function invoke_get_probed_hosts(): Promise<Array<DataSetItem>>{
+  return invoke('get_probed_hosts');
+}
+
+
 if (localStorage.theme === 'dark') {
   nodeLabelColor.value = "#ffffff";
 } else {
   nodeLabelColor.value = "#000000";
 }
 
+const probedHosts = ref([
+  {
+    id: "",
+    name: "",
+  },
+]);
+
+const targetHost = ref("");
+const targetHosts = ref([]);
+
+function setProbedHosts() {
+  return new Promise(
+    (resolve, reject) => {
+      resolve(
+        invoke_get_probed_hosts().then(results => {
+          probedHosts.value.splice(0, probedHosts.value.length);
+          results.forEach(result => {
+            probedHosts.value.push({
+              id: result.id.toString(),
+              name: result.name.toString(),
+            });
+          });
+        })
+      );
+    }
+  );
+}
+
+function initMap() {
+  setProbedHosts().then(() => {
+      probedHosts.value.forEach(host => {
+      const id = `node${Object.keys(nodes).length + 1}`;
+      nodes[id] = { name: host.id, ip_addr: "", host_name: "" };
+      layouts.nodes[id] = getNewPosition();
+      console.log("Node added: " + id + ", " + nodes[id].name);
+    });
+  });
+}
+
 const nodes: Nodes = reactive(
   {
-    node1: { name: "192.168.1.8" },
-    node2: { name: "192.168.1.4" },
-    node3: { name: "192.168.1.1" },
-    node4: { name: "192.168.1.92" },
-    node5: { name: "179.48.249.196" },
-    node6: { name: "45.33.32.156" },
-    node7: { name: "45.33.34.74" },
-    node8: { name: "45.33.34.76" },
-    node9: { name: "45.33.35.67" },
-    node10: { name: "45.33.40.103" },
+    node1: { name: "192.168.1.8", ip_addr: "", host_name: "" },
+    node2: { name: "192.168.1.4", ip_addr: "", host_name: "" },
+    node3: { name: "192.168.1.1", ip_addr: "", host_name: "" },
+    node4: { name: "192.168.1.92", ip_addr: "", host_name: "" },
+    node5: { name: "179.48.249.196", ip_addr: "", host_name: "" },
+    node6: { name: "45.33.32.156", ip_addr: "", host_name: "" },
+    node7: { name: "45.33.34.74", ip_addr: "", host_name: "" },
+    node8: { name: "45.33.34.76", ip_addr: "", host_name: "" },
+    node9: { name: "45.33.35.67", ip_addr: "", host_name: "" },
+    node10: { name: "45.33.40.103", ip_addr: "", host_name: "" },
   }
   );
 
@@ -42,9 +91,15 @@ const edges: Edges = reactive(
   }
 );
 
-
 const configs = reactive(defineConfigs({
   node: {
+    selectable: true,
+    label: {
+      visible: true,
+      color: nodeLabelColor.value,
+    },
+  },
+  edge: {
     selectable: true,
     label: {
       visible: true,
@@ -70,14 +125,62 @@ const layouts: Layouts = reactive(
   }
 ); 
 
-const selectedNodes = ref<string[]>(["node2"]);
+const selectedNodes = ref<string[]>([]);
+const selectedEdges = ref<string[]>([]);
+
+const getNewPosition = () => {
+  let x = 0;
+  let y = 0;
+  Object.keys(layouts.nodes).forEach(key => {
+    if ( (x > layouts.nodes[key].x - 100 && x <= layouts.nodes[key].x + 100) 
+    && (y > layouts.nodes[key].y - 60 && y <= layouts.nodes[key].y + 60) ){
+      x += 100;
+    }
+    if (x > 600){
+      x = 100;
+      y += 60;
+    }
+  });
+  return { x, y };
+};
 
 const addNode = () => {
+  if (!targetHost.value) {
+    return;
+  }
   const id = `node${Object.keys(nodes).length + 1}`;
-  nodes[id] = { name: id };
-  layouts.nodes[id] = { x: 0, y: 0 };
-  console.log(id);
-  //selectedNodes.value = [id];
+  nodes[id] = { name: targetHost.value, ip_addr: "", host_name: "" };
+  layouts.nodes[id] = getNewPosition();
+  console.log("Node added: " + id + ", " + nodes[id].name);
+  targetHost.value = "";
+}
+
+const removeNodes = () => {
+  for (const nodeId of selectedNodes.value) {
+    delete nodes[nodeId]
+  }
+}
+
+const connectNodes = () => {
+  if (selectedNodes.value.length !== 2) return;
+  const [source, target] = selectedNodes.value;
+  const edgeId = `edge${Object.keys(edges).length + 1}`;
+  edges[edgeId] = { source, target };
+}
+
+const removeEdges = () => {
+  for (const edgeId of selectedEdges.value) {
+    delete edges[edgeId]
+  }
+}
+
+const saveMap = () => {
+  const map = {
+    nodes: nodes,
+    edges: edges,
+    layouts: layouts,
+  };
+  console.log(map);
 }
 
 onMounted(() => {
@@ -86,9 +189,9 @@ onMounted(() => {
     } else {
         nodeLabelColor.value = "#000000";
     }
-    invoke('test_command_arg', { invokeMessage: 'Map' });
-    invoke('test_command_return').then((message) => console.log(message));
-    addNode();
+    //invoke('test_command_arg', { invokeMessage: 'Map' });
+    //invoke('test_command_return').then((message) => console.log(message));
+    initMap();
 });
 
 onUnmounted(() => {
@@ -97,12 +200,85 @@ onUnmounted(() => {
 
 </script>
 
+<style scoped>
+.card-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.item {
+  margin-bottom: 18px;
+}
+</style>
+
 <template>
+  <el-card class="box-card">
+    <!-- Header -->
+    <template #header>
+        <div class="card-header">
+            <span>Map</span>
+            <el-button type="primary" plain @click="saveMap">Save</el-button>
+        </div>
+    </template>
+    <!-- Header -->
+    <el-row :gutter="10">
+      <el-col :span="14">
+        <p style="font-size: var(--el-font-size-small)">Target</p>
+        <el-row :gutter="10">
+          <el-col :span="12">
+            <el-input v-model="targetHost" placeholder="Address or Name" @keyup.enter="addNode"></el-input>
+          </el-col>
+          <el-col :span="4">
+            <el-button type="primary" plain @click="addNode">Add Node</el-button>
+          </el-col>
+        </el-row>
+      </el-col>
+      <el-col :span="6">
+          <p style="font-size: var(--el-font-size-small)">Hosts</p>
+          <el-select
+          v-model="targetHosts"
+          multiple 
+          collapse-tags 
+          placeholder="Select"
+          >
+            <el-option
+                v-for="item in probedHosts"
+                :key="item.id"
+                :label="item.name"
+                :value="item.id"
+            />
+          </el-select>
+      </el-col>
+    </el-row>
+    <el-row :gutter="10">
+      <el-col :span="14">
+        <p style="font-size: var(--el-font-size-small)">Selected Nodes</p>
+        <el-row :gutter="10">
+          <el-col :span="4">
+            <el-button type="primary" plain @click="connectNodes">Connect</el-button>
+          </el-col>
+          <el-col :span="4">
+            <el-button type="primary" plain @click="removeNodes">Remove</el-button>
+          </el-col>
+        </el-row>
+      </el-col>
+      <el-col :span="10">
+        <p style="font-size: var(--el-font-size-small)">Selected Edges</p>
+        <el-row :gutter="10">
+          <el-col :span="4">
+            <el-button type="primary" plain @click="removeEdges">Remove</el-button>
+          </el-col>
+        </el-row>
+      </el-col>
+    </el-row>
+  </el-card>
     <v-network-graph
+        v-model:selected-nodes="selectedNodes"
+        v-model:selected-edges="selectedEdges"
         :nodes="nodes"
         :edges="edges"
         :layouts="layouts"
-        :selected-nodes="selectedNodes"
         :configs="configs"
         style="height: 600px;"
     >
