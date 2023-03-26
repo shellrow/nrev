@@ -164,6 +164,6 @@ pub fn get_probe_log(opt: models::LogSearchArg) -> Vec<ProbeLog> {
 }
 
 #[tauri::command]
-pub fn get_probed_host() -> Vec<DataSetItem> {
+pub fn get_probed_hosts() -> Vec<DataSetItem> {
     enmap_core::db::get_probed_hosts()
 }
