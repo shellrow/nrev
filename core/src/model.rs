@@ -212,3 +212,45 @@ impl DataSetItem {
         DataSetItem { id: String::new(), name: String::new() }
     }
 }
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct MapInfo {
+    pub map_id: u32,
+    pub map_name: String,
+    pub display_order: u32,
+    pub created_at: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct MapNode {
+    pub map_id: u32,
+    pub node_id: String,
+    pub node_name: String,
+    pub ip_addr: String,
+    pub host_name: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct MapEdge {
+    pub map_id: u32,
+    pub edge_id: String,
+    pub source_node_id: String,
+    pub target_node_id: String,
+    pub edge_label: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct MapLayout {
+    pub map_id: u32,
+    pub node_id: String,
+    pub x_value: u32,
+    pub y_value: u32
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct MapData {
+    pub map_id: MapInfo,
+    pub nodes: Vec<MapNode>,
+    pub edges: Vec<MapEdge>,
+    pub layouts: Vec<MapLayout>,
+}

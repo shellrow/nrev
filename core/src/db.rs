@@ -4,7 +4,7 @@ use rusqlite::{Connection, Result, params};
 use uuid::Uuid;
 use crate::{define, option};
 use crate::result::{PortScanResult, HostScanResult, PingStat, PingResult, TraceResult, Node};
-use crate::model::{ProbeLog, DataSetItem};
+use crate::model::{ProbeLog, DataSetItem, MapInfo, MapNode, MapEdge, MapLayout};
 
 pub fn connect_db() -> Result<Connection,rusqlite::Error> {
     let mut path: PathBuf = env::current_exe().unwrap();
@@ -145,6 +145,63 @@ pub fn init_db() -> Result<usize, rusqlite::Error> {
             Err(e) => return Err(e),
         };
     }
+    // map_group
+    let sql: &str = "CREATE TABLE IF NOT EXISTS map_info (
+        map_id INTEGER PRIMARY KEY AUTOINCREMENT,
+        map_name TEXT NULL, 
+        display_order INTEGER NULL,
+        created_at TEXT NULL 
+    );";
+    match conn.execute(sql, params![]){
+        Ok(row_count) => {
+            affected_row_count += row_count;
+        },
+        Err(e) => return Err(e),
+    };
+    // map_node
+    let sql: &str = "CREATE TABLE IF NOT EXISTS map_node (
+        map_id INTEGER NOT NULL, 
+        node_id TEXT NOT NULL,
+        node_name TEXT NULL,
+        ip_addr TEXT NULL, 
+        host_name TEXT NULL, 
+        PRIMARY KEY(map_id, node_id) 
+    );";
+    match conn.execute(sql, params![]){
+        Ok(row_count) => {
+            affected_row_count += row_count;
+        },
+        Err(e) => return Err(e),
+    };
+    // map_edge
+    let sql: &str = "CREATE TABLE IF NOT EXISTS map_edge (
+        map_id INTEGER NOT NULL,  
+        edge_id TEXT NOT NULL,
+        source_node_id TEXT NOT NULL,
+        target_node_id TEXT NOT NULL, 
+        edge_label TEXT NULL, 
+        PRIMARY KEY(map_id, edge_id) 
+    );";
+    match conn.execute(sql, params![]){
+        Ok(row_count) => {
+            affected_row_count += row_count;
+        },
+        Err(e) => return Err(e),
+    };
+    // map_layout
+    let sql: &str = "CREATE TABLE IF NOT EXISTS map_layout (
+        map_id INTEGER NOT NULL, 
+        node_id TEXT PRIMARY KEY,
+        x_value INTEGER NOT NULL,
+        y_value INTEGER NOT NULL, 
+        PRIMARY KEY(map_id, node_id)
+    );";
+    match conn.execute(sql, params![]){
+        Ok(row_count) => {
+            affected_row_count += row_count;
+        },
+        Err(e) => return Err(e),
+    };
     Ok(affected_row_count)
 }
 
@@ -436,4 +493,20 @@ pub fn get_probed_hosts() -> Vec<DataSetItem> {
         }
     }
     return results;
+}
+
+pub fn save_map_group(_model: MapInfo) {
+
+}
+
+pub fn save_map_node(_model: MapNode) {
+
+}
+
+pub fn save_map_edge(_model: MapEdge) {
+
+}
+
+pub fn save_map_layout(_model: MapLayout) {
+
 }

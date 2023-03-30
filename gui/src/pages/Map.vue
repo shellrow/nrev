@@ -12,6 +12,43 @@ type DataSetItem = {
   name: string;
 }
 
+type MapInfo = {
+  map_id: Number,
+  map_name: String,
+  display_order: Number,
+  created_at: String,
+}
+
+type MapNode = {
+  map_id: Number,
+  node_id: String,
+  node_name: String,
+  ip_addr: String,
+  host_name: String,
+}
+
+type MapEdge = {
+  map_id: Number,
+  edge_id: String,
+  source_node_id: String,
+  target_node_id: String,
+  edge_label: String,
+}
+
+type MapLayout = {
+  map_id: Number,
+  node_id: String,
+  x_value: Number,
+  y_value: Number,
+}
+
+type MapData = {
+  map_info: MapInfo,
+  map_nodes: Array<MapNode>,
+  map_edges: Array<MapEdge>,
+  map_layouts: Array<MapLayout>,
+}
+
 function invoke_get_probed_hosts(): Promise<Array<DataSetItem>>{
   return invoke('get_probed_hosts');
 }
@@ -181,6 +218,19 @@ const saveMap = () => {
     layouts: layouts,
   };
   console.log(map);
+  
+  // Save nodes
+  Object.keys(map.nodes).forEach(key => {
+    console.log(key + ": " + map.nodes[key].name);
+  });
+  // Save edges
+  Object.keys(map.edges).forEach(key => {
+    console.log(key + ": " + map.edges[key].source + " -> " + map.edges[key].target);
+  });
+  // Save layouts
+  Object.keys(map.layouts.nodes).forEach(key => {
+    console.log(key + ": " + map.layouts.nodes[key].x + ", " + map.layouts.nodes[key].y);
+  });
 }
 
 onMounted(() => {
