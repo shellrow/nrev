@@ -16,7 +16,7 @@ name = "enmap_core"
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-default-net = "0.11.0"
+default-net = "0.14.1"
 netscan = { version = "0.13.0", features = ["full"] }
 domainscan = "0.1.0"
 tracert = "0.4.1"
