@@ -167,3 +167,17 @@ pub fn get_probe_log(opt: models::LogSearchArg) -> Vec<ProbeLog> {
 pub fn get_probed_hosts() -> Vec<DataSetItem> {
     enmap_core::db::get_probed_hosts()
 }
+
+#[tauri::command]
+pub fn save_map_data(map_data: enmap_core::model::MapData) -> u32 {
+    let mut conn = enmap_core::db::connect_db().unwrap();
+    match enmap_core::db::save_map_data(&mut conn, map_data) {
+        Ok(_affected_rows) => {
+            return 0;
+        },
+        Err(e) => {
+            println!("{}", e);
+            return 1;
+        }
+    }
+}

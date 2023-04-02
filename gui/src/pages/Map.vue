@@ -99,19 +99,28 @@ function initMap() {
   });
 }
 
-const nodes: Nodes = reactive(
+const mapInfo: MapInfo = reactive(
   {
-    node1: { name: "192.168.1.8", ip_addr: "", host_name: "" },
-    node2: { name: "192.168.1.4", ip_addr: "", host_name: "" },
-    node3: { name: "192.168.1.1", ip_addr: "", host_name: "" },
-    node4: { name: "192.168.1.92", ip_addr: "", host_name: "" },
-    node5: { name: "179.48.249.196", ip_addr: "", host_name: "" },
-    node6: { name: "45.33.32.156", ip_addr: "", host_name: "" },
-    node7: { name: "45.33.34.74", ip_addr: "", host_name: "" },
-    node8: { name: "45.33.34.76", ip_addr: "", host_name: "" },
-    node9: { name: "45.33.35.67", ip_addr: "", host_name: "" },
-    node10: { name: "45.33.40.103", ip_addr: "", host_name: "" },
+    map_id: 1,
+    map_name: "default",
+    display_order: 1,
+    created_at: "",
   }
+);
+
+const nodes: Nodes = reactive(
+    {
+      node1: { name: "192.168.1.8", ip_addr: "", host_name: "" },
+      node2: { name: "192.168.1.4", ip_addr: "", host_name: "" },
+      node3: { name: "192.168.1.1", ip_addr: "", host_name: "" },
+      node4: { name: "192.168.1.92", ip_addr: "", host_name: "" },
+      node5: { name: "179.48.249.196", ip_addr: "", host_name: "" },
+      node6: { name: "45.33.32.156", ip_addr: "", host_name: "" },
+      node7: { name: "45.33.34.74", ip_addr: "", host_name: "" },
+      node8: { name: "45.33.34.76", ip_addr: "", host_name: "" },
+      node9: { name: "45.33.35.67", ip_addr: "", host_name: "" },
+      node10: { name: "45.33.40.103", ip_addr: "", host_name: "" },
+    }
   );
 
 const edges: Edges = reactive(
@@ -212,24 +221,48 @@ const removeEdges = () => {
 }
 
 const saveMap = () => {
-  const map = {
-    nodes: nodes,
-    edges: edges,
-    layouts: layouts,
+  let node_array: Array<MapNode> = [];
+  let edge_array: Array<MapEdge> = [];
+  let layout_array: Array<MapLayout> = [];
+  Object.keys(nodes).forEach(key => {
+    node_array.push({
+        map_id: mapInfo.map_id,
+        node_id: key,
+        node_name: `${nodes[key].name}`,
+        ip_addr: nodes[key].ip_addr,
+        host_name: nodes[key].host_name,
+    });
+  });
+  Object.keys(edges).forEach(key => {
+    edge_array.push({
+      map_id: mapInfo.map_id,
+      edge_id: key,
+      source_node_id: edges[key].source,
+      target_node_id: edges[key].target,
+      edge_label: edges[key].label,
+    });
+  });
+  Object.keys(layouts).forEach(key => {
+    layout_array.push({
+      map_id: mapInfo.map_id,
+      node_id: key,
+      x_value: layouts[key].x,
+      y_value: layouts[key].y,
+    });
+  });
+  const map_data: MapData = {
+    map_info: mapInfo,
+    map_nodes: node_array,
+    map_edges: edge_array,
+    map_layouts: layout_array,
   };
-  console.log(map);
-  
-  // Save nodes
-  Object.keys(map.nodes).forEach(key => {
-    console.log(key + ": " + map.nodes[key].name);
-  });
-  // Save edges
-  Object.keys(map.edges).forEach(key => {
-    console.log(key + ": " + map.edges[key].source + " -> " + map.edges[key].target);
-  });
-  // Save layouts
-  Object.keys(map.layouts.nodes).forEach(key => {
-    console.log(key + ": " + map.layouts.nodes[key].x + ", " + map.layouts.nodes[key].y);
+  console.log(map_data);
+  invoke('save_map_data', { "map_data": map_data }).then((code) => {
+    if (code === 0) {
+      console.log("Map saved");
+    } else {
+      console.log("Map save failed");
+    }
   });
 }
 

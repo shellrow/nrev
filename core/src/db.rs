@@ -1,10 +1,10 @@
 use std::{env, vec};
 use std::path::{PathBuf};
-use rusqlite::{Connection, Result, params};
+use rusqlite::{Connection, Result, params, Transaction};
 use uuid::Uuid;
 use crate::{define, option};
 use crate::result::{PortScanResult, HostScanResult, PingStat, PingResult, TraceResult, Node};
-use crate::model::{ProbeLog, DataSetItem, MapInfo, MapNode, MapEdge, MapLayout};
+use crate::model::{ProbeLog, DataSetItem, MapInfo, MapNode, MapEdge, MapLayout, MapData};
 
 pub fn connect_db() -> Result<Connection,rusqlite::Error> {
     let mut path: PathBuf = env::current_exe().unwrap();
@@ -145,7 +145,7 @@ pub fn init_db() -> Result<usize, rusqlite::Error> {
             Err(e) => return Err(e),
         };
     }
-    // map_group
+    // map_info
     let sql: &str = "CREATE TABLE IF NOT EXISTS map_info (
         map_id INTEGER PRIMARY KEY AUTOINCREMENT,
         map_name TEXT NULL, 
@@ -191,7 +191,7 @@ pub fn init_db() -> Result<usize, rusqlite::Error> {
     // map_layout
     let sql: &str = "CREATE TABLE IF NOT EXISTS map_layout (
         map_id INTEGER NOT NULL, 
-        node_id TEXT PRIMARY KEY,
+        node_id TEXT NOT NULL,
         x_value INTEGER NOT NULL,
         y_value INTEGER NOT NULL, 
         PRIMARY KEY(map_id, node_id)
@@ -495,18 +495,262 @@ pub fn get_probed_hosts() -> Vec<DataSetItem> {
     return results;
 }
 
-pub fn save_map_group(_model: MapInfo) {
-
+pub fn get_map_list() -> Vec<MapInfo> {
+    let mut results: Vec<MapInfo> = vec![];
+    let conn = connect_db().unwrap();
+    let sql: &str = "SELECT map_id, map_name, display_order, created_at FROM map_info ORDER BY display_order ASC;";
+    let mut stmt = conn.prepare(sql).unwrap();
+    let result_iter = stmt.query_map([], |row| {
+        Ok(MapInfo{
+            map_id: row.get(0).unwrap(), 
+            map_name: row.get(1).unwrap(), 
+            display_order: row.get(2).unwrap(),
+            created_at: row.get(3).unwrap()
+        })
+    }).unwrap();
+    for result in result_iter {
+        match result {
+            Ok(r) => {
+                results.push(r);
+            },
+            Err(e) => {
+                println!("Error: {}", e);
+            }
+        }
+    }
+    results
 }
 
-pub fn save_map_node(_model: MapNode) {
-
+pub fn get_map_info(map_id: u32) -> Option<MapInfo> {
+    let conn = connect_db().unwrap();
+    let sql: &str = "SELECT map_id, map_name, display_order, created_at FROM map_info WHERE map_id = ?1;";
+    let params_vec: &[&dyn rusqlite::ToSql] = params![
+        map_id
+    ];   
+    let mut stmt = conn.prepare(sql).unwrap();
+    let result_iter = stmt.query_map(params_vec, |row| {
+        Ok(MapInfo{
+            map_id: row.get(0).unwrap(), 
+            map_name: row.get(1).unwrap(), 
+            display_order: row.get(2).unwrap(),
+            created_at: row.get(3).unwrap()
+        })
+    }).unwrap();
+    for result in result_iter {
+        match result {
+            Ok(r) => {
+                return Some(r);
+            },
+            Err(e) => {
+                println!("Error: {}", e);
+            }
+        }
+    }
+    None
 }
 
-pub fn save_map_edge(_model: MapEdge) {
-
+pub fn insert_map_info(tran:&Transaction, model: MapInfo) -> Result<usize,rusqlite::Error>  {
+    let sql: &str = "INSERT INTO map_info (map_id, map_name, display_order, created_at) 
+        VALUES (?1,?2,?3,datetime(CURRENT_TIMESTAMP, 'localtime'));";
+    let params_vec: &[&dyn rusqlite::ToSql] = params![
+        model.map_id,
+        model.map_name,
+        model.display_order
+    ];   
+    tran.execute(sql, params_vec)
 }
 
-pub fn save_map_layout(_model: MapLayout) {
+pub fn delete_map_info(tran:&Transaction, map_id: u32) -> Result<usize,rusqlite::Error>  {
+    let sql: &str = "DELETE FROM map_info WHERE map_id = ?1;";
+    let params_vec: &[&dyn rusqlite::ToSql] = params![
+        map_id
+    ];   
+    tran.execute(sql, params_vec)
+}
 
+pub fn insert_map_node(tran:&Transaction, model: MapNode) -> Result<usize,rusqlite::Error> {
+    let sql: &str = "INSERT INTO map_node (map_id, node_id, node_name, ip_addr, host_name) 
+        VALUES (?1,?2,?3,?4,?5);";
+    let params_vec: &[&dyn rusqlite::ToSql] = params![
+        model.map_id,
+        model.node_id,
+        model.node_name,
+        model.ip_addr,
+        model.host_name
+    ];   
+    tran.execute(sql, params_vec)
+}
+
+pub fn delete_map_node(tran:&Transaction, model: MapNode) -> Result<usize,rusqlite::Error>  {
+    let sql: &str = "DELETE FROM map_node WHERE map_id = ?1 AND node_id = ?2;";
+    let params_vec: &[&dyn rusqlite::ToSql] = params![
+        model.map_id,
+        model.node_id
+    ];   
+    tran.execute(sql, params_vec)
+}
+
+pub fn delete_map_nodes(tran:&Transaction, map_id: u32) -> Result<usize,rusqlite::Error>  {
+    let sql: &str = "DELETE FROM map_node WHERE map_id = ?1;";
+    let params_vec: &[&dyn rusqlite::ToSql] = params![
+        map_id
+    ];   
+    tran.execute(sql, params_vec)
+}
+
+pub fn insert_map_edge(tran:&Transaction, model: MapEdge) -> Result<usize,rusqlite::Error> {
+    let sql: &str = "INSERT INTO map_edge (map_id, edge_id, source_node_id, target_node_id, edge_label) 
+        VALUES (?1,?2,?3,?4,?5);";
+    let params_vec: &[&dyn rusqlite::ToSql] = params![
+        model.map_id,
+        model.edge_id,
+        model.source_node_id,
+        model.target_node_id,
+        model.edge_label
+    ];   
+    tran.execute(sql, params_vec)
+}
+
+pub fn delete_map_edge(tran:&Transaction, model: MapEdge) -> Result<usize,rusqlite::Error>  {
+    let sql: &str = "DELETE FROM map_edge WHERE map_id = ?1 AND edge_id = ?2;";
+    let params_vec: &[&dyn rusqlite::ToSql] = params![
+        model.map_id,
+        model.edge_id
+    ];   
+    tran.execute(sql, params_vec)
+}
+
+pub fn delete_map_edges(tran:&Transaction, map_id: u32) -> Result<usize,rusqlite::Error>  {
+    let sql: &str = "DELETE FROM map_edge WHERE map_id = ?1;";
+    let params_vec: &[&dyn rusqlite::ToSql] = params![
+        map_id
+    ];   
+    tran.execute(sql, params_vec)
+}
+
+pub fn insert_map_layout(tran:&Transaction, model: MapLayout) -> Result<usize,rusqlite::Error> {
+    let sql: &str = "INSERT INTO map_layout (map_id, node_id, x_value, y_value) 
+        VALUES (?1,?2,?3,?4);";
+    let params_vec: &[&dyn rusqlite::ToSql] = params![
+        model.map_id,
+        model.node_id,
+        model.x_value,
+        model.y_value
+    ];   
+    tran.execute(sql, params_vec)
+}
+
+pub fn delete_map_layout(tran:&Transaction, model: MapLayout) -> Result<usize,rusqlite::Error>  {
+    let sql: &str = "DELETE FROM map_layout WHERE map_id = ?1 AND node_id = ?2;";
+    let params_vec: &[&dyn rusqlite::ToSql] = params![
+        model.map_id,
+        model.node_id
+    ];   
+    tran.execute(sql, params_vec)
+}
+
+pub fn delete_map_layouts(tran:&Transaction, map_id: u32) -> Result<usize,rusqlite::Error>  {
+    let sql: &str = "DELETE FROM map_layout WHERE map_id = ?1;";
+    let params_vec: &[&dyn rusqlite::ToSql] = params![
+        map_id
+    ];   
+    tran.execute(sql, params_vec)
+}
+
+pub fn save_map_data(conn:&mut Connection, model: MapData) -> Result<usize,rusqlite::Error> {
+    let mut affected_row_count: usize = 0;
+    let map_id: u32 = model.map_info.map_id.clone();
+    let map_info = get_map_info(map_id);
+    let tran: Transaction = conn.transaction().unwrap();
+    // Save map_info
+    if map_info.is_none() {
+        match insert_map_info(&tran, model.map_info) {
+            Ok(row_count) => {
+                affected_row_count += row_count;
+            },
+            Err(e) => {
+                println!("Error: {}", e);
+                tran.rollback().unwrap();
+                return Err(e);
+            }
+        }
+    }
+    // Save map_node
+    match delete_map_nodes(&tran, map_id) {
+        Ok(row_count) => {
+            affected_row_count += row_count;
+        },
+        Err(e) => {
+            println!("Error: {}", e);
+            tran.rollback().unwrap();
+            return Err(e);
+        }
+    }
+    for map_node in model.nodes {
+        match insert_map_node(&tran, map_node) {
+            Ok(row_count) => {
+                affected_row_count += row_count;
+            },
+            Err(e) => {
+                println!("Error: {}", e);
+                tran.rollback().unwrap();
+                return Err(e);
+            }
+        }
+    }
+    // Save map_edge
+    match delete_map_edges(&tran, map_id) {
+        Ok(row_count) => {
+            affected_row_count += row_count;
+        },
+        Err(e) => {
+            println!("Error: {}", e);
+            tran.rollback().unwrap();
+            return Err(e);
+        }
+    }
+    for map_edge in model.edges {   
+        match insert_map_edge(&tran, map_edge) {
+            Ok(row_count) => {
+                affected_row_count += row_count;
+            },
+            Err(e) => {
+                println!("Error: {}", e);
+                tran.rollback().unwrap();
+                return Err(e);
+            }
+        }
+    }
+    // Save map_layout
+    match delete_map_layouts(&tran, map_id) {
+        Ok(row_count) => {
+            affected_row_count += row_count;
+        },
+        Err(e) => {
+            println!("Error: {}", e);
+            tran.rollback().unwrap();
+            return Err(e);
+        }
+    }
+    for map_layout in model.layouts {
+        match insert_map_layout(&tran, map_layout) {
+            Ok(row_count) => {
+                affected_row_count += row_count;
+            },
+            Err(e) => {
+                println!("Error: {}", e);
+                tran.rollback().unwrap();
+                return Err(e);
+            }
+        }
+    }
+    match tran.commit() {
+        Ok(_) => {
+            return Ok(affected_row_count);
+        },
+        Err(e) => {
+            println!("Error: {}", e);
+            return Err(e);
+        }
+    }
 }

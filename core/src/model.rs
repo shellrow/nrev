@@ -249,7 +249,7 @@ pub struct MapLayout {
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct MapData {
-    pub map_id: MapInfo,
+    pub map_info: MapInfo,
     pub nodes: Vec<MapNode>,
     pub edges: Vec<MapEdge>,
     pub layouts: Vec<MapLayout>,
