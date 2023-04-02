@@ -14,6 +14,9 @@ use clap::{Command, AppSettings, Arg, App, ArgGroup};
 use enmap_core::{option, process, sys, validator};
 
 fn main() {
+    if !enmap_core::process::privileged() {
+        //enmap_core::process::restart_as_root();
+    }
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
         show_app_desc();
