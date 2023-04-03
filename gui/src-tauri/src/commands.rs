@@ -181,3 +181,8 @@ pub fn save_map_data(map_data: enmap_core::model::MapData) -> u32 {
         }
     }
 }
+
+#[tauri::command]
+pub fn get_map_data(map_id: u32) -> enmap_core::model::MapData {
+    enmap_core::db::get_map_data(map_id)
+}

@@ -254,3 +254,19 @@ pub struct MapData {
     pub edges: Vec<MapEdge>,
     pub layouts: Vec<MapLayout>,
 }
+
+impl MapData {
+    pub fn new() -> MapData {
+        MapData {
+            map_info: MapInfo {
+                map_id: 0,
+                map_name: String::new(),
+                display_order: 0,
+                created_at: String::new(),
+            },
+            nodes: vec![],
+            edges: vec![],
+            layouts: vec![],
+        }
+    }
+}

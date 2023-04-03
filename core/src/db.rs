@@ -1,6 +1,6 @@
 use std::{env, vec};
 use std::path::{PathBuf};
-use rusqlite::{Connection, Result, params, Transaction};
+use rusqlite::{Connection, Result, params, Transaction, Statement, Rows};
 use uuid::Uuid;
 use crate::{define, option};
 use crate::result::{PortScanResult, HostScanResult, PingStat, PingResult, TraceResult, Node};
@@ -753,4 +753,86 @@ pub fn save_map_data(conn:&mut Connection, model: MapData) -> Result<usize,rusql
             return Err(e);
         }
     }
+}
+
+pub fn get_map_nodes(map_id: u32) -> Vec<MapNode> {
+    let mut map_nodes: Vec<MapNode> = Vec::new();
+    let conn: Connection = connect_db().unwrap();
+    let sql: &str = "SELECT map_id, node_id, node_name, ip_addr, host_name FROM map_node WHERE map_id = ?1;";
+    let params_vec: &[&dyn rusqlite::ToSql] = params![
+        map_id
+    ];
+    let mut stmt: Statement = conn.prepare(sql).unwrap();
+    let mut rows: Rows = stmt.query(params_vec).unwrap();
+    while let Some(row) = rows.next().unwrap() {
+        let map_node: MapNode = MapNode {
+            map_id: row.get(0).unwrap(),
+            node_id: row.get(1).unwrap(),
+            node_name: row.get(2).unwrap(),
+            ip_addr: row.get(3).unwrap(),
+            host_name: row.get(4).unwrap()
+        };
+        map_nodes.push(map_node);
+    }
+    map_nodes
+}
+
+pub fn get_map_edges(map_id: u32) -> Vec<MapEdge> {
+    let mut map_edges: Vec<MapEdge> = Vec::new();
+    let conn: Connection = connect_db().unwrap();
+    let sql: &str = "SELECT map_id, edge_id, source_node_id, target_node_id, edge_label FROM map_edge WHERE map_id = ?1";
+    let params_vec: &[&dyn rusqlite::ToSql] = params![
+        map_id
+    ];
+    let mut stmt: Statement = conn.prepare(sql).unwrap();
+    let mut rows: Rows = stmt.query(params_vec).unwrap();
+    while let Some(row) = rows.next().unwrap() {
+        let map_edge: MapEdge = MapEdge {
+            map_id: row.get(0).unwrap(),
+            edge_id: row.get(1).unwrap(),
+            source_node_id: row.get(2).unwrap(),
+            target_node_id: row.get(3).unwrap(),
+            edge_label: row.get(4).unwrap()
+        };
+        map_edges.push(map_edge);
+    }
+    map_edges
+}
+
+pub fn get_map_layouts(map_id: u32) -> Vec<MapLayout> {
+    let mut map_layouts: Vec<MapLayout> = Vec::new();
+    let conn: Connection = connect_db().unwrap();
+    let sql: &str = "SELECT map_id, node_id, x_value, y_value FROM map_layout WHERE map_id = $1";
+    let params_vec: &[&dyn rusqlite::ToSql] = params![
+        map_id
+    ];
+    let mut stmt: Statement = conn.prepare(sql).unwrap();
+    let mut rows: Rows = stmt.query(params_vec).unwrap();
+    while let Some(row) = rows.next().unwrap() {
+        let map_layout: MapLayout = MapLayout {
+            map_id: row.get(0).unwrap(),
+            node_id: row.get(1).unwrap(),
+            x_value: row.get(2).unwrap(),
+            y_value: row.get(3).unwrap()
+        };
+        map_layouts.push(map_layout);
+    }
+    map_layouts
+}
+
+pub fn get_map_data(map_id: u32) -> MapData {
+    let mut map_data: MapData = MapData::new();
+    let map_info: Option<MapInfo> = get_map_info(map_id);
+    if map_info.is_some() {
+        map_data.map_info = map_info.unwrap();
+    }else {
+        return map_data;
+    }
+    let map_nodes: Vec<MapNode> = get_map_nodes(map_id);
+    map_data.nodes = map_nodes;
+    let map_edges: Vec<MapEdge> = get_map_edges(map_id);
+    map_data.edges = map_edges;
+    let map_layouts: Vec<MapLayout> = get_map_layouts(map_id);
+    map_data.layouts = map_layouts;
+    map_data
 }
