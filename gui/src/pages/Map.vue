@@ -44,9 +44,9 @@ type MapLayout = {
 
 type MapData = {
   map_info: MapInfo,
-  map_nodes: Array<MapNode>,
-  map_edges: Array<MapEdge>,
-  map_layouts: Array<MapLayout>,
+  nodes: Array<MapNode>,
+  edges: Array<MapEdge>,
+  layouts: Array<MapLayout>,
 }
 
 function invoke_get_probed_hosts(): Promise<Array<DataSetItem>>{
@@ -242,22 +242,22 @@ const saveMap = () => {
       edge_label: edges[key].label,
     });
   });
-  Object.keys(layouts).forEach(key => {
+  Object.keys(layouts.nodes).forEach(key => {
     layout_array.push({
       map_id: mapInfo.map_id,
       node_id: key,
-      x_value: layouts[key].x,
-      y_value: layouts[key].y,
+      x_value: layouts.nodes[key].x,
+      y_value: layouts.nodes[key].y,
     });
   });
-  const map_data: MapData = {
+  const mapData: MapData = {
     map_info: mapInfo,
-    map_nodes: node_array,
-    map_edges: edge_array,
-    map_layouts: layout_array,
+    nodes: node_array,
+    edges: edge_array,
+    layouts: layout_array,
   };
-  console.log(map_data);
-  invoke('save_map_data', { "map_data": map_data }).then((code) => {
+  console.log(mapData);
+  invoke('save_map_data', { "mapData": mapData }).then((code) => {
     if (code === 0) {
       console.log("Map saved");
     } else {
