@@ -13,33 +13,33 @@ type DataSetItem = {
 }
 
 type MapInfo = {
-  map_id: Number,
-  map_name: String,
+  map_id: number,
+  map_name: string,
   display_order: Number,
-  created_at: String,
+  created_at: string,
 }
 
 type MapNode = {
-  map_id: Number,
-  node_id: String,
-  node_name: String,
-  ip_addr: String,
-  host_name: String,
+  map_id: number,
+  node_id: string,
+  node_name: string,
+  ip_addr: string,
+  host_name: string,
 }
 
 type MapEdge = {
-  map_id: Number,
-  edge_id: String,
-  source_node_id: String,
-  target_node_id: String,
-  edge_label: String,
+  map_id: number,
+  edge_id: string,
+  source_node_id: string,
+  target_node_id: string,
+  edge_label: string,
 }
 
 type MapLayout = {
-  map_id: Number,
-  node_id: String,
-  x_value: Number,
-  y_value: Number,
+  map_id: number,
+  node_id: string,
+  x_value: number,
+  y_value: number,
 }
 
 type MapData = {
@@ -97,6 +97,7 @@ function initMap() {
       console.log("Node added: " + id + ", " + nodes[id].name);
     });
   });
+  loadMapData();
 }
 
 const mapInfo: MapInfo = reactive(
@@ -110,7 +111,7 @@ const mapInfo: MapInfo = reactive(
 
 const nodes: Nodes = reactive(
     {
-      node1: { name: "192.168.1.8", ip_addr: "", host_name: "" },
+      /* node1: { name: "192.168.1.8", ip_addr: "", host_name: "" },
       node2: { name: "192.168.1.4", ip_addr: "", host_name: "" },
       node3: { name: "192.168.1.1", ip_addr: "", host_name: "" },
       node4: { name: "192.168.1.92", ip_addr: "", host_name: "" },
@@ -119,13 +120,13 @@ const nodes: Nodes = reactive(
       node7: { name: "45.33.34.74", ip_addr: "", host_name: "" },
       node8: { name: "45.33.34.76", ip_addr: "", host_name: "" },
       node9: { name: "45.33.35.67", ip_addr: "", host_name: "" },
-      node10: { name: "45.33.40.103", ip_addr: "", host_name: "" },
+      node10: { name: "45.33.40.103", ip_addr: "", host_name: "" }, */
     }
   );
 
 const edges: Edges = reactive(
   {
-    edge1: { source: "node1", target: "node2", label: "1 Gbps" },
+    /* edge1: { source: "node1", target: "node2", label: "1 Gbps" },
     edge2: { source: "node2", target: "node3", label: "1 Gbps" },
     edge3: { source: "node2", target: "node4", label: "1 Gbps" },
     edge4: { source: "node3", target: "node5", label: "1 Gbps" },
@@ -133,7 +134,7 @@ const edges: Edges = reactive(
     edge6: { source: "node5", target: "node7", label: "1 Gbps" },
     edge7: { source: "node5", target: "node8", label: "1 Gbps" },
     edge8: { source: "node5", target: "node9", label: "1 Gbps" },
-    edge9: { source: "node5", target: "node10", label: "1 Gbps" },
+    edge9: { source: "node5", target: "node10", label: "1 Gbps" }, */
   }
 );
 
@@ -157,7 +158,7 @@ const configs = reactive(defineConfigs({
 const layouts: Layouts = reactive(
   {
     nodes: {
-      node1: { x: 0, y: 140 },
+      /* node1: { x: 0, y: 140 },
       node2: { x: 160, y: 140 },
       node3: { x: 280, y: 140 },
       node4: { x: 60, y: 220 },
@@ -166,7 +167,7 @@ const layouts: Layouts = reactive(
       node7: { x: 540, y: 100 },
       node8: { x: 580, y: 200 },
       node9: { x: 540, y: 280 },
-      node10: { x: 500, y: 340 },
+      node10: { x: 500, y: 340 }, */
     },
   }
 ); 
@@ -263,6 +264,30 @@ const saveMap = () => {
     } else {
       console.log("Map save failed");
     }
+  });
+}
+
+const loadMapData = () => {
+  invoke<MapData>('get_map_data', { "mapId": 1 }).then((mapData) => {
+    console.log(mapData);
+    // Map Info
+    mapInfo.map_id = mapData.map_info.map_id;
+    mapInfo.map_name = mapData.map_info.map_name;
+    mapInfo.display_order = mapData.map_info.display_order;
+    mapInfo.created_at = mapData.map_info.created_at;
+    // Nodes
+    mapData.nodes.forEach(node => {
+      nodes[node.node_id] = { name: node.node_name, ip_addr: node.ip_addr, host_name: node.host_name };
+    });
+    // Edges
+    mapData.edges.forEach(edge => {
+      edges[edge.edge_id] = { source: edge.source_node_id, target: edge.target_node_id, label: edge.edge_label };
+    });
+    // Layouts
+    mapData.layouts.forEach(layout => {
+      layouts.nodes[layout.node_id] = { x: layout.x_value, y: layout.y_value };
+    });
+
   });
 }
 
