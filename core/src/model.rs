@@ -221,6 +221,21 @@ pub struct MapInfo {
     pub created_at: String,
 }
 
+impl MapInfo {
+    pub fn new() -> MapInfo {
+        MapInfo { map_id: 0, map_name: String::new(), display_order: 0, created_at: String::new() }
+    }
+    pub fn insert(&self) {
+
+    }
+    pub fn update(&self) {
+
+    }
+    pub fn delete(&self) {
+
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct MapNode {
     pub map_id: u32,
@@ -228,6 +243,21 @@ pub struct MapNode {
     pub node_name: String,
     pub ip_addr: String,
     pub host_name: String,
+}
+
+impl MapNode {
+    pub fn new() -> MapNode {
+        MapNode { map_id: 0, node_id: String::new(), node_name: String::new(), ip_addr: String::new(), host_name: String::new() }
+    }
+    pub fn insert(&self) {
+
+    }
+    pub fn update(&self) {
+
+    }
+    pub fn delete(&self) {
+
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -239,12 +269,42 @@ pub struct MapEdge {
     pub edge_label: String,
 }
 
+impl MapEdge {
+    pub fn new() -> MapEdge {
+        MapEdge { map_id: 0, edge_id: String::new(), source_node_id: String::new(), target_node_id: String::new(), edge_label: String::new() }
+    }
+    pub fn insert(&self) {
+
+    }
+    pub fn update(&self) {
+
+    }
+    pub fn delete(&self) {
+
+    }
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct MapLayout {
     pub map_id: u32,
     pub node_id: String,
     pub x_value: u32,
     pub y_value: u32
+}
+
+impl MapLayout {
+    pub fn new() -> MapLayout {
+        MapLayout { map_id: 0, node_id: String::new(), x_value: 0, y_value: 0 }
+    }
+    pub fn insert(&self) {
+
+    }
+    pub fn update(&self) {
+
+    }
+    pub fn delete(&self) {
+
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
