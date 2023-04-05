@@ -1,5 +1,5 @@
 # enmap-desktop
-Simple, but enhanced network mapper.  
+Easy and enhanced network mapper.  
 Graphical enmap frontend.
 
 **Under development**

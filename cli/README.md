@@ -1,5 +1,5 @@
 # enmap 
-Simple, but enhanced network mapper.
+Easy and enhanced network mapper.
 
 ## Features
 - Port Scan
