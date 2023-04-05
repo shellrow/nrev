@@ -53,7 +53,6 @@ function invoke_get_probed_hosts(): Promise<Array<DataSetItem>>{
   return invoke('get_probed_hosts');
 }
 
-
 if (localStorage.theme === 'dark') {
   nodeLabelColor.value = "#ffffff";
 } else {
@@ -91,10 +90,10 @@ function setProbedHosts() {
 function initMap() {
   setProbedHosts().then(() => {
       probedHosts.value.forEach(host => {
-      const id = `node${Object.keys(nodes).length + 1}`;
-      nodes[id] = { name: host.id, ip_addr: "", host_name: "" };
-      layouts.nodes[id] = getNewPosition();
-      console.log("Node added: " + id + ", " + nodes[id].name);
+      //const id = `node${Object.keys(nodes).length + 1}`;
+      //nodes[id] = { name: host.id, ip_addr: "", host_name: "" };
+      //layouts.nodes[id] = getNewPosition();
+      //console.log("Node added: " + id + ", " + nodes[id].name);
     });
   });
   loadMapData();
@@ -109,34 +108,9 @@ const mapInfo: MapInfo = reactive(
   }
 );
 
-const nodes: Nodes = reactive(
-    {
-      /* node1: { name: "192.168.1.8", ip_addr: "", host_name: "" },
-      node2: { name: "192.168.1.4", ip_addr: "", host_name: "" },
-      node3: { name: "192.168.1.1", ip_addr: "", host_name: "" },
-      node4: { name: "192.168.1.92", ip_addr: "", host_name: "" },
-      node5: { name: "179.48.249.196", ip_addr: "", host_name: "" },
-      node6: { name: "45.33.32.156", ip_addr: "", host_name: "" },
-      node7: { name: "45.33.34.74", ip_addr: "", host_name: "" },
-      node8: { name: "45.33.34.76", ip_addr: "", host_name: "" },
-      node9: { name: "45.33.35.67", ip_addr: "", host_name: "" },
-      node10: { name: "45.33.40.103", ip_addr: "", host_name: "" }, */
-    }
-  );
+const nodes: Nodes = reactive({});
 
-const edges: Edges = reactive(
-  {
-    /* edge1: { source: "node1", target: "node2", label: "1 Gbps" },
-    edge2: { source: "node2", target: "node3", label: "1 Gbps" },
-    edge3: { source: "node2", target: "node4", label: "1 Gbps" },
-    edge4: { source: "node3", target: "node5", label: "1 Gbps" },
-    edge5: { source: "node5", target: "node6", label: "1 Gbps" },
-    edge6: { source: "node5", target: "node7", label: "1 Gbps" },
-    edge7: { source: "node5", target: "node8", label: "1 Gbps" },
-    edge8: { source: "node5", target: "node9", label: "1 Gbps" },
-    edge9: { source: "node5", target: "node10", label: "1 Gbps" }, */
-  }
-);
+const edges: Edges = reactive({});
 
 const configs = reactive(defineConfigs({
   node: {
@@ -157,18 +131,7 @@ const configs = reactive(defineConfigs({
 
 const layouts: Layouts = reactive(
   {
-    nodes: {
-      /* node1: { x: 0, y: 140 },
-      node2: { x: 160, y: 140 },
-      node3: { x: 280, y: 140 },
-      node4: { x: 60, y: 220 },
-      node5: { x: 400, y: 140 },
-      node6: { x: 500, y: 40 },
-      node7: { x: 540, y: 100 },
-      node8: { x: 580, y: 200 },
-      node9: { x: 540, y: 280 },
-      node10: { x: 500, y: 340 }, */
-    },
+    nodes: {},
   }
 ); 
 
@@ -191,11 +154,31 @@ const getNewPosition = () => {
   return { x, y };
 };
 
+const getNewNodeId = () => {
+  let seq = Object.keys(nodes).length + 1;
+  let newId = `node${seq}`;
+  while (Object.keys(nodes).includes(newId)){
+    seq += 1;
+    newId = `node${seq}`;
+  }
+  return newId;
+};
+
+const getNewEdgeId = () => {
+  let seq = Object.keys(nodes).length + 1;
+  let newId = `edge${seq}`;
+  while (Object.keys(edges).includes(newId)){
+    seq += 1;
+    newId = `edge${seq}`;
+  }
+  return newId;
+};
+
 const addNode = () => {
   if (!targetHost.value) {
     return;
   }
-  const id = `node${Object.keys(nodes).length + 1}`;
+  const id = getNewNodeId();
   nodes[id] = { name: targetHost.value, ip_addr: "", host_name: "" };
   layouts.nodes[id] = getNewPosition();
   console.log("Node added: " + id + ", " + nodes[id].name);
@@ -211,8 +194,11 @@ const removeNodes = () => {
 const connectNodes = () => {
   if (selectedNodes.value.length !== 2) return;
   const [source, target] = selectedNodes.value;
-  const edgeId = `edge${Object.keys(edges).length + 1}`;
-  edges[edgeId] = { source, target };
+  const label = "Edge";
+  const edgeId = getNewEdgeId();
+  console.log("Edge added: " + edgeId + ", " + label);
+  console.log(nodes[source].name + " -> " + nodes[target].name);
+  edges[edgeId] = { source, target, label };
 }
 
 const removeEdges = () => {
@@ -291,6 +277,16 @@ const loadMapData = () => {
   });
 }
 
+const onTargetHostsChange = (event) => {
+  console.log(event);
+  console.log(targetHosts.value);
+}
+
+const onTargetHostRemoved = (event) => {
+  console.log(event);
+  console.log(targetHosts.value);
+}
+
 onMounted(() => {
     if (localStorage.theme === 'dark') {
         nodeLabelColor.value = "#ffffff";
@@ -348,7 +344,9 @@ onUnmounted(() => {
           v-model="targetHosts"
           multiple 
           collapse-tags 
-          placeholder="Select"
+          placeholder="Select" 
+          @change="onTargetHostsChange" 
+          @remove-tag="onTargetHostRemoved"
           >
             <el-option
                 v-for="item in probedHosts"
