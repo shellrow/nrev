@@ -67,7 +67,8 @@ const probedHosts = ref([
 ]);
 
 const targetHost = ref("");
-const targetHosts = ref([]);
+const targetHosts = ref<string[]>([]);
+const prevTargetHosts = ref<string[]>([]);
 
 function setProbedHosts() {
   return new Promise(
@@ -90,13 +91,11 @@ function setProbedHosts() {
 function initMap() {
   setProbedHosts().then(() => {
       probedHosts.value.forEach(host => {
-      //const id = `node${Object.keys(nodes).length + 1}`;
-      //nodes[id] = { name: host.id, ip_addr: "", host_name: "" };
-      //layouts.nodes[id] = getNewPosition();
-      //console.log("Node added: " + id + ", " + nodes[id].name);
+        prevTargetHosts.value.push(host.id);
     });
   });
   loadMapData();
+  selectMappedHosts();
 }
 
 const mapInfo: MapInfo = reactive(
@@ -173,6 +172,20 @@ const getNewEdgeId = () => {
   }
   return newId;
 };
+
+const getNodeId = (targetName) => {
+  let nodeId = "";
+  probedHosts.value.forEach(host => {
+    if (host.id === targetName || host.name === targetName) {
+      Object.keys(nodes).forEach(key => {
+        if (nodes[key].name === host.id || nodes[key].name === host.name) {
+          nodeId = key;
+        }
+      });
+    }
+  });
+  return nodeId;
+}
 
 const addNode = () => {
   if (!targetHost.value) {
@@ -277,14 +290,69 @@ const loadMapData = () => {
   });
 }
 
+function getAddedHosts() {
+  let addedHosts: Array<string> = targetHosts.value.filter(x => !prevTargetHosts.value.includes(x));
+  return addedHosts;
+}
+
+function getRemovedHosts() {
+  let removedHosts: Array<string> = prevTargetHosts.value.filter(x => !targetHosts.value.includes(x));
+  return removedHosts;
+}
+
+const addCheckedNodes = () => {
+  const checkedHosts = getAddedHosts();
+  if (checkedHosts.length > 0) {
+    checkedHosts.forEach(host => {
+      const nodeId = getNodeId(host);
+      if (nodeId === "") {
+        const id = getNewNodeId();
+        nodes[id] = { name: host, ip_addr: "", host_name: "" };
+        layouts.nodes[id] = getNewPosition();
+      }
+    });
+  }
+  prevTargetHosts.value = targetHosts.value;
+}
+
+const removeUncheckedNodes = () => {
+  const removedHosts = getRemovedHosts();
+  if (removedHosts.length > 0) {
+    removedHosts.forEach(host => {
+      const nodeId = getNodeId(host);
+      if (nodeId !== "") {
+        delete nodes[nodeId];
+      }
+    });
+  }
+  prevTargetHosts.value = targetHosts.value;
+}
+
+const selectMappedHosts = () => {
+  probedHosts.value.forEach(host => {
+    const nodeId = getNodeId(host);
+    if (nodeId !== "") {
+      targetHosts.value.push(nodes[nodeId].ip_addr);
+    }
+  });
+  prevTargetHosts.value = targetHosts.value;
+}
+
 const onTargetHostsChange = (event) => {
-  console.log(event);
-  console.log(targetHosts.value);
+  console.log(event); 
+  if (event.length > prevTargetHosts.value.length) {
+    addCheckedNodes();
+  } else if (event.length < prevTargetHosts.value.length) {
+    removeUncheckedNodes();
+  }
 }
 
 const onTargetHostRemoved = (event) => {
-  console.log(event);
-  console.log(targetHosts.value);
+  const removedHost = event;
+  const nodeId = getNodeId(removedHost);
+  if (nodeId !== "") {
+    delete nodes[nodeId];
+  }
 }
 
 onMounted(() => {
