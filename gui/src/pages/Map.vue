@@ -3,6 +3,7 @@ import { ref, reactive, onMounted, onUnmounted } from 'vue';
 import { invoke } from '@tauri-apps/api/tauri';
 import { debounce } from 'lodash';
 import { Nodes, Edges, Layouts, defineConfigs} from "v-network-graph";
+import {Refresh} from '@element-plus/icons-vue';
 
 const nodeLabelColor = ref("#ffffff");
 const darkBgThemes = ["","dark", "night", "dracula", "halloween"];
@@ -89,6 +90,11 @@ function setProbedHosts() {
 }
 
 function initMap() {
+  if (localStorage.theme === 'dark') {
+      nodeLabelColor.value = "#ffffff";
+  } else {
+      nodeLabelColor.value = "#000000";
+  }
   setProbedHosts().then(() => {
       probedHosts.value.forEach(host => {
         prevTargetHosts.value.push(host.id);
@@ -96,6 +102,10 @@ function initMap() {
   });
   loadMapData();
   selectMappedHosts();
+}
+
+function reloadMap() {
+  initMap();
 }
 
 const mapInfo: MapInfo = reactive(
@@ -329,10 +339,13 @@ const removeUncheckedNodes = () => {
 }
 
 const selectMappedHosts = () => {
+  targetHosts.value.splice(0, probedHosts.value.length);
   probedHosts.value.forEach(host => {
     const nodeId = getNodeId(host);
     if (nodeId !== "") {
-      targetHosts.value.push(nodes[nodeId].ip_addr);
+      if (!targetHosts.value.includes(nodes[nodeId].ip_addr)) {
+        targetHosts.value.push(nodes[nodeId].ip_addr);
+      }
     }
   });
   prevTargetHosts.value = targetHosts.value;
@@ -356,13 +369,6 @@ const onTargetHostRemoved = (event) => {
 }
 
 onMounted(() => {
-    if (localStorage.theme === 'dark') {
-        nodeLabelColor.value = "#ffffff";
-    } else {
-        nodeLabelColor.value = "#000000";
-    }
-    //invoke('test_command_arg', { invokeMessage: 'Map' });
-    //invoke('test_command_return').then((message) => console.log(message));
     initMap();
 });
 
@@ -390,7 +396,10 @@ onUnmounted(() => {
     <template #header>
         <div class="card-header">
             <span>Map</span>
-            <el-button type="primary" plain @click="saveMap">Save</el-button>
+            <div>
+              <el-button type="primary" plain @click="reloadMap"><el-icon><Refresh /></el-icon></el-button>
+              <el-button type="primary" plain @click="saveMap">Save</el-button>
+            </div>
         </div>
     </template>
     <!-- Header -->
