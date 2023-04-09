@@ -288,8 +288,8 @@ impl MapEdge {
 pub struct MapLayout {
     pub map_id: u32,
     pub node_id: String,
-    pub x_value: u32,
-    pub y_value: u32
+    pub x_value: i32,
+    pub y_value: i32
 }
 
 impl MapLayout {
