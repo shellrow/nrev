@@ -2,11 +2,15 @@
 import { ref, reactive, onMounted, onUnmounted } from 'vue';
 import { invoke } from '@tauri-apps/api/tauri';
 import { debounce } from 'lodash';
-import { Nodes, Edges, Layouts, defineConfigs} from "v-network-graph";
+//import { Nodes, Edges, Layouts, defineConfigs, Instance} from "v-network-graph";
+import * as vNG from "v-network-graph"
 import {Refresh} from '@element-plus/icons-vue';
 
+const innerWidth = ref(window.innerWidth);
+const innerHeight = ref(window.innerHeight);
 const nodeLabelColor = ref("#ffffff");
 const darkBgThemes = ["","dark", "night", "dracula", "halloween"];
+const graph = ref<vNG.Instance>();
 
 type DataSetItem = {
   id: string;
@@ -71,6 +75,11 @@ const targetHost = ref("");
 const targetHosts = ref<string[]>([]);
 const prevTargetHosts = ref<string[]>([]);
 
+const checkWindowSize = () => {
+    innerWidth.value = window.innerWidth;
+    innerHeight.value = window.innerHeight;
+};
+
 function setProbedHosts() {
   return new Promise(
     (resolve, reject) => {
@@ -102,6 +111,19 @@ function initMap() {
   });
   loadMapData();
   selectMappedHosts();
+  if (!graph.value) return;
+  console.log("panned");
+  graph.value.panTo({
+      x: 40,
+      y: 40,
+  });
+  graph.value.setViewBox({
+    left: 0,
+    top: 0,
+    right: 540,
+    bottom: 540,
+  });
+  console.log("view box set");
 }
 
 function reloadMap() {
@@ -117,11 +139,14 @@ const mapInfo: MapInfo = reactive(
   }
 );
 
-const nodes: Nodes = reactive({});
+const nodes: vNG.Nodes = reactive({});
 
-const edges: Edges = reactive({});
+const edges: vNG.Edges = reactive({});
 
-const configs = reactive(defineConfigs({
+const configs = reactive(vNG.defineConfigs({
+  view: {
+    autoPanAndZoomOnLoad: false,
+  },
   node: {
     selectable: true,
     label: {
@@ -132,13 +157,13 @@ const configs = reactive(defineConfigs({
   edge: {
     selectable: true,
     label: {
-      visible: true,
+      //visible: true,
       color: nodeLabelColor.value,
     },
   },
 }));
 
-const layouts: Layouts = reactive(
+const layouts: vNG.Layouts = reactive(
   {
     nodes: {},
   }
@@ -369,11 +394,12 @@ const onTargetHostRemoved = (event) => {
 }
 
 onMounted(() => {
-    initMap();
+  window.addEventListener('resize', debounce(checkWindowSize, 100));
+  initMap();
 });
 
 onUnmounted(() => {
-
+  window.removeEventListener('resize', checkWindowSize);
 });
 
 </script>
@@ -457,13 +483,14 @@ onUnmounted(() => {
     </el-row>
   </el-card>
     <v-network-graph
+        ref="graph"
         v-model:selected-nodes="selectedNodes"
         v-model:selected-edges="selectedEdges"
         :nodes="nodes"
         :edges="edges"
         :layouts="layouts"
         :configs="configs"
-        style="height: 600px;"
+        :style="'height:'+ (innerHeight - 100).toString() + 'px'"
     >
     </v-network-graph>
 </template>
