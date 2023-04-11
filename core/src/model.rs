@@ -202,6 +202,20 @@ impl ProbeLog {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct ProbeStat {
+    pub portscan_count: u32,
+    pub hostscan_count: u32,
+    pub ping_count: u32,
+    pub traceroute_count: u32,
+}
+
+impl ProbeStat {
+    pub fn new() -> ProbeStat {
+        ProbeStat { portscan_count: 0, hostscan_count: 0, ping_count: 0, traceroute_count: 0 }
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct DataSetItem {
     pub id: String,
     pub name: String,

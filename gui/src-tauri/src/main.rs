@@ -7,7 +7,7 @@ mod define;
 mod db;
 mod models;
 mod commands;
-use commands::{test_command, test_command_arg, test_command_return, test_command_result, test_command_async, exec_portscan, exec_hostscan, exec_ping, exec_traceroute, lookup_hostname, lookup_ipaddr, get_probe_log, get_probed_hosts, save_map_data, get_map_data};
+use commands::{test_command, test_command_arg, test_command_return, test_command_result, test_command_async, exec_portscan, exec_hostscan, exec_ping, exec_traceroute, lookup_hostname, lookup_ipaddr, get_probe_log, get_probed_hosts, save_map_data, get_map_data, get_top_probe_hist, get_probe_stat};
 
 fn main() {
   // Initialize DB
@@ -36,7 +36,9 @@ fn main() {
       get_probe_log,
       get_probed_hosts,
       save_map_data,
-      get_map_data
+      get_map_data,
+      get_top_probe_hist,
+      get_probe_stat
       ])
     .run(tauri::generate_context!())
     .expect("error while running tauri application");

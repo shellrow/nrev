@@ -1,6 +1,6 @@
 use std::sync::mpsc::{channel ,Sender, Receiver};
 use std::thread;
-use enmap_core::model::{ProbeLog, DataSetItem};
+use enmap_core::model::{ProbeLog, DataSetItem, ProbeStat};
 use tauri::Manager;
 use enmap_core::option::{ScanOption};
 use enmap_core::result::{PortScanResult, HostScanResult, PingStat, TraceResult};
@@ -185,4 +185,14 @@ pub fn save_map_data(map_data: enmap_core::model::MapData) -> u32 {
 #[tauri::command]
 pub fn get_map_data(map_id: u32) -> enmap_core::model::MapData {
     enmap_core::db::get_map_data(map_id)
+}
+
+#[tauri::command]
+pub fn get_top_probe_hist() -> Vec<ProbeLog> {
+    enmap_core::db::get_top_probe_hist()
+}
+
+#[tauri::command]
+pub fn get_probe_stat() -> ProbeStat {
+    enmap_core::db::get_probe_stat()
 }

@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from 'vue-router';
+import Dashboard from '../pages/Dashboard.vue';
 import Map from '../pages/Map.vue';
 import PortScan from '../pages/PortScan.vue';
 import HostScan from '../pages/HostScan.vue';
@@ -14,6 +15,11 @@ import About from '../pages/About.vue';
 const routes = [
   {
     path: '/',
+    name: 'Dashboard',
+    component: Dashboard,
+  },
+  {
+    path: '/map',
     name: 'Map',
     component: Map,
   },

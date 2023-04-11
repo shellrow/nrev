@@ -99,14 +99,14 @@ onUnmounted(() => {
             </el-header>
             <el-container>
                 <el-aside id="side-menu" :width="isCollapse ? '80px' : '200px'" class="duration-300" >
-                    <el-menu default-active="1" :collapse="isCollapse" :style="'min-height:'+ innerHeight + 'px'" @open="handleOpen" @close="handleClose">
+                    <el-menu default-active="0" :collapse="isCollapse" :style="'min-height:'+ innerHeight + 'px'" @open="handleOpen" @close="handleClose">
                         <el-menu-item index="0">
                             <el-icon><Histogram /></el-icon>
                             <template #title><router-link to="/">Dashboard</router-link></template>
                         </el-menu-item>
                         <el-menu-item index="1">
                             <el-icon><IconMenu /></el-icon>
-                            <template #title><router-link to="/">Map</router-link></template>
+                            <template #title><router-link to="/map">Map</router-link></template>
                         </el-menu-item>
                         <el-sub-menu index="2">
                             <template #title>

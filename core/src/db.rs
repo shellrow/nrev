@@ -4,7 +4,7 @@ use rusqlite::{Connection, Result, params, Transaction, Statement, Rows};
 use uuid::Uuid;
 use crate::{define, option};
 use crate::result::{PortScanResult, HostScanResult, PingStat, PingResult, TraceResult, Node};
-use crate::model::{ProbeLog, DataSetItem, MapInfo, MapNode, MapEdge, MapLayout, MapData};
+use crate::model::{ProbeLog, DataSetItem, MapInfo, MapNode, MapEdge, MapLayout, MapData, ProbeStat};
 
 pub fn connect_db() -> Result<Connection,rusqlite::Error> {
     let mut path: PathBuf = env::current_exe().unwrap();
@@ -835,4 +835,51 @@ pub fn get_map_data(map_id: u32) -> MapData {
     let map_layouts: Vec<MapLayout> = get_map_layouts(map_id);
     map_data.layouts = map_layouts;
     map_data
+}
+
+pub fn get_top_probe_hist() -> Vec<ProbeLog> {
+    let mut results: Vec<ProbeLog> = vec![];
+    let conn = connect_db().unwrap();
+    let sql: &str = "SELECT A.id, A.probe_id, A.probe_type_id, B.probe_type_name, A.probe_target_addr, A.probe_target_name, A.protocol_id, A.probe_option, A.issued_at 
+    FROM probe_result AS A INNER JOIN probe_type AS B ON A.probe_type_id = B.probe_type_id ORDER BY A.id DESC LIMIT 10 ; ";
+    let mut stmt = conn.prepare(sql).unwrap(); 
+    let result_iter = stmt.query_map([], |row| {
+        Ok(ProbeLog {
+            id: row.get(0).unwrap(), 
+            probe_id: row.get(1).unwrap(), 
+            probe_type_id: row.get(2).unwrap(), 
+            probe_type_name: row.get(3).unwrap(), 
+            probe_target_addr: row.get(4).unwrap(), 
+            probe_target_name: row.get(5).unwrap(), 
+            protocol_id: row.get(6).unwrap(), 
+            probe_option: row.get(7).unwrap(), 
+            issued_at: row.get(8).unwrap() 
+        })
+    }).unwrap();
+    for result in result_iter {
+        results.push(result.unwrap());
+    }
+    return results;
+}
+
+pub fn get_probe_stat() -> ProbeStat {
+    let mut probe_stat: ProbeStat = ProbeStat::new();
+    let conn = connect_db().unwrap();
+    let sql: &str = "SELECT probe_type_id, COUNT(*) FROM probe_result GROUP BY probe_type_id;";
+    let mut stmt = conn.prepare(sql).unwrap();
+    let mut rows = stmt.query([]).unwrap();
+    while let Some(row) = rows.next().unwrap() {
+        let probe_type_id: String = row.get(0).unwrap();
+        let count: u32 = row.get(1).unwrap();
+        if probe_type_id == option::CommandType::PortScan.id() {
+            probe_stat.portscan_count = count;
+        }else if probe_type_id == option::CommandType::HostScan.id() {
+            probe_stat.hostscan_count = count;
+        }else if probe_type_id == option::CommandType::Traceroute.id() {
+            probe_stat.traceroute_count = count;
+        }else if probe_type_id == option::CommandType::Ping.id() {
+            probe_stat.ping_count = count;
+        }
+    }
+    probe_stat
 }
