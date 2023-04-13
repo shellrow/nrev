@@ -163,8 +163,7 @@ const clickScan = (event) => {
 };
 
 onMounted(() => {
-    invoke('test_command_arg', { invokeMessage: 'PortScan' });
-    invoke('test_command_return').then((message) => console.log(message));
+    
 });
 
 onUnmounted(() => {

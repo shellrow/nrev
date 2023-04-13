@@ -114,8 +114,7 @@ const handleOpen = (index, row) => {
 }
 
 onMounted(() => {
-    invoke('test_command_arg', { invokeMessage: 'Log' });
-    invoke('test_command_return').then((message) => console.log(message));
+  
 });
 
 onUnmounted(() => {

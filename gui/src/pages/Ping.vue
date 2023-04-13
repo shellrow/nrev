@@ -107,8 +107,7 @@ const clickScan = (event) => {
 };
 
 onMounted(() => {
-    invoke('test_command_arg', { invokeMessage: 'Ping' });
-    invoke('test_command_return').then((message) => console.log(message));
+    
 });
 
 onUnmounted(() => {

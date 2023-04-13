@@ -64,8 +64,7 @@ const clickScan = (event) => {
 };
 
 onMounted(() => {
-    invoke('test_command_arg', { invokeMessage: 'Traceroute' });
-    invoke('test_command_return').then((message) => console.log(message));
+  
 });
 
 onUnmounted(() => {

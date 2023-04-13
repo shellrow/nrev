@@ -6,42 +6,7 @@ use enmap_core::option::{ScanOption};
 use enmap_core::result::{PortScanResult, HostScanResult, PingStat, TraceResult};
 use enmap_core::scan;
 use enmap_core::network;
-
 use crate::models;
-
-// Test commands
-#[tauri::command]
-pub fn test_command() {
-    println!("I was invoked from JS!");
-}
-
-#[tauri::command]
-pub fn test_command_arg(invoke_message: String) {
-    println!("I was invoked from JS, with this message: {}", invoke_message);
-}
-
-#[tauri::command]
-pub fn test_command_return() -> String {
-    String::from("Hello from Rust!")
-}
-
-#[tauri::command]
-pub fn test_command_result() -> Result<String, String> {
-    // Fail
-    //Err("This failed!".into())
-    // Success
-    Ok("This worked!".into())
-}
-
-async fn some_async_function() -> Option<String> {
-    Some("response".into())
-}
-
-#[tauri::command]
-pub async fn test_command_async() {
-    let result = some_async_function().await;
-    println!("Result: {}", result.unwrap());
-}
 
 // Commands
 #[tauri::command]

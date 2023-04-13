@@ -2,7 +2,6 @@
 import { ref, reactive, onMounted, onUnmounted } from 'vue';
 import { invoke } from '@tauri-apps/api/tauri';
 import { debounce } from 'lodash';
-//import { Nodes, Edges, Layouts, defineConfigs, Instance} from "v-network-graph";
 import * as vNG from "v-network-graph"
 import {Refresh} from '@element-plus/icons-vue';
 

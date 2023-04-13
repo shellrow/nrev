@@ -89,11 +89,6 @@ onUnmounted(() => {
                     </router-link> -->
                     <div class="flex-grow" />
                     <el-menu-item index="0"><router-link to="/system">System</router-link></el-menu-item>
-                    <el-sub-menu index="1">
-                        <template #title>Account</template>
-                        <el-menu-item index="1-1"><router-link to="/profile">Profile</router-link></el-menu-item>
-                        <el-menu-item index="1-2"><router-link to="/login">Login</router-link></el-menu-item>
-                    </el-sub-menu>
                     <el-switch v-model="mode" @click="changeMode" style="margin-left: 24px; margin-top: 12px;" inline-prompt :active-icon="Sunny" :inactive-icon="Moon" />
                 </el-menu>
             </el-header>
