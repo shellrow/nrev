@@ -29,7 +29,7 @@
         "icons/icon.ico"
       ],
       "identifier": "com.intsigma.enmap-desktop",
-      "longDescription": "",
+      "longDescription": "Cross-platform network mapper",
       "macOS": {
         "entitlements": null,
         "exceptionDomain": "",
@@ -38,7 +38,7 @@
         "signingIdentity": null
       },
       "resources": [],
-      "shortDescription": "",
+      "shortDescription": "Cross-platform network mapper",
       "targets": "all",
       "windows": {
         "certificateThumbprint": null,
