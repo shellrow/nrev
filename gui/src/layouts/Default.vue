@@ -2,7 +2,8 @@
 import {ref ,onMounted, onUnmounted} from 'vue';
 import {debounce} from 'lodash';
 import {Document, Menu as IconMenu, Setting, Sunny, Moon, Expand, Fold, View, Histogram} from '@element-plus/icons-vue';
-
+import SystemPage from '../pages/System.vue';
+import AboutPage from '../pages/About.vue';
 //import EnMapLogo from "../assets/enmap_icon.png";
 
 const innerWidth = ref(window.innerWidth);
@@ -11,6 +12,9 @@ const theme = ref('light');
 const activeIndex = ref('0');
 const mode = ref(true);
 const isCollapse = ref(innerWidth.value < 1200 ? true : false);
+
+const dialogSystemVisible = ref(false);
+const dialogAboutVisible = ref(false);
 
 if (localStorage.theme === 'dark') {
     document.documentElement.classList.add('dark');
@@ -88,13 +92,14 @@ onUnmounted(() => {
                         <img class="img" :src="EnMapLogo" width="40" style="margin-left: 4px; margin-top: 10px" />
                     </router-link> -->
                     <div class="flex-grow" />
-                    <el-menu-item index="0"><router-link to="/system">System</router-link></el-menu-item>
+                    <el-menu-item index="0" @click="dialogSystemVisible = true">System</el-menu-item>
+                    <el-menu-item index="1" @click="dialogAboutVisible = true">About</el-menu-item>
                     <el-switch v-model="mode" @click="changeMode" style="margin-left: 24px; margin-top: 12px;" inline-prompt :active-icon="Sunny" :inactive-icon="Moon" />
                 </el-menu>
             </el-header>
             <el-container>
                 <el-aside id="side-menu" :width="isCollapse ? '80px' : '200px'" class="duration-300" >
-                    <el-menu default-active="0" :collapse="isCollapse" :style="'min-height:'+ innerHeight + 'px'" @open="handleOpen" @close="handleClose">
+                    <el-menu :default-active="activeIndex" :collapse="isCollapse" :style="'min-height:'+ innerHeight + 'px'" @open="handleOpen" @close="handleClose">
                         <el-menu-item index="0">
                             <el-icon><Histogram /></el-icon>
                             <template #title><router-link to="/">Dashboard</router-link></template>
@@ -133,5 +138,24 @@ onUnmounted(() => {
             </el-container>
         </el-container>
     </div>
+
+    <!-- Dialog -->
+    <el-dialog v-model="dialogSystemVisible" title="System">
+        <SystemPage></SystemPage>
+        <template #footer>
+            <span class="dialog-footer">
+                <el-button @click="dialogSystemVisible = false">Close</el-button>
+            </span>
+        </template>
+    </el-dialog>
+    <el-dialog v-model="dialogAboutVisible" title="About">
+        <AboutPage></AboutPage>
+        <template #footer>
+            <span class="dialog-footer">
+                <el-button @click="dialogAboutVisible = false">Close</el-button>
+            </span>
+        </template>
+    </el-dialog>
+    <!-- Dialog -->
 
 </template>

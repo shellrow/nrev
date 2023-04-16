@@ -161,3 +161,8 @@ pub fn get_top_probe_hist() -> Vec<ProbeLog> {
 pub fn get_probe_stat() -> ProbeStat {
     enmap_core::db::get_probe_stat()
 }
+
+#[tauri::command]
+pub fn get_default_interface() -> enmap_core::model::NetworkInterface {
+    enmap_core::network::get_default_interface_model()
+}

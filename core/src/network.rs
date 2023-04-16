@@ -189,3 +189,33 @@ pub fn get_interface_by_name(if_name: String) -> Option<default_net::Interface> 
     }
     return None;
 }
+
+pub fn get_default_interface_model() -> crate::model::NetworkInterface {
+    let mut default_interface: crate::model::NetworkInterface = crate::model::NetworkInterface::new();
+    match default_net::get_default_interface() {
+        Ok(interface) => {
+            default_interface.index = interface.index;
+            default_interface.name = interface.name;
+            default_interface.friendly_name = interface.friendly_name.unwrap_or(String::new());
+            default_interface.description = interface.description.unwrap_or(String::new());
+            default_interface.if_type = interface.if_type.name();
+            if let Some(mac) = interface.mac_addr {
+                default_interface.mac_addr = mac.address();
+            }
+            for ip in interface.ipv4 {
+                default_interface.ipv4.push(ip.addr.to_string());
+            }
+            for ip in interface.ipv6 {
+                default_interface.ipv6.push(ip.addr.to_string());
+            }
+            if let Some(gateway) = interface.gateway {
+                default_interface.gateway_mac_addr = gateway.mac_addr.address();
+                default_interface.gateway_ip_addr = gateway.ip_addr.to_string();
+            }
+        }
+        Err(e) => {
+            println!("{}", e);
+        }
+    }
+    default_interface
+}
