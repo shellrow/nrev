@@ -1,6 +1,0 @@
-[workspace]
-members = [
-    "core",
-    "cli",
-    "gui/src-tauri"
-]

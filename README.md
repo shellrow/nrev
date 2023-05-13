@@ -1,16 +1,5 @@
-# enmap
-Easy and enhanced network mapper.
+# nesmap-desktop
+Easy and enhanced network mapper.  
+Graphical nesmap frontend.
 
-## Features
-- Port Scan
-- Host Scan
-- Service detection (Experimental)
-- OS detection (Experimental)
-- Ping
-- Traceroute
-- Subdomain scan
-
-## Supported platforms
-- Linux
-- macOS
-- Windows
+**Under development**
