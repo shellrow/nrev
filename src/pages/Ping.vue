@@ -143,7 +143,7 @@ onUnmounted(() => {
       <el-row :gutter="20">
         <el-col :span="6">
           <p style="font-size: var(--el-font-size-small)">IP Address</p>
-          <el-input v-model="option.target_host" placeholder="IP Address" />
+          <el-input v-model="option.target_host" placeholder="IP Address or HostName" />
         </el-col>
         <el-col :span="4">
             <p style="font-size: var(--el-font-size-small)">Protocol</p>
@@ -164,14 +164,6 @@ onUnmounted(() => {
             <el-input type="number" min="0" max="64" v-model="option.count" placeholder="80" />
         </el-col>
       </el-row>
-      <el-row :gutter="20">
-        <el-col :span="4">
-            <el-checkbox v-model="option.os_detection_flag" label="OS Detection" />
-        </el-col>
-        <el-col :span="4">
-            <el-checkbox v-model="option.save_flag" label="Save" />
-        </el-col>
-      </el-row>
       <!-- Options -->
     </el-card>
     <!-- Results -->
@@ -185,15 +177,15 @@ onUnmounted(() => {
         >
         </el-descriptions>
         <el-table :data="result.ping_results" style="width: 100%" class="mt-2">
-            <el-table-column prop="protocol" label="Protocol" />
-            <el-table-column prop="seq" label="SEQ" />
-            <el-table-column prop="ip_addr" label="IP Address"  />
+            <el-table-column prop="protocol" label="Protocol" width="100" />
+            <el-table-column prop="seq" label="SEQ" width="80" />
+            <el-table-column prop="ip_addr" label="IP Address" width="200" />
             <el-table-column prop="host_name" label="Host Name" />
-            <el-table-column prop="port_number" label="Port" />
-            <el-table-column prop="ttl" label="TTL" />
-            <el-table-column prop="hop" label="HOP" />
-            <el-table-column prop="rtt" label="RTT(ms)" />
-            <el-table-column prop="status" label="Status" />
+            <el-table-column prop="port_number" label="Port" width="100" />
+            <el-table-column prop="ttl" label="TTL" width="100" />
+            <el-table-column prop="hop" label="HOP" width="100" />
+            <el-table-column prop="rtt" label="RTT(ms)" width="100" />
+            <el-table-column prop="status" label="Status" width="100" />
         </el-table>
       </div>
       <div v-else>

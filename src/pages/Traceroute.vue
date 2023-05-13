@@ -109,14 +109,6 @@ onUnmounted(() => {
             <el-input type="number" min="0" max="60000" v-model="option.timeout" placeholder="30000" />
         </el-col>
       </el-row>
-      <el-row :gutter="20">
-        <el-col :span="4">
-            <el-checkbox v-model="option.os_detection_flag" label="OS Detection" />
-        </el-col>
-        <el-col :span="4">
-            <el-checkbox v-model="option.save_flag" label="Save" />
-        </el-col>
-      </el-row>
       <!-- Options -->
     </el-card>
     <!-- Results -->
@@ -130,13 +122,13 @@ onUnmounted(() => {
         >
         </el-descriptions>
         <el-table :data="result.nodes" style="width: 100%" class="mt-2">
-            <el-table-column prop="seq" label="SEQ" />
-            <el-table-column prop="ip_addr" label="IP Address"  />
+            <el-table-column prop="seq" label="SEQ" width="80" />
+            <el-table-column prop="ip_addr" label="IP Address" width="200" />
             <el-table-column prop="host_name" label="Host Name" />
-            <el-table-column prop="ttl" label="TTL" />
-            <el-table-column prop="hop" label="HOP" />
-            <el-table-column prop="rtt" label="RTT" />
-            <el-table-column prop="node_type" label="Node Type" />
+            <el-table-column prop="ttl" label="TTL" width="80" />
+            <el-table-column prop="hop" label="HOP" width="80" />
+            <el-table-column prop="rtt" label="RTT" width="80" />
+            <el-table-column prop="node_type" label="Node Type" width="120"/>
             <!-- <el-table-column prop="status" label="Status" /> -->
         </el-table>
       </div>

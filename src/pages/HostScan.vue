@@ -150,7 +150,7 @@ onUnmounted(() => {
         <el-row :gutter="20">
             <el-col :span="6">
                 <p style="font-size: var(--el-font-size-small)">Network Address</p>
-                <el-input v-model="option.network_address" placeholder="IP Address" />
+                <el-input v-model="option.network_address" placeholder="IP Address or HostName" />
             </el-col>
             <el-col :span="3">
                 <p style="font-size: var(--el-font-size-small)">Prefix</p>
@@ -191,12 +191,6 @@ onUnmounted(() => {
             </el-col>
             <el-col :span="4">
                 <el-checkbox v-model="option.dsn_lookup_flag" label="DNS Lookup" />
-            </el-col>
-            <el-col :span="4">
-                <el-checkbox v-model="option.os_detection_flag" label="OS Detection" />
-            </el-col>
-            <el-col :span="4">
-                <el-checkbox v-model="option.save_flag" label="Save" />
             </el-col>
         </el-row>
         <!-- Options -->
@@ -240,11 +234,11 @@ onUnmounted(() => {
     <!-- Dialog -->
     <el-dialog v-model="dialog_list_visible" title="Custom Host List">
         <el-row :gutter="20">
-            <el-col :span="6">
-                <el-input v-model="target_host" placeholder="IP Address or Host Name" @keyup.enter="addTargetHost" @blur="addTargetHost" />
+            <el-col :span="12">
+                <el-input v-model="target_host" placeholder="IP Address or HostName" @keyup.enter="addTargetHost" @blur="addTargetHost" />
             </el-col>
             <el-col :span="6">
-                <el-button type="info" plain @click="addTargetHost">Add</el-button>
+                <el-button type="primary" plain @click="addTargetHost">Add</el-button>
             </el-col>
         </el-row>
         <el-table :data="target_hosts">

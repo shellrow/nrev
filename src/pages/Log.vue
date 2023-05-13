@@ -3,6 +3,7 @@ import { ref, reactive, onMounted, onUnmounted } from 'vue';
 import { invoke } from '@tauri-apps/api/tauri';
 import { debounce } from 'lodash';
 
+const log_detail_visible = ref(false);
 const searching = ref(false);
 
 const probeTypes = [
@@ -24,6 +25,19 @@ const probeTypes = [
   },
 ];
 
+const log_detail = reactive({
+  id: 0,
+  probe_id: "",
+  probe_type_id: "",
+  probe_type_name: "",
+  probe_target_addr: "",
+  probe_target_name: "",
+  protocol_id: "",
+  probe_option: "",
+  issued_at: "", 
+  save_file_path: "",
+});
+
 const getLocalTime = (date) => {
     const d = new Date(date);
     const offset = d.getTimezoneOffset() * 60000;
@@ -40,8 +54,6 @@ const defaultDateRange = [
   getLocalTime(getLastWeekDateTime()),  
   getLocalTime(new Date())
 ];
-
-
 
 const optionDateRange = ref('');
 
@@ -111,6 +123,12 @@ const clickSearch = (event) => {
 
 const handleOpen = (index, row) => {
   console.log(index, row);
+  log_detail.id = row.id;
+  log_detail.probe_id = row.probe_id;
+  log_detail.probe_type_id = row.probe_type_id;
+  log_detail.probe_type_name = row.probe_type_name;
+  log_detail.save_file_path = `${row.id}-${row.probe_id}.json`;
+  log_detail_visible.value = true;
 }
 
 onMounted(() => {
@@ -192,7 +210,7 @@ onUnmounted(() => {
             </el-col>
             <el-col :span="6">
                 <p style="font-size: var(--el-font-size-small)">Target</p>
-                <el-input v-model="searchOption.target_host" placeholder="Address or Name" />
+                <el-input v-model="searchOption.target_host" placeholder="IP Address or Host Name" />
             </el-col>
             <el-col :span="6">
                 <p style="font-size: var(--el-font-size-small)">Probe date range</p>
@@ -258,4 +276,21 @@ onUnmounted(() => {
             </el-result>
         </div>
     </div>
+    <!-- Dialog -->
+    <el-dialog v-model="log_detail_visible" :title="`Scan Result: ${log_detail.probe_id} ${log_detail.probe_type_name}`">
+        <el-row :gutter="20">
+            <el-col :span="12">
+                <el-input v-model="log_detail.save_file_path" placeholder="Save FilePath" />
+            </el-col>
+            <el-col :span="6">
+                <el-button type="primary" plain >Export</el-button>
+            </el-col>
+        </el-row>
+        <template #footer>
+            <span class="dialog-footer">
+                <el-button @click="log_detail_visible = false">Close</el-button>
+            </span>
+        </template>
+    </el-dialog>
+    <!-- Dialog -->
 </template>

@@ -205,7 +205,7 @@ onUnmounted(() => {
         <el-row :gutter="20">
             <el-col :span="6">
                 <p style="font-size: var(--el-font-size-small)">Target</p>
-                <el-input v-model="option.target_host" placeholder="Address or Name" />
+                <el-input v-model="option.target_host" placeholder="IP Address or HostName" />
             </el-col>
             <el-col :span="6">
                 <p style="font-size: var(--el-font-size-small)">Port</p>
