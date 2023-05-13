@@ -1,16 +1,6 @@
 use std::collections::HashMap;
 use crate::{db, db_models};
 
-#[allow(unused)]
-pub fn get_oui_map() -> HashMap<String, String> {
-    let mut oui_map: HashMap<String, String> = HashMap::new();
-    let rs_nscan_oui: Vec<db_models::Oui> = db_models::Oui::get_oui_list();
-    for oui in rs_nscan_oui {
-        oui_map.insert(oui.mac_prefix, oui.vendor_name);
-    }
-    oui_map
-}
-
 pub fn get_oui_detail_map() -> HashMap<String, String> {
     let mut oui_map: HashMap<String, String> = HashMap::new();
     let rs_nscan_oui: Vec<db_models::Oui> = db_models::Oui::get_oui_list();
