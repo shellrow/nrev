@@ -426,7 +426,7 @@ pub fn run_traceroute(opt: ScanOption, msg_tx: &mpsc::Sender<String>) -> TraceRe
                 tracert::node::NodeType::Relay => NodeType::Relay,
                 tracert::node::NodeType::Destination => NodeType::Destination, 
             },
-            rtt: node.rtt,
+            rtt: node.rtt.as_millis() as u64,
         };
         result.nodes.push(n);
     }

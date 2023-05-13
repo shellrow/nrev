@@ -61,8 +61,8 @@ pub struct Node {
     pub hop: Option<u8>,
     /// Node type
     pub node_type: NodeType,
-    /// Round Trip Time
-    pub rtt: Duration,
+    /// Round Trip Time (ms)
+    pub rtt: u64,
 }
 
 #[derive(Clone, Debug ,Serialize, Deserialize)]

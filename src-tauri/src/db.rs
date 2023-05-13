@@ -250,7 +250,7 @@ pub fn insert_trace_result(conn:&Connection, probe_id: String, trace_result: Tra
             node.host_name,
             node.ttl.unwrap_or(0),
             node.hop.unwrap_or(0),
-            node.rtt.as_millis() as u64,
+            node.rtt,
             node.node_type.name()
         ];   
         match conn.execute(sql, params_vec) {
