@@ -3,6 +3,7 @@ use std::str::FromStr;
 use std::net::{IpAddr, SocketAddr};
 use std::path::Path;
 use dns_lookup::lookup_host;
+use ipnet::IpNet;
 use crate::network;
 
 #[allow(unused)]
@@ -37,39 +38,45 @@ pub fn validate_port_opt(v: &str) -> Result<(), String> {
 
 #[allow(unused)]
 pub fn validate_network_opt(v: &str) -> Result<(), String> {
-    let addr = IpAddr::from_str(&v);
-    match addr {
-        Ok(_) => {
-            return Ok(())
-        },
+    match v.parse::<IpNet>() {
+        Ok(_) => return Ok(()),
         Err(_) => {
-            return Err(String::from("Please specify ip address"));
+            match IpAddr::from_str(&v) {
+                Ok(_) => {
+                    return Ok(())
+                },
+                Err(_) => {
+                    return Err(String::from("Please specify network address"));
+                }
+            }
         }
     }
 }
 
 #[allow(unused)]
 pub fn validate_hostscan_opt(v: &str) -> Result<(), String> {
+    match validate_network_opt(v) {
+        Ok(_) => return Ok(()),
+        Err(_) => {},
+    }
     let re_host = Regex::new(r"[\w\-._]+\.[A-Za-z]+").unwrap();
     if Path::new(&v).exists() {
         return Ok(());
-    }else{
+    } else {
         let ip_vec: Vec<&str> = v.split(",").collect();
         for ip_str in ip_vec {
             match IpAddr::from_str(&ip_str) {
-                Ok(_) => {},
-                Err(_) => {
-                    match SocketAddr::from_str(&ip_str) {
-                        Ok(_) => {
-                            return Ok(());
-                        },
-                        Err(_) => {
-                            if !re_host.is_match(ip_str) {
-                                return Err(String::from("Please specify ip address or host name"));
-                            }
-                        },
+                Ok(_) => {}
+                Err(_) => match SocketAddr::from_str(&ip_str) {
+                    Ok(_) => {
+                        return Ok(());
                     }
-                }
+                    Err(_) => {
+                        if !re_host.is_match(ip_str) {
+                            return Err(String::from("Please specify ip address or host name"));
+                        }
+                    }
+                },
             }
         }
     }
