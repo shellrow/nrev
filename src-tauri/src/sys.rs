@@ -1,6 +1,21 @@
 use std::{fs, env};
 use std::path::{PathBuf, Path};
 
+#[cfg(target_os = "windows")]
+pub fn get_os_type() -> String {
+    "windows".to_owned()
+}
+
+#[cfg(target_os = "linux")]
+pub fn get_os_type() -> String {
+    "linux".to_owned()
+}
+
+#[cfg(target_os = "macos")]
+pub fn get_os_type() -> String {
+    "macos".to_owned()
+}
+
 pub fn init(handle: tauri::AppHandle) {
     crate::sys::copy_db_from_resource(handle);
 }

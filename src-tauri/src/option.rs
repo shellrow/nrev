@@ -3,7 +3,8 @@ use std::time::Duration;
 use std::net::{IpAddr, Ipv4Addr};
 use ipnet::Ipv4Net;
 use serde::{Serialize, Deserialize};
-use super::process;
+use crate::process;
+use crate::sys;
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub enum CommandType {
@@ -213,6 +214,9 @@ impl ScanOption {
         }
         if process::privileged() {
             opt.port_scan_type = ScanType::TcpSynScan;
+            if sys::get_os_type() == "windows" {
+                opt.async_scan = false;
+            }
         }else{
             opt.port_scan_type = ScanType::TcpConnectScan;
             opt.async_scan = true;
