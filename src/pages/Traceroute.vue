@@ -97,8 +97,8 @@ onUnmounted(() => {
       <!-- Options -->
       <el-row :gutter="20">
         <el-col :span="6">
-          <p style="font-size: var(--el-font-size-small)">Target</p>
-          <el-input v-model="option.target_host" placeholder="IP Address or Host Name" />
+          <p style="font-size: var(--el-font-size-small)">TargetHost</p>
+          <el-input v-model="option.target_host" placeholder="IP Address or HostName" />
         </el-col>
         <el-col :span="3">
             <p style="font-size: var(--el-font-size-small)">Max Hop</p>

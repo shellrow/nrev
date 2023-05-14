@@ -1,7 +1,7 @@
 <script setup>
 import { ref, reactive, onMounted, onUnmounted, nextTick } from 'vue';
 import { invoke } from '@tauri-apps/api/tauri';
-import { ElMessage } from 'element-plus'
+import { ElMessage } from 'element-plus';
 //import { debounce } from 'lodash';
 //import {sleep} from '../logic/shared.js';
 import {PORT_OPTION_DEFAULT,PORT_OPTION_WELL_KNOWN,PORT_OPTION_CUSTOM_LIST,PORTSCAN_TYPE_TCP_SYN,PORTSCAN_TYPE_TCP_CONNECT} from '../define.js';
@@ -128,7 +128,7 @@ const runPortScan = async() => {
 
 const validateInput = () => {
   if (!option.target_host) {
-    return "Invalid host";
+    return "TargetHost is required";
   }
   if (isValidIPaddress(option.target_host) || isValidHostname(option.target_host)) {
     if (isIpv4NetworkAddress(option.target_host)) {
@@ -204,7 +204,7 @@ onUnmounted(() => {
         <!-- Options -->
         <el-row :gutter="20">
             <el-col :span="6">
-                <p style="font-size: var(--el-font-size-small)">Target</p>
+                <p style="font-size: var(--el-font-size-small)">TargetHost</p>
                 <el-input v-model="option.target_host" placeholder="IP Address or HostName" />
             </el-col>
             <el-col :span="6">

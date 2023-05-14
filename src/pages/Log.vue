@@ -210,7 +210,7 @@ onUnmounted(() => {
             </el-col>
             <el-col :span="6">
                 <p style="font-size: var(--el-font-size-small)">Target</p>
-                <el-input v-model="searchOption.target_host" placeholder="IP Address or Host Name" />
+                <el-input v-model="searchOption.target_host" placeholder="IP Address or HostName" />
             </el-col>
             <el-col :span="6">
                 <p style="font-size: var(--el-font-size-small)">Probe date range</p>
@@ -277,7 +277,7 @@ onUnmounted(() => {
         </div>
     </div>
     <!-- Dialog -->
-    <el-dialog v-model="log_detail_visible" :title="`Scan Result: ${log_detail.probe_id} ${log_detail.probe_type_name}`">
+    <el-dialog v-model="log_detail_visible" :title="`${log_detail.probe_type_name} Result: ${log_detail.probe_id}`">
         <el-row :gutter="20">
             <el-col :span="12">
                 <el-input v-model="log_detail.save_file_path" placeholder="Save FilePath" />

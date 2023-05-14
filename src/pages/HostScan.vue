@@ -2,7 +2,8 @@
 import { ref, reactive, onMounted, onUnmounted, nextTick } from 'vue';
 import { invoke } from '@tauri-apps/api/tauri';
 import { debounce } from 'lodash';
-import {sleep, isValidIPaddress, isValidHostname} from '../logic/shared.js';
+import { ElMessage } from 'element-plus';
+import {sleep, isValidIPaddress, isValidHostname, isIpv4NetworkAddress, isValidIPv6Address} from '../logic/shared.js';
 import {PROTOCOL_ICMPv4, PROTOCOL_TCP, HOSTSCAN_TYPE_NETWORK, HOSTSCAN_TYPE_CUSTOM_HOSTS} from '../define.js';
 
 const scanning = ref(false);
@@ -88,7 +89,7 @@ const runHostScan = async() => {
         network_address: option.network_address,
         prefix_len: option.prefix_len,
         protocol: option.protocol,
-        port: option.port,
+        port: Number(option.port),
         target_hosts: option.target_hosts,
         scan_type: option.scan_type,
         async_flag: option.async_flag,
@@ -109,8 +110,34 @@ const runHostScan = async() => {
     });
 };
 
+const validateInput = () => {
+    if (option.scan_type == HOSTSCAN_TYPE_NETWORK){
+        if (!option.network_address) {
+            return "Network Address is required";
+        }
+        if (!option.prefix_len) {
+            return "Prefix is required";
+        }
+        if (option.prefix_len < 8 || option.prefix_len > 30) {
+            return "Prefix must be between 8 and 30";
+        }
+        if (!isIpv4NetworkAddress(option.network_address) && !isValidIPv6Address(option.network_address)) {
+            return "Invalid Network Address";
+        }
+    }
+    return "OK";
+}
+
 const clickScan = (event) => {
-  runHostScan();
+    const inputStatus = validateInput();
+    if (inputStatus != "OK") {
+        ElMessage({
+            message: inputStatus,
+            type: 'warning',
+        })
+        return;
+    }
+    runHostScan();
 };
 
 onMounted(() => {
@@ -150,7 +177,7 @@ onUnmounted(() => {
         <el-row :gutter="20">
             <el-col :span="6">
                 <p style="font-size: var(--el-font-size-small)">Network Address</p>
-                <el-input v-model="option.network_address" placeholder="IP Address or HostName" />
+                <el-input v-model="option.network_address" placeholder="IP Address" />
             </el-col>
             <el-col :span="3">
                 <p style="font-size: var(--el-font-size-small)">Prefix</p>
