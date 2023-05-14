@@ -384,7 +384,7 @@ pub fn run_ping(opt: ScanOption, msg_tx: &mpsc::Sender<String>) -> PingStat {
     }
     let min: u128;
     let max: u128;
-    let avg: u128 = (rtt_vec.iter().sum::<u128>() as usize / rtt_vec.len()) as u128;
+    let avg: u128 = if rtt_vec.len() == 0 {0}else{(rtt_vec.iter().sum::<u128>() as usize / rtt_vec.len()) as u128};
     match rtt_vec.iter().min() {
         Some(n) => min = *n,
         None => unreachable!(),
