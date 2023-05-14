@@ -19,17 +19,23 @@ pub async fn exec_portscan(opt: models::PortArg) -> PortScanResult {
             scan::run_service_scan(m_probe_opt, &msg_tx).await
         })
     });
-    let result: PortScanResult = handle.join().unwrap();
-    // DB Insert
-    let probe_id = crate::db::get_probe_id();
-    let conn = crate::db::connect_db().unwrap();
-    match crate::db::insert_port_scan_result(&conn, probe_id, result.clone(), String::new()) {
-        Ok(_affected_rows) => {},
-        Err(e) => {
-            println!("{}", e);
+    match handle.join() {
+        Ok(result) => {
+            // DB Insert
+            let probe_id = crate::db::get_probe_id();
+            let conn = crate::db::connect_db().unwrap();
+            match crate::db::insert_port_scan_result(&conn, probe_id, result.clone(), String::new()) {
+                Ok(_affected_rows) => {},
+                Err(e) => {
+                    println!("{}", e);
+                }
+            }
+            result
+        },
+        Err(_) => {
+            PortScanResult::new()
         }
     }
-    result
 }
 
 #[tauri::command]
@@ -42,17 +48,23 @@ pub async fn exec_hostscan(opt: models::HostArg) -> HostScanResult {
             scan::run_node_scan(m_probe_opt, &msg_tx).await
         })
     });
-    let result: HostScanResult = handle.join().unwrap();
-    // DB Insert
-    let probe_id = crate::db::get_probe_id();
-    let conn = crate::db::connect_db().unwrap();
-    match crate::db::insert_host_scan_result(&conn, probe_id, result.clone(), String::new()) {
-        Ok(_affected_rows) => {},
-        Err(e) => {
-            println!("{}", e);
+    match handle.join() {
+        Ok(result) => {
+            // DB Insert
+            let probe_id = crate::db::get_probe_id();
+            let conn = crate::db::connect_db().unwrap();
+            match crate::db::insert_host_scan_result(&conn, probe_id, result.clone(), String::new()) {
+                Ok(_affected_rows) => {},
+                Err(e) => {
+                    println!("{}", e);
+                }
+            }
+            result
+        },
+        Err(_) => {
+            HostScanResult::new()
         }
     }
-    result
 }
 
 #[tauri::command]
@@ -69,17 +81,23 @@ pub async fn exec_ping(opt: models::PingArg, app_handle: tauri::AppHandle) -> Pi
     while let Ok(msg) = msg_rx.recv() {
         app_handle.emit_all("ping_progress", format!("{}", msg)).unwrap();
     } 
-    let result: PingStat = handle.join().unwrap();
-    // DB Insert
-    let probe_id = crate::db::get_probe_id();
-    let conn = crate::db::connect_db().unwrap();
-    match crate::db::insert_ping_result(&conn, probe_id, result.clone(), String::new()) {
-        Ok(_affected_rows) => {},
-        Err(e) => {
-            println!("{}", e);
+    match handle.join() {
+        Ok(result) => {
+            // DB Insert
+            let probe_id = crate::db::get_probe_id();
+            let conn = crate::db::connect_db().unwrap();
+            match crate::db::insert_ping_result(&conn, probe_id, result.clone(), String::new()) {
+                Ok(_affected_rows) => {},
+                Err(e) => {
+                    println!("{}", e);
+                }
+            }
+            result
+        },
+        Err(_) => {
+            PingStat::new()
         }
     }
-    result
 }
 
 #[tauri::command]
@@ -96,17 +114,23 @@ pub async fn exec_traceroute(opt: models::TracerouteArg, app_handle: tauri::AppH
     while let Ok(msg) = msg_rx.recv() {
         app_handle.emit_all("trace_progress", format!("{}", msg)).unwrap();
     } 
-    let result: TraceResult = handle.join().unwrap();
-    // DB Insert
-    let probe_id = crate::db::get_probe_id();
-    let conn = crate::db::connect_db().unwrap();
-    match crate::db::insert_trace_result(&conn, probe_id, result.clone(), String::new()) {
-        Ok(_affected_rows) => {},
-        Err(e) => {
-            println!("{}", e);
+    match handle.join() {
+        Ok(result) => {
+            // DB Insert
+            let probe_id = crate::db::get_probe_id();
+            let conn = crate::db::connect_db().unwrap();
+            match crate::db::insert_trace_result(&conn, probe_id, result.clone(), String::new()) {
+                Ok(_affected_rows) => {},
+                Err(e) => {
+                    println!("{}", e);
+                }
+            }
+            result
+        },
+        Err(_) => {
+            TraceResult::new()
         }
     }
-    result
 }
 
 #[tauri::command]
