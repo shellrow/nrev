@@ -128,9 +128,9 @@ impl PortScanResult {
             port_scan_result.host_name = row.get(4).unwrap();
             port_scan_result.port = row.get(5).unwrap();
             port_scan_result.port_status_id = row.get(6).unwrap();
-            port_scan_result.service_id = row.get(7).unwrap();
-            port_scan_result.service_version = row.get(8).unwrap();
-            port_scan_result.protocol_id = row.get(9).unwrap();
+            port_scan_result.protocol_id = row.get(7).unwrap();
+            port_scan_result.service_id = row.get(8).unwrap();
+            port_scan_result.service_version = row.get(9).unwrap();
             port_scan_result.issued_at = row.get(10).unwrap();
             port_scan_results.push(port_scan_result);
         }
