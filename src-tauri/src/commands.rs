@@ -1,12 +1,13 @@
 use std::sync::mpsc::{channel ,Sender, Receiver};
 use std::thread;
-use crate::db_models::{ProbeLog, DataSetItem, ProbeStat};
 use tauri::Manager;
+use crate::db_models::{self, ProbeLog, DataSetItem, ProbeStat};
 use crate::option::{ScanOption};
 use crate::result::{PortScanResult, HostScanResult, PingStat, TraceResult};
 use crate::scan;
 use crate::network;
 use crate::models;
+use crate::json_models;
 
 // Commands
 #[tauri::command]
@@ -189,4 +190,102 @@ pub fn get_probe_stat() -> ProbeStat {
 #[tauri::command]
 pub fn get_default_interface() -> crate::models::NetworkInterface {
     crate::network::get_default_interface_model()
+}
+
+#[tauri::command]
+pub fn get_port_scan_result(probe_id: String) -> json_models::JsonPortScanResult {
+    let probe_result: db_models::ProbeResult = db_models::ProbeResult::get(probe_id.clone());
+    let host_scan_results: Vec<db_models::HostScanResult> = db_models::HostScanResult::get(probe_id.clone());
+    let port_scan_results: Vec<db_models::PortScanResult> = db_models::PortScanResult::get(probe_id);
+    let mut result: json_models::JsonPortScanResult = json_models::JsonPortScanResult::new();
+    result.probe_id = probe_result.probe_id;
+    result.ip_addr = probe_result.probe_target_addr;
+    result.hostname = probe_result.probe_target_name;
+    result.protocol = probe_result.protocol_id;
+    for port in port_scan_results {
+        let mut port_result: json_models::JsonPortResult = json_models::JsonPortResult::new();
+        port_result.port = port.port;
+        port_result.port_status = port.port_status_id;
+        port_result.service = port.service_id;
+        port_result.service_version = port.service_version;
+        result.ports.push(port_result);
+    }
+    if host_scan_results.len() > 0 {
+        let os_fingerprint: db_models::OsFingerprint = db_models::OsFingerprint::get(host_scan_results[0].cpe.clone());
+        let mut json_os_fingerprint: json_models::JsonOsInfo = json_models::JsonOsInfo::new();
+        json_os_fingerprint.cpe = os_fingerprint.cpe;
+        json_os_fingerprint.os_name = os_fingerprint.os_name;
+        json_os_fingerprint.os_family = os_fingerprint.os_family;
+        json_os_fingerprint.os_generation = os_fingerprint.os_generation;
+        json_os_fingerprint.device_type = os_fingerprint.device_type;
+        result.os = json_os_fingerprint;
+    }
+    result.issued_at = probe_result.issued_at;
+    result
+}
+
+#[tauri::command]
+pub fn get_host_scan_result(probe_id: String) -> json_models::JsonHostScanResult {
+    let probe_result: db_models::ProbeResult = db_models::ProbeResult::get(probe_id.clone());
+    let host_scan_results: Vec<db_models::HostScanResult> = db_models::HostScanResult::get(probe_id);
+    let mut result: json_models::JsonHostScanResult = json_models::JsonHostScanResult::new();
+    result.probe_id = probe_result.probe_id;
+    result.protocol = probe_result.protocol_id;    
+    for host_scan_result in host_scan_results {
+        let mut host_result: json_models::JsonHostResult = json_models::JsonHostResult::new();
+        host_result.ip_addr = host_scan_result.ip_addr;
+        host_result.hostname = host_scan_result.host_name;
+        host_result.os_info = host_scan_result.os_name;
+        host_result.mac_addr = host_scan_result.mac_addr;
+        host_result.vendor = host_scan_result.vendor;
+        result.port = host_scan_result.port;
+        result.hosts.push(host_result);
+    }
+    result.issued_at = probe_result.issued_at;
+    result
+}
+
+#[tauri::command]
+pub fn get_ping_stat(probe_id: String) -> json_models::JsonPingStat {
+    let probe_result: db_models::ProbeResult = db_models::ProbeResult::get(probe_id.clone());
+    let ping_results: Vec<db_models::PingResult> = db_models::PingResult::get(probe_id);
+    let mut result: json_models::JsonPingStat = json_models::JsonPingStat::new();
+    result.probe_id = probe_result.probe_id;
+    result.ip_addr = probe_result.probe_target_addr;
+    result.hostname = probe_result.probe_target_name;
+    result.protocol = probe_result.protocol_id;
+    for ping_result in ping_results {
+        let mut json_ping_result: json_models::JsonPingResult = json_models::JsonPingResult::new();
+        json_ping_result.seq = ping_result.seq;
+        json_ping_result.ttl = ping_result.ttl;
+        json_ping_result.hop = ping_result.hop;
+        json_ping_result.rtt = ping_result.rtt;
+        json_ping_result.status = String::from("Done");
+        result.port = ping_result.port;
+        result.results.push(json_ping_result);
+    }
+    result.issued_at = probe_result.issued_at;
+    result
+}
+
+#[tauri::command]
+pub fn get_trace_result(probe_id: String) -> json_models::JsonTracerouteStat {
+    let probe_result: db_models::ProbeResult = db_models::ProbeResult::get(probe_id.clone());
+    let trace_results: Vec<db_models::TracerouteResult> = db_models::TracerouteResult::get(probe_id);
+    let mut result: json_models::JsonTracerouteStat = json_models::JsonTracerouteStat::new();
+    result.probe_id = probe_result.probe_id;
+    result.ip_addr = probe_result.probe_target_addr;
+    result.hostname = probe_result.probe_target_name;
+    for trace_result in trace_results {
+        let mut json_trace_result: json_models::JsonTracerouteResult = json_models::JsonTracerouteResult::new();
+        json_trace_result.seq = trace_result.seq;
+        json_trace_result.ip_addr = trace_result.ip_addr;
+        json_trace_result.hostname = trace_result.host_name;
+        json_trace_result.ttl = trace_result.ttl;
+        json_trace_result.hop = trace_result.hop;
+        json_trace_result.rtt = trace_result.rtt;
+        result.results.push(json_trace_result);
+    }
+    result.issued_at = probe_result.issued_at;
+    result
 }

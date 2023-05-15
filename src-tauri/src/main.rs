@@ -10,6 +10,7 @@ mod validator;
 mod result;
 mod db;
 mod db_models;
+mod json_models;
 mod models;
 mod process;
 mod sys;
@@ -17,7 +18,25 @@ mod dataset;
 mod os;
 mod scan;
 mod commands;
-use commands::{exec_portscan, exec_hostscan, exec_ping, exec_traceroute, lookup_hostname, lookup_ipaddr, get_probe_log, get_probed_hosts, save_map_data, get_map_data, get_top_probe_hist, get_probe_stat,get_default_interface};
+use commands::{
+  exec_portscan, 
+  exec_hostscan, 
+  exec_ping, 
+  exec_traceroute, 
+  lookup_hostname, 
+  lookup_ipaddr, 
+  get_probe_log, 
+  get_probed_hosts, 
+  save_map_data, 
+  get_map_data, 
+  get_top_probe_hist, 
+  get_probe_stat,
+  get_default_interface,
+  get_port_scan_result,
+  get_host_scan_result,
+  get_ping_stat,
+  get_trace_result
+};
 
 fn main() {
   // Check if we are running as root
@@ -39,7 +58,11 @@ fn main() {
       get_map_data,
       get_top_probe_hist,
       get_probe_stat,
-      get_default_interface
+      get_default_interface,
+      get_port_scan_result,
+      get_host_scan_result,
+      get_ping_stat,
+      get_trace_result
       ])
       .setup(|app| {
         let app_handle = app.handle();
