@@ -61,7 +61,7 @@ pub struct Node {
     pub hop: Option<u8>,
     /// Node type
     pub node_type: NodeType,
-    /// Round Trip Time (ms)
+    /// Round Trip Time (microseconds)
     pub rtt: u64,
 }
 

@@ -254,6 +254,9 @@ pub fn get_ping_stat(probe_id: String) -> json_models::JsonPingStat {
     result.ip_addr = probe_result.probe_target_addr;
     result.hostname = probe_result.probe_target_name;
     result.protocol = probe_result.protocol_id;
+    result.min = probe_result.min_value.unwrap_or(0);
+    result.avg = probe_result.avg_value.unwrap_or(0);
+    result.max = probe_result.max_value.unwrap_or(0);
     for ping_result in ping_results {
         let mut json_ping_result: json_models::JsonPingResult = json_models::JsonPingResult::new();
         json_ping_result.seq = ping_result.seq;

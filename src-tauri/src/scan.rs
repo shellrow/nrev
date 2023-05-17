@@ -375,7 +375,7 @@ pub fn run_ping(opt: ScanOption, msg_tx: &mpsc::Sender<String>) -> PingStat {
             port_number : if opt.targets[0].ports.len() > 0 { Some(opt.targets[0].ports[0]) } else { None }, 
             ttl : node.ttl.unwrap_or(0),
             hop : node.hop.unwrap_or(0),
-            rtt : node.rtt.as_micros()as u64,
+            rtt : node.rtt.as_micros() as u64,
             status : ProbeStatus::Done,
             protocol : opt.protocol.name(),
         };
@@ -426,7 +426,7 @@ pub fn run_traceroute(opt: ScanOption, msg_tx: &mpsc::Sender<String>) -> TraceRe
                 tracert::node::NodeType::Relay => NodeType::Relay,
                 tracert::node::NodeType::Destination => NodeType::Destination, 
             },
-            rtt: node.rtt.as_millis() as u64,
+            rtt: node.rtt.as_micros() as u64,
         };
         result.nodes.push(n);
     }

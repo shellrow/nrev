@@ -185,7 +185,7 @@ impl HostScanResult {
             host_scan_result.mac_addr = row.get(6).unwrap();
             host_scan_result.vendor = row.get(7).unwrap();
             host_scan_result.os_name = row.get(8).unwrap();
-            host_scan_result.cpe = row.get(9).unwrap();
+            host_scan_result.cpe = row.get(9).unwrap_or(String::new());
             host_scan_result.issued_at = row.get(10).unwrap();
             host_scan_results.push(host_scan_result);
         }

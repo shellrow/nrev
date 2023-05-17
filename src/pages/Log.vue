@@ -104,6 +104,34 @@ const searchLog = async () => {
     });
 }
 
+const getResult = async (probeId, probeTypeId) => {
+  console.log(`Result ${probeId} ${probeTypeId}}`);
+  switch (probeTypeId){
+    case 'port_scan':
+      invoke('get_port_scan_result', { "probeId": probeId }).then((results) => {
+        console.log(results);
+      });
+      break;
+    case 'host_scan':
+      invoke('get_host_scan_result', { "probeId": probeId }).then((results) => {
+        console.log(results);
+      });
+      break;
+    case 'ping':
+      invoke('get_ping_stat', { "probeId": probeId }).then((results) => {
+        console.log(results);
+      });
+      break;
+    case 'traceroute':
+      invoke('get_trace_result', { "probeId": probeId }).then((results) => {
+        console.log(results);
+      });
+      break;
+    default:
+      console.log('Undefined probe type.');
+  }
+}
+
 const clickSearch = (event) => {
     if (optionDateRange.value) {
       if (optionDateRange.value.length > 0 && (optionDateRange.value[0] && optionDateRange.value[1])) {
@@ -128,6 +156,7 @@ const handleOpen = (index, row) => {
   log_detail.probe_type_id = row.probe_type_id;
   log_detail.probe_type_name = row.probe_type_name;
   log_detail.save_file_path = `${row.id}-${row.probe_id}.json`;
+  getResult(row.probe_id, row.probe_type_id);
   log_detail_visible.value = true;
 }
 

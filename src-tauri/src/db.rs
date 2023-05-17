@@ -44,10 +44,10 @@ pub fn insert_port_scan_result(conn:&Connection, probe_id: String, scan_result: 
         scan_result.host.host_name,
         option::Protocol::TCP.id(),
         option_value,
-        scan_result.port_scan_time.as_millis() as u64,
-        scan_result.service_detection_time.as_millis() as u64,
-        scan_result.os_detection_time.as_millis() as u64,
-        scan_result.total_scan_time.as_millis() as u64
+        scan_result.port_scan_time.as_micros() as u64,
+        scan_result.service_detection_time.as_micros() as u64,
+        scan_result.os_detection_time.as_micros() as u64,
+        scan_result.total_scan_time.as_micros() as u64
     ];
     match conn.execute(sql, params_vec) {
         Ok(row_count) => {
@@ -120,8 +120,8 @@ pub fn insert_host_scan_result(conn:&Connection, probe_id: String, scan_result: 
         String::new(),
         scan_result.protocol.id(),
         option_value,
-        scan_result.host_scan_time.as_millis() as u64,
-        scan_result.total_scan_time.as_millis() as u64
+        scan_result.host_scan_time.as_micros() as u64,
+        scan_result.total_scan_time.as_micros() as u64
     ];   
     match conn.execute(sql, params_vec) {
         Ok(row_count) => {
@@ -177,10 +177,10 @@ pub fn insert_ping_result(conn:&Connection, probe_id: String, ping_stat: PingSta
         ping_result.host_name,
         ping_result.protocol,
         option_value,
-        ping_stat.probe_time / 1000,
-        ping_stat.min / 1000,
-        ping_stat.avg / 1000,
-        ping_stat.max / 1000
+        ping_stat.probe_time,
+        ping_stat.min,
+        ping_stat.avg,
+        ping_stat.max
     ];   
     match conn.execute(sql, params_vec) {
         Ok(row_count) => {
@@ -189,7 +189,7 @@ pub fn insert_ping_result(conn:&Connection, probe_id: String, ping_stat: PingSta
         Err(e) => return Err(e),
     };
     for ping in ping_stat.ping_results {
-        let sql: &str = "INSERT INTO ping_result (probe_id, seq, ip_addr, host_name, port_no, status, ttl, hop, rtt, issued_at) 
+        let sql: &str = "INSERT INTO ping_result (probe_id, seq, ip_addr, host_name, port, port_status_id, ttl, hop, rtt, issued_at) 
         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,datetime(CURRENT_TIMESTAMP, 'localtime'));";
         let params_vec: &[&dyn rusqlite::ToSql] = params![
             probe_id,
@@ -200,7 +200,7 @@ pub fn insert_ping_result(conn:&Connection, probe_id: String, ping_stat: PingSta
             ping.status.name(),
             ping.ttl,
             ping.hop,
-            ping.rtt / 1000
+            ping.rtt
         ];   
         match conn.execute(sql, params_vec) {
             Ok(row_count) => {
@@ -232,7 +232,7 @@ pub fn insert_trace_result(conn:&Connection, probe_id: String, trace_result: Tra
         first_node.host_name,
         option::Protocol::UDP.id(),
         option_value,
-        trace_result.probe_time / 1000
+        trace_result.probe_time
     ];   
     match conn.execute(sql, params_vec) {
         Ok(row_count) => {
