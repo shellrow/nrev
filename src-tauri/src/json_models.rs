@@ -144,8 +144,8 @@ pub struct JsonPingStat {
     pub min: u64,
     pub avg: u64,
     pub max: u64,
-    pub transmitted: u8,
-    pub received: u8,
+    pub transmitted: u64,
+    pub received: u64,
     pub results: Vec<JsonPingResult>,
     pub issued_at: String,
 }

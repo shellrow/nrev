@@ -254,6 +254,8 @@ pub fn get_ping_stat(probe_id: String) -> json_models::JsonPingStat {
     result.ip_addr = probe_result.probe_target_addr;
     result.hostname = probe_result.probe_target_name;
     result.protocol = probe_result.protocol_id;
+    result.transmitted = probe_result.transmitted_count.unwrap_or(0);
+    result.received = probe_result.received_count.unwrap_or(0);
     result.min = probe_result.min_value.unwrap_or(0);
     result.avg = probe_result.avg_value.unwrap_or(0);
     result.max = probe_result.max_value.unwrap_or(0);
