@@ -256,10 +256,10 @@ pub struct TracerouteResult {
     pub seq: u16,
     pub ip_addr: String,
     pub host_name: String,
-    pub port: u16,
     pub ttl: u16,
     pub hop: u16,
     pub rtt: u64,
+    pub node_type: String,
     pub issued_at: String,
 }
 
@@ -271,16 +271,16 @@ impl TracerouteResult {
             seq: 0,
             ip_addr: String::new(),
             host_name: String::new(),
-            port: 0,
             ttl: 0,
             hop: 0,
             rtt: 0,
+            node_type: String::new(),
             issued_at: String::new(),
         }
     }
     pub fn get(probe_id: String) -> Vec<TracerouteResult> {
         let conn = db::connect_db().unwrap();
-        let mut stmt = conn.prepare("SELECT id, probe_id, seq, ip_addr, host_name, port, ttl, hop, rtt, issued_at FROM traceroute_result WHERE probe_id = ?1").unwrap();
+        let mut stmt = conn.prepare("SELECT id, probe_id, seq, ip_addr, host_name, ttl, hop, rtt, node_type, issued_at FROM traceroute_result WHERE probe_id = ?1").unwrap();
         let mut rows = stmt.query(params![probe_id]).unwrap();
         let mut traceroute_results: Vec<TracerouteResult> = Vec::new();
         while let Some(row) = rows.next().unwrap() {
@@ -290,10 +290,10 @@ impl TracerouteResult {
             traceroute_result.seq = row.get(2).unwrap();
             traceroute_result.ip_addr = row.get(3).unwrap();
             traceroute_result.host_name = row.get(4).unwrap();
-            traceroute_result.port = row.get(5).unwrap();
-            traceroute_result.ttl = row.get(6).unwrap();
-            traceroute_result.hop = row.get(7).unwrap();
-            traceroute_result.rtt = row.get(8).unwrap();
+            traceroute_result.ttl = row.get(5).unwrap();
+            traceroute_result.hop = row.get(6).unwrap();
+            traceroute_result.rtt = row.get(7).unwrap();
+            traceroute_result.node_type = row.get(8).unwrap();
             traceroute_result.issued_at = row.get(9).unwrap();
             traceroute_results.push(traceroute_result);
         }
