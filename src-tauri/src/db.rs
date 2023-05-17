@@ -156,7 +156,7 @@ pub fn insert_host_scan_result(conn:&Connection, probe_id: String, scan_result: 
 pub fn insert_ping_result(conn:&Connection, probe_id: String, ping_stat: PingStat, option_value: String)  -> Result<usize,rusqlite::Error> {
     let mut affected_row_count: usize = 0;
     
-    let ping_result: PingResult = ping_stat.ping_results[0].clone();
+    let ping_result: PingResult = if ping_stat.ping_results.len() > 0 {ping_stat.ping_results[0].clone()}else{PingResult::new()};
     let sql: &str = "INSERT INTO probe_result (
         probe_id, 
         probe_type_id,
@@ -165,11 +165,13 @@ pub fn insert_ping_result(conn:&Connection, probe_id: String, ping_stat: PingSta
         protocol_id,
         probe_option, 
         probe_time, 
+        transmitted_count,
+        received_count,
         min_value,
         avg_value,
         max_value,
         issued_at)  
-        VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,datetime(CURRENT_TIMESTAMP, 'localtime'));";
+        VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,datetime(CURRENT_TIMESTAMP, 'localtime'));";
     let params_vec: &[&dyn rusqlite::ToSql] = params![
         probe_id,
         option::CommandType::Ping.id(),
@@ -178,6 +180,8 @@ pub fn insert_ping_result(conn:&Connection, probe_id: String, ping_stat: PingSta
         ping_result.protocol,
         option_value,
         ping_stat.probe_time,
+        ping_stat.transmitted_count,
+        ping_stat.received_count,
         ping_stat.min,
         ping_stat.avg,
         ping_stat.max
@@ -214,7 +218,7 @@ pub fn insert_ping_result(conn:&Connection, probe_id: String, ping_stat: PingSta
 
 pub fn insert_trace_result(conn:&Connection, probe_id: String, trace_result: TraceResult, option_value: String)  -> Result<usize,rusqlite::Error> {
     let mut affected_row_count: usize = 0;
-    let first_node: Node = trace_result.nodes[0].clone();
+    let first_node: Node = if trace_result.nodes.len() > 0 {trace_result.nodes[trace_result.nodes.len() - 1].clone()}else{Node::new()};
     let sql: &str = "INSERT INTO probe_result (
         probe_id, 
         probe_type_id,

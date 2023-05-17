@@ -65,6 +65,20 @@ pub struct Node {
     pub rtt: u64,
 }
 
+impl Node {
+    pub fn new() -> Node {
+        Node { 
+            seq: 0, 
+            ip_addr: IpAddr::from([0, 0, 0, 0]), 
+            host_name: String::new(), 
+            ttl: None, 
+            hop: None, 
+            node_type: NodeType::Relay, 
+            rtt: 0 
+        }
+    }
+}
+
 #[derive(Clone, Debug ,Serialize, Deserialize)]
 pub struct PortInfo {
     pub port_number: u16,
@@ -163,6 +177,22 @@ pub struct PingResult {
     pub status: ProbeStatus,
     /// Protocol
     pub protocol: String,
+}
+
+impl PingResult {
+    pub fn new() -> PingResult {
+        PingResult { 
+            seq: 0, 
+            ip_addr: IpAddr::from([0, 0, 0, 0]), 
+            host_name: String::new(), 
+            port_number: None, 
+            ttl: 0, 
+            hop: 0, 
+            rtt: 0, 
+            status: ProbeStatus::Done, 
+            protocol: String::new() 
+        }
+    }
 }
 
 #[derive(Clone, Debug ,Serialize, Deserialize)]
