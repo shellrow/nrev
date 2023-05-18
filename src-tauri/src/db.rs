@@ -62,7 +62,7 @@ pub fn insert_port_scan_result(conn:&Connection, probe_id: String, scan_result: 
         probe_id,
         scan_result.host.ip_addr,
         scan_result.host.host_name,
-        scan_result.ports[0].port_number,
+        0,
         option::Protocol::TCP.id(),
         scan_result.host.mac_addr,
         scan_result.host.vendor_info,
@@ -130,13 +130,13 @@ pub fn insert_host_scan_result(conn:&Connection, probe_id: String, scan_result: 
         Err(e) => return Err(e),
     };
     for host in scan_result.hosts {
-        let sql: &str = "INSERT INTO host_scan_result (probe_id, ip_addr, host_name, port,protocol_id, mac_addr, vendor, os_name, issued_at)
+        let sql: &str = "INSERT INTO host_scan_result (probe_id, ip_addr, host_name, port, protocol_id, mac_addr, vendor, os_name, issued_at)
         VALUES (?1,?2,?3,?4,?5,?6,?7,?8,datetime(CURRENT_TIMESTAMP, 'localtime'));";
         let params_vec: &[&dyn rusqlite::ToSql] = params![
             probe_id,
             host.ip_addr,
             host.host_name,
-            scan_result.port_number,
+            if scan_result.protocol == option::Protocol::ICMPv4 || scan_result.protocol == option::Protocol::ICMPv6 {0}else{scan_result.port_number},
             scan_result.protocol.id(),
             host.mac_addr,
             host.vendor_info,
