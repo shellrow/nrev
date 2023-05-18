@@ -1,6 +1,8 @@
 <script setup>
 import { ref, reactive, onMounted, onUnmounted } from 'vue';
 import { invoke } from '@tauri-apps/api/tauri';
+import { save, open } from "@tauri-apps/api/dialog";
+import { writeTextFile, readTextFile } from "@tauri-apps/api/fs";
 import { debounce } from 'lodash';
 import { ElMessage } from 'element-plus';
 
@@ -167,8 +169,16 @@ const handleOpen = (index, row) => {
   log_detail_visible.value = true;
 }
 
+async function writeJsonFile() {
+  const filePath = await save({ defaultPath: log_detail.save_file_path });
+  if (filePath) {
+    writeTextFile(path, json_text_area.value);
+  }
+}
+
 const clickExport = (event) => {
   console.log('Export');
+  writeJsonFile();
 }
 
 const clickCopy = (event) => {
