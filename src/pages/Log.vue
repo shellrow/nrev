@@ -2,6 +2,7 @@
 import { ref, reactive, onMounted, onUnmounted } from 'vue';
 import { invoke } from '@tauri-apps/api/tauri';
 import { debounce } from 'lodash';
+import { ElMessage } from 'element-plus';
 
 const log_detail_visible = ref(false);
 const searching = ref(false);
@@ -37,6 +38,8 @@ const log_detail = reactive({
   issued_at: "", 
   save_file_path: "",
 });
+
+const json_text_area = ref('');
 
 const getLocalTime = (date) => {
     const d = new Date(date);
@@ -110,21 +113,25 @@ const getResult = async (probeId, probeTypeId) => {
     case 'port_scan':
       invoke('get_port_scan_result', { "probeId": probeId }).then((results) => {
         console.log(results);
+        json_text_area.value = JSON.stringify(results, null, 2);
       });
       break;
     case 'host_scan':
       invoke('get_host_scan_result', { "probeId": probeId }).then((results) => {
         console.log(results);
+        json_text_area.value = JSON.stringify(results, null, 2);
       });
       break;
     case 'ping':
       invoke('get_ping_stat', { "probeId": probeId }).then((results) => {
         console.log(results);
+        json_text_area.value = JSON.stringify(results, null, 2);
       });
       break;
     case 'traceroute':
       invoke('get_trace_result', { "probeId": probeId }).then((results) => {
         console.log(results);
+        json_text_area.value = JSON.stringify(results, null, 2);
       });
       break;
     default:
@@ -158,6 +165,23 @@ const handleOpen = (index, row) => {
   log_detail.save_file_path = `${row.id}-${row.probe_id}.json`;
   getResult(row.probe_id, row.probe_type_id);
   log_detail_visible.value = true;
+}
+
+const clickExport = (event) => {
+  console.log('Export');
+}
+
+const clickCopy = (event) => {
+  console.log('Copy');
+  navigator.clipboard.writeText(json_text_area.value).then(() => {
+      ElMessage({
+        message: "JSON Data copied!",
+        type: 'success',
+      });
+  })
+  .catch(e => {
+      console.error(e);
+  });
 }
 
 onMounted(() => {
@@ -308,12 +332,25 @@ onUnmounted(() => {
     <!-- Dialog -->
     <el-dialog v-model="log_detail_visible" :title="`${log_detail.probe_type_name} Result: ${log_detail.probe_id}`">
         <el-row :gutter="20">
-            <el-col :span="12">
+            <el-col :span="14">
                 <el-input v-model="log_detail.save_file_path" placeholder="Save FilePath" />
             </el-col>
-            <el-col :span="6">
-                <el-button type="primary" plain >Export</el-button>
+            <el-col :span="4">
+                <el-button type="primary" plain @click="clickExport">Export</el-button>
             </el-col>
+            <el-col :span="4">
+                <el-button type="primary" plain @click="clickCopy">Copy</el-button>
+            </el-col>
+        </el-row>
+        <div style="margin: 20px 0" />
+        <el-row :gutter="20">
+          <el-input
+            v-model="json_text_area"
+            :autosize="{ minRows: 8, maxRows: 16 }"
+            type="textarea"
+            placeholder="JSON Result" 
+            readonly
+          />
         </el-row>
         <template #footer>
             <span class="dialog-footer">
