@@ -98,6 +98,9 @@ function setProbedHosts() {
 }
 
 function initMap() {
+  targetHost.value =  "";
+  targetHosts.value = [];
+  prevTargetHosts.value = [];
   if (localStorage.theme === 'dark') {
       nodeLabelColor.value = "#ffffff";
   } else {
