@@ -6,7 +6,7 @@ import { debounce } from 'lodash';
 import { ElMessage } from 'element-plus';
 import {sleep} from '../logic/shared.js';
 import {PROTOCOL_ICMPv4, PROTOCOL_TCP, PROTOCOL_UDP}  from '../define.js';
-import { isIpv4NetworkAddress, isIpv6NetworkAddress, isValidHostname, isValidIPaddress } from '../logic/shared';
+import {isIpv4NetworkAddress, isIpv6NetworkAddress, isValidHostname, isValidIPaddress} from '../logic/shared';
 
 const pinging = ref(false);
 
@@ -109,10 +109,7 @@ const validateInput = () => {
     return "TargetHost is required";
   }
   if (isValidIPaddress(option.target_host) || isValidHostname(option.target_host)) {
-    if (isIpv4NetworkAddress(option.target_host)) {
-      return "Invalid host (network address)";
-    }
-    if (isIpv6NetworkAddress(option.target_host)) {
+    if (isIpv4NetworkAddress(option.target_host) || isIpv6NetworkAddress(option.target_host)) {
       return "Invalid host (network address)";
     }
     return "OK";

@@ -3,7 +3,9 @@ import { ref, reactive, onMounted, onUnmounted } from 'vue';
 import { invoke } from '@tauri-apps/api/tauri';
 import { listen } from '@tauri-apps/api/event';
 import { debounce } from 'lodash';
+import { ElMessage } from 'element-plus';
 import {sleep} from '../logic/shared.js';
+import {isIpv4NetworkAddress, isIpv6NetworkAddress, isValidHostname, isValidIPaddress} from '../logic/shared';
 
 const tracing = ref(false);
 
@@ -50,7 +52,17 @@ const runTraceroute = async() => {
   };
   invoke('exec_traceroute', { "opt": opt }).then((trace_result) => {
     console.log(trace_result);
-    result.nodes = trace_result.nodes;
+    trace_result.nodes.forEach(node => {
+      result.nodes.push({
+        seq: node.seq,
+        ip_addr: node.ip_addr,
+        host_name: node.host_name,
+        ttl: node.ttl,
+        hop: node.hop,
+        rtt: node.rtt / 1000,
+        node_type: node.node_type,
+      });
+    });
     result.status = "";
     result.probe_time = trace_result.probe_time / 1000;
     console.log(result);
@@ -59,7 +71,29 @@ const runTraceroute = async() => {
   });
 }
 
+const validateInput = () => {
+  if (!option.target_host) {
+    return "TargetHost is required";
+  }
+  if (isValidIPaddress(option.target_host) || isValidHostname(option.target_host)) {
+    if (isIpv4NetworkAddress(option.target_host) || isIpv6NetworkAddress(option.target_host)) {
+      return "Invalid host (network address)";
+    }
+    return "OK";
+  }else {
+    return "Invalid host";
+  }
+}
+
 const clickScan = (event) => {
+  const inputStatus = validateInput();
+  if (inputStatus != "OK") {
+    ElMessage({
+      message: inputStatus,
+      type: 'warning',
+    })
+    return;
+  }
   runTraceroute();
 };
 
@@ -127,9 +161,8 @@ onUnmounted(() => {
             <el-table-column prop="host_name" label="Host Name" />
             <el-table-column prop="ttl" label="TTL" width="80" />
             <el-table-column prop="hop" label="HOP" width="80" />
-            <el-table-column prop="rtt" label="RTT" width="80" />
+            <el-table-column prop="rtt" label="RTT(ms)" width="90" />
             <el-table-column prop="node_type" label="Node Type" width="120"/>
-            <!-- <el-table-column prop="status" label="Status" /> -->
         </el-table>
       </div>
       <div v-else>
