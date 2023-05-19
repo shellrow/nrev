@@ -176,7 +176,14 @@ async function writeJsonFile() {
       filters: [{name: 'JSON', extensions: ['json', 'txt']}] 
     });
   if (filePath) {
-    writeTextFile(filePath, json_text_area.value);
+    writeTextFile(filePath, json_text_area.value).then(() => {
+      ElMessage({
+        message: "JSON Data exported!",
+        type: 'success',
+      });
+    }).catch((error) => {
+      console.error(error);
+    });
   }
 }
 
