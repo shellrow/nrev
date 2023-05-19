@@ -164,15 +164,19 @@ const handleOpen = (index, row) => {
   log_detail.probe_id = row.probe_id;
   log_detail.probe_type_id = row.probe_type_id;
   log_detail.probe_type_name = row.probe_type_name;
-  log_detail.save_file_path = `${row.id}-${row.probe_id}.json`;
+  log_detail.save_file_path = `${row.id}-${row.probe_type_id}.json`;
   getResult(row.probe_id, row.probe_type_id);
   log_detail_visible.value = true;
 }
 
 async function writeJsonFile() {
-  const filePath = await save({ defaultPath: log_detail.save_file_path });
+  const filePath = await save(
+    { 
+      defaultPath: log_detail.save_file_path,
+      filters: [{name: 'JSON', extensions: ['json', 'txt']}] 
+    });
   if (filePath) {
-    writeTextFile(path, json_text_area.value);
+    writeTextFile(filePath, json_text_area.value);
   }
 }
 
