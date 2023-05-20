@@ -171,7 +171,7 @@ impl ScanOption {
             port_scan_type: ScanType::TcpConnectScan,
             ping_type: Protocol::ICMPv4,
             timeout: Duration::from_millis(30000),
-            wait_time: Duration::from_millis(200),
+            wait_time: Duration::from_millis(500),
             send_rate: Duration::from_millis(0),
             count: 4,
             default_scan: true,
