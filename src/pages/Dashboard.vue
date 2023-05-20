@@ -30,7 +30,7 @@ function setRecentActivities() {
     invoke('get_top_probe_hist').then((res) => {
         res.forEach((log) => {
             activities.value.push({
-                content: `[${log.probe_id}] [${log.probe_type_name}] ${log.probe_target_name} ${log.probe_target_addr}` ,
+                content: `[${log.id}] ${log.probe_type_name} ${log.probe_target_name} ${log.probe_target_addr}` ,
                 timestamp: log.issued_at,
             });
         });
