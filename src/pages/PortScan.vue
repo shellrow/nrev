@@ -4,7 +4,7 @@ import { invoke } from '@tauri-apps/api/tauri';
 import { ElMessage } from 'element-plus';
 //import { debounce } from 'lodash';
 //import {sleep} from '../logic/shared.js';
-import {PORT_OPTION_DEFAULT,PORT_OPTION_WELL_KNOWN,PORT_OPTION_CUSTOM_LIST,PORTSCAN_TYPE_TCP_SYN,PORTSCAN_TYPE_TCP_CONNECT} from '../define.js';
+import {PORT_OPTION_DEFAULT,PORT_OPTION_WELL_KNOWN,PORT_OPTION_CUSTOM_LIST,PORTSCAN_TYPE_TCP_SYN,PORTSCAN_TYPE_TCP_CONNECT,OS_TYPE_WINDOWS} from '../define.js';
 import { isIpv4NetworkAddress, isIpv6NetworkAddress, isValidHostname, isValidIPaddress } from '../logic/shared';
 
 const scanning = ref(false);
@@ -86,6 +86,11 @@ const scanTypeOptions = [
   },
 ];
 
+const getOsType = async() => {
+  const os_type = await invoke('get_os_type');
+  return os_type;
+};
+
 const runPortScan = async() => {
   scanning.value = true;
   if (option.port_option === PORT_OPTION_CUSTOM_LIST) {
@@ -126,9 +131,15 @@ const runPortScan = async() => {
   });
 };
 
-const validateInput = () => {
+const validateInput = async() => {
   if (!option.target_host) {
     return "TargetHost is required";
+  }
+  const os_type = await getOsType();
+  if (os_type === OS_TYPE_WINDOWS) {
+    if (option.async_flag && option.scan_type === PORTSCAN_TYPE_TCP_SYN) {
+      return "Async TCP SYN Scan is not supported on Windows";
+    }
   }
   if (isValidIPaddress(option.target_host) || isValidHostname(option.target_host)) {
     if (isIpv4NetworkAddress(option.target_host)) {
@@ -156,16 +167,17 @@ const clearResult = () => {
 }
 
 const clickScan = (event) => {
-  const inputStatus = validateInput();
-  if (inputStatus != "OK") {
-    ElMessage({
-      message: inputStatus,
-      type: 'warning',
-    })
-    return;
-  }
-  clearResult();
-  runPortScan();
+  validateInput().then((inputStatus) => {
+    if (inputStatus != "OK") {
+      ElMessage({
+        message: inputStatus,
+        type: 'warning',
+      })
+      return;
+    }
+    clearResult();
+    runPortScan();
+  });
 };
 
 onMounted(() => {

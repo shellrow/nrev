@@ -35,7 +35,8 @@ use commands::{
   get_port_scan_result,
   get_host_scan_result,
   get_ping_stat,
-  get_trace_result
+  get_trace_result,
+  get_os_type
 };
 
 fn main() {
@@ -62,7 +63,8 @@ fn main() {
       get_port_scan_result,
       get_host_scan_result,
       get_ping_stat,
-      get_trace_result
+      get_trace_result,
+      get_os_type
       ])
       .setup(|app| {
         let app_handle = app.handle();

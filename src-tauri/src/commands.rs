@@ -4,7 +4,7 @@ use tauri::Manager;
 use crate::db_models::{self, ProbeLog, DataSetItem, ProbeStat};
 use crate::option::{ScanOption};
 use crate::result::{PortScanResult, HostScanResult, PingStat, TraceResult};
-use crate::scan;
+use crate::{scan, sys};
 use crate::network;
 use crate::models;
 use crate::json_models;
@@ -293,4 +293,9 @@ pub fn get_trace_result(probe_id: String) -> json_models::JsonTracerouteStat {
     }
     result.issued_at = probe_result.issued_at;
     result
+}
+
+#[tauri::command]
+pub fn get_os_type() -> String {
+    sys::get_os_type()
 }

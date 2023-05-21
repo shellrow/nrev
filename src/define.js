@@ -17,6 +17,11 @@ const PORTSCAN_TYPE_TCP_CONNECT = "tcp_connect_scan";
 const HOSTSCAN_TYPE_NETWORK = "network";
 const HOSTSCAN_TYPE_CUSTOM_HOSTS = "custom_list";
 
+// OS Type
+const OS_TYPE_LINUX = "linux";
+const OS_TYPE_MACOS = "macos";
+const OS_TYPE_WINDOWS = "windows";
+
 export { 
     PROTOCOL_ICMPv4,
     PROTOCOL_ICMPv6,
@@ -29,4 +34,7 @@ export {
     PORTSCAN_TYPE_TCP_CONNECT,
     HOSTSCAN_TYPE_NETWORK,
     HOSTSCAN_TYPE_CUSTOM_HOSTS,
+    OS_TYPE_LINUX,
+    OS_TYPE_MACOS,
+    OS_TYPE_WINDOWS
 };
