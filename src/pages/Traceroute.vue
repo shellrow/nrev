@@ -162,7 +162,7 @@ onUnmounted(() => {
             <el-table-column prop="ttl" label="TTL" width="80" />
             <el-table-column prop="hop" label="HOP" width="80" />
             <el-table-column prop="rtt" label="RTT(ms)" width="90" />
-            <el-table-column prop="node_type" label="Node Type" width="120"/>
+            <el-table-column prop="node_type" label="Node Type" width="130"/>
         </el-table>
       </div>
       <div v-else>
