@@ -32,7 +32,7 @@
         "icons/icon.ico"
       ],
       "identifier": "com.intsigma.nesmap-desktop",
-      "longDescription": "Network mapper for diagnosis and discovery",
+      "longDescription": "Network mapper for discovery and management",
       "macOS": {
         "entitlements": null,
         "exceptionDomain": "",
@@ -41,7 +41,7 @@
         "signingIdentity": null
       },
       "resources": ["resources/*"],
-      "shortDescription": "Network mapper for diagnosis and discovery",
+      "shortDescription": "Network mapper for discovery and management",
       "targets": "all",
       "windows": {
         "certificateThumbprint": null,
