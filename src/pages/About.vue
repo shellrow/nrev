@@ -4,12 +4,12 @@ import { invoke } from '@tauri-apps/api/tauri';
 import { debounce } from 'lodash';
 
 const about_app = reactive({
-    name: 'NesMap',
+    name: 'NesMap Desktop',
     version: 'v0.1.0',
-    release_date: '2023-04-28',
+    release_date: '2023-05-20',
     author: 'shellrow <shellrow@protonmail.com>',
-    description: 'Cross-platform network mapper',
-    repository: 'https://github.com/shellrow/nesmap',
+    description: 'Network mapper for diagnosis and discovery',
+    repository: 'https://github.com/shellrow/nesmap-desktop',
 });
 
 onMounted(() => {
