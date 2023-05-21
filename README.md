@@ -1,5 +1,5 @@
 # nesmap-desktop
-Network mapper for discovery and management
+Network mapper for discovery and management.  
 `nesmap-desktop` is a cross-platform graphical `nesmap` frontend.
 
 ## Features
