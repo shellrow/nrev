@@ -148,7 +148,7 @@ onUnmounted(() => {
             </span>
         </template>
     </el-dialog>
-    <el-dialog v-model="dialogAboutVisible" title="About NesMap">
+    <el-dialog v-model="dialogAboutVisible" title="About NesMap Desktop">
         <AboutPage></AboutPage>
         <template #footer>
             <span class="dialog-footer">
