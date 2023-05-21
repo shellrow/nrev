@@ -44,17 +44,18 @@ impl PortArg {
             target.ports = dataset::get_default_ports();
             opt.default_scan = true;
         }
-        if self.async_flag {
-            opt.async_scan = true;
+        if self.scan_type == ScanType::TcpConnectScan.id() {
+            opt.port_scan_type = ScanType::TcpConnectScan;
+        }else{
+            opt.port_scan_type = ScanType::TcpSynScan;
         }
+        opt.async_scan = self.async_flag;
         if self.service_detection_flag {
             opt.service_detection = true;
             opt.http_ports = dataset::get_http_ports();
             opt.https_ports = dataset::get_https_ports();
         }
-        if self.os_detection_flag {
-            opt.os_detection = true;
-        }
+        opt.os_detection = self.os_detection_flag;
         opt.targets.push(target);
         opt
     }

@@ -86,6 +86,15 @@ impl ScanType {
             ScanType::UdpPingScan => netscan::setting::ScanType::UdpPingScan,
         }
     }
+    pub fn id(&self) -> String {
+        match *self {
+            ScanType::TcpSynScan => String::from("tcp_syn_scan"),
+            ScanType::TcpConnectScan => String::from("tcp_connect_scan"),
+            ScanType::IcmpPingScan => String::from("icmp_ping_scan"),
+            ScanType::TcpPingScan => String::from("tcp_ping_scan"),
+            ScanType::UdpPingScan => String::from("udp_ping_scan"),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
@@ -205,14 +214,15 @@ impl ScanOption {
             Err(_) => {},
         }
         if process::privileged() {
-            opt.port_scan_type = ScanType::TcpSynScan;
             if sys::get_os_type() == "windows" {
-                opt.async_scan = false;
+                opt.port_scan_type = ScanType::TcpConnectScan;
+            }else{
+                opt.port_scan_type = ScanType::TcpSynScan;
             }
         }else{
             opt.port_scan_type = ScanType::TcpConnectScan;
-            opt.async_scan = true;
         }
+        opt.async_scan = true;
         opt
     }
     pub fn set_dst_hosts_from_na(&mut self, v: String, prefix_len: u8, port: Option<u16>) {
