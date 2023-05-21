@@ -1,10 +1,10 @@
 [package]
 name = "nesmap-desktop"
 version = "0.1.0"
-description = "Network mapper for diagnosis and discovery"
+description = "Network mapper for discovery and management"
 authors = ["shellrow <shellrow@protonmail.com>"]
 license = "MIT"
-repository = "https://github.com/shellrow/nesmap"
+repository = "https://github.com/shellrow/nesmap-desktop"
 default-run = "nesmap-desktop"
 edition = "2021"
 rust-version = "1.57"
