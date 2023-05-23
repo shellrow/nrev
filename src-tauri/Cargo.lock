@@ -782,6 +782,32 @@ dependencies = [
 ]
 
 [[package]]
+name = "enmap"
+version = "0.1.0"
+dependencies = [
+ "async-io",
+ "default-net 0.14.1",
+ "dns-lookup",
+ "domainscan",
+ "ipnet",
+ "netscan",
+ "pnet_datalink",
+ "pnet_packet",
+ "regex",
+ "runas",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "sudo",
+ "tauri",
+ "tauri-build",
+ "tokio",
+ "tracert",
+ "uuid",
+ "winapi",
+]
+
+[[package]]
 name = "enum-as-inner"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1912,32 +1938,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6e5a6ae77c8ee183dcbbba6150e2e6b9f3f4196a7666c02a715a95692ec1fa97"
 dependencies = [
  "jni-sys",
-]
-
-[[package]]
-name = "nesmap-desktop"
-version = "0.1.0"
-dependencies = [
- "async-io",
- "default-net 0.14.1",
- "dns-lookup",
- "domainscan",
- "ipnet",
- "netscan",
- "pnet_datalink",
- "pnet_packet",
- "regex",
- "runas",
- "rusqlite",
- "serde",
- "serde_json",
- "sudo",
- "tauri",
- "tauri-build",
- "tokio",
- "tracert",
- "uuid",
- "winapi",
 ]
 
 [[package]]

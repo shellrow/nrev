@@ -1,4 +1,4 @@
-// Const Define for nodemap-desktop frontend
+// Const Define for enmap
 
 // Protocol
 const PROTOCOL_ICMPv4 = "ICMPv4";

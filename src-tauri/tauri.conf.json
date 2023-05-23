@@ -6,7 +6,7 @@
     "distDir": "../dist"
   },
   "package": {
-    "productName": "nesmap-desktop",
+    "productName": "enmap",
     "version": "0.1.0"
   },
   "tauri": {
@@ -31,7 +31,7 @@
         "icons/icon.icns",
         "icons/icon.ico"
       ],
-      "identifier": "com.intsigma.nesmap-desktop",
+      "identifier": "com.intsigma.enmap",
       "longDescription": "Network mapper for discovery and management",
       "macOS": {
         "entitlements": null,
@@ -60,7 +60,7 @@
         "fullscreen": false,
         "height": 800,
         "resizable": true,
-        "title": "NesMap Desktop",
+        "title": "Enmap",
         "width": 1280
       }
     ]

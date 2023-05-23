@@ -1,6 +1,5 @@
-# nesmap-desktop
-Network mapper for discovery and management.  
-`nesmap-desktop` is a cross-platform graphical `nesmap` frontend.
+# enmap
+Easy and Enhanced Network mapper for discovery and management
 
 ## Features
 - Port Scan
@@ -16,7 +15,7 @@ Network mapper for discovery and management.
 - Windows
 
 ## Privileges
-`nesmap` and `nesmap-desktop` uses a raw socket which require elevated privileges.  Execute with administrator privileges.
+`enmap` uses a raw socket which require elevated privileges.  Execute with administrator privileges.
 
 ## Note for Windows users
 For Traceroute, you may need to set up firewall rules that allow `ICMP Time-to-live Exceeded` and `ICMP Destination (Port) Unreachable` packets to be received.

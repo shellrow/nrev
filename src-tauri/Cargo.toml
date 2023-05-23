@@ -1,11 +1,11 @@
 [package]
-name = "nesmap-desktop"
+name = "enmap"
 version = "0.1.0"
 description = "Network mapper for discovery and management"
 authors = ["shellrow <shellrow@protonmail.com>"]
 license = "MIT"
-repository = "https://github.com/shellrow/nesmap-desktop"
-default-run = "nesmap-desktop"
+repository = "https://github.com/shellrow/enmap"
+default-run = "enmap"
 edition = "2021"
 rust-version = "1.57"
 keywords = ["network","security","scan","gui","cross-platform"]
