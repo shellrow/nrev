@@ -4,7 +4,7 @@ import { invoke } from '@tauri-apps/api/tauri';
 import { debounce } from 'lodash';
 
 const about_app = reactive({
-    name: 'Enmap',
+    name: 'EnMap',
     version: 'v0.1.0',
     release_date: '2023-05-23',
     author: 'shellrow <shellrow@protonmail.com>',

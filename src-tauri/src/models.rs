@@ -18,7 +18,7 @@ pub struct PortArg {
 }
 
 impl PortArg {
-    pub fn to_scan_option(&self) -> crate::option::ScanOption {
+    pub async fn to_scan_option(&self) -> crate::option::ScanOption {
         let mut opt: ScanOption = ScanOption::default();
         opt.command_type = CommandType::PortScan;
         opt.tcp_map = dataset::get_tcp_map();
@@ -26,7 +26,7 @@ impl PortArg {
         if validator::is_ipaddr(self.target_host.clone()) {
             ip_addr = self.target_host.parse::<IpAddr>().unwrap();
         }else{
-            match network::lookup_host_name(self.target_host.clone()) {
+            match network::lookup_host_name_async(self.target_host.clone()).await {
                 Some(ip) => {
                     ip_addr = ip;
                 },
@@ -124,7 +124,7 @@ pub struct PingArg {
 }
 
 impl PingArg {
-    pub fn to_scan_option(&self) -> crate::option::ScanOption {
+    pub async fn to_scan_option(&self) -> crate::option::ScanOption {
         let mut opt: ScanOption = ScanOption::default();
         opt.command_type = CommandType::Ping;
         // TODO: IPv6 support
@@ -133,7 +133,7 @@ impl PingArg {
                                         ip
                                     },
                                     Err(_) => {
-                                        match network::lookup_host_name(self.target_host.clone()) {
+                                        match network::lookup_host_name_async(self.target_host.clone()).await {
                                             Some(ip) => {
                                                 ip
                                             },
@@ -168,7 +168,7 @@ pub struct TracerouteArg {
 }
 
 impl TracerouteArg {
-    pub fn to_scan_option(&self) -> crate::option::ScanOption {
+    pub async fn to_scan_option(&self) -> crate::option::ScanOption {
         let mut opt: ScanOption = ScanOption::default();
         opt.command_type = CommandType::Traceroute;
         opt.set_timeout_from_milis(self.timeout);
@@ -178,7 +178,7 @@ impl TracerouteArg {
                                         ip
                                     },
                                     Err(_) => {
-                                        match network::lookup_host_name(self.target_host.clone()) {
+                                        match network::lookup_host_name_async(self.target_host.clone()).await {
                                             Some(ip) => {
                                                 ip
                                             },

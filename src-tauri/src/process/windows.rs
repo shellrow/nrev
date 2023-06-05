@@ -1,10 +1,8 @@
 use std::io::Error;
-use std::ptr;
-
-use winapi::um::handleapi::CloseHandle;
-use winapi::um::processthreadsapi::{ GetCurrentProcess, OpenProcessToken };
-use winapi::um::securitybaseapi::GetTokenInformation;
-use winapi::um::winnt::{HANDLE, TOKEN_ELEVATION, TOKEN_QUERY, TokenElevation};
+use windows_sys::Win32::Foundation::{CloseHandle, HANDLE};
+use windows_sys::Win32::System::Threading::{GetCurrentProcess, OpenProcessToken};
+use windows_sys::Win32::Security::GetTokenInformation;
+use windows_sys::Win32::Security::{TokenElevation, TOKEN_ELEVATION, TOKEN_QUERY};
 
 pub fn privileged() -> bool {
     _is_elevated().unwrap_or(false)
@@ -20,9 +18,9 @@ struct QueryAccessToken(HANDLE);
 impl QueryAccessToken {
     fn from_current_process() -> Result<Self, Error> {
         unsafe {
-            let mut handle: HANDLE = ptr::null_mut();
+            let mut handle = HANDLE::default();
             if OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &mut handle) != 0 {
-                Ok ( Self(handle) )
+                Ok(Self(handle))
             } else {
                 Err(Error::last_os_error())
             }
@@ -31,10 +29,17 @@ impl QueryAccessToken {
 
     fn is_elevated(&self) -> Result<bool, Error> {
         unsafe {
-            let mut elevation = TOKEN_ELEVATION::default();
+            let mut elevation: TOKEN_ELEVATION = TOKEN_ELEVATION { TokenIsElevated: 0 };
             let size = std::mem::size_of::<TOKEN_ELEVATION>() as u32;
             let mut ret_size = size;
-            if GetTokenInformation(self.0, TokenElevation, &mut elevation as *mut _ as *mut _, size, &mut ret_size ) != 0 {
+            if GetTokenInformation(
+                self.0,
+                TokenElevation,
+                &mut elevation as *const _ as *mut _,
+                size,
+                &mut ret_size,
+            ) != 0
+            {
                 Ok(elevation.TokenIsElevated != 0)
             } else {
                 Err(Error::last_os_error())
@@ -45,8 +50,6 @@ impl QueryAccessToken {
 
 impl Drop for QueryAccessToken {
     fn drop(&mut self) {
-        if !self.0.is_null() {
-            unsafe { CloseHandle(self.0) };
-        }
+        unsafe { CloseHandle(self.0) };
     }
 }

@@ -12,7 +12,7 @@ use crate::json_models;
 // Commands
 #[tauri::command]
 pub async fn exec_portscan(opt: models::PortArg) -> PortScanResult {
-    let probe_opt: ScanOption = opt.to_scan_option();
+    let probe_opt: ScanOption = opt.to_scan_option().await;
     let m_probe_opt: ScanOption = probe_opt.clone();
     let (msg_tx, _msg_rx): (Sender<String>, Receiver<String>) = channel();
     let handle = thread::spawn(move|| {
@@ -70,7 +70,7 @@ pub async fn exec_hostscan(opt: models::HostArg) -> HostScanResult {
 
 #[tauri::command]
 pub async fn exec_ping(opt: models::PingArg, app_handle: tauri::AppHandle) -> PingStat {
-    let probe_opt: ScanOption = opt.to_scan_option();
+    let probe_opt: ScanOption = opt.to_scan_option().await;
     let m_probe_opt: ScanOption = probe_opt.clone();
     let (msg_tx, msg_rx): (Sender<String>, Receiver<String>) = channel();
     let handle = thread::spawn(move|| {
@@ -103,7 +103,7 @@ pub async fn exec_ping(opt: models::PingArg, app_handle: tauri::AppHandle) -> Pi
 
 #[tauri::command]
 pub async fn exec_traceroute(opt: models::TracerouteArg, app_handle: tauri::AppHandle) -> TraceResult {
-    let probe_opt: ScanOption = opt.to_scan_option();
+    let probe_opt: ScanOption = opt.to_scan_option().await;
     let m_probe_opt: ScanOption = probe_opt.clone();
     let (msg_tx, msg_rx): (Sender<String>, Receiver<String>) = channel();
     let handle = thread::spawn(move|| {

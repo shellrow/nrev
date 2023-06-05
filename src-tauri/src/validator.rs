@@ -2,7 +2,6 @@ use regex::Regex;
 use std::str::FromStr;
 use std::net::{IpAddr, SocketAddr};
 use std::path::Path;
-use dns_lookup::lookup_host;
 use ipnet::IpNet;
 use crate::network;
 
@@ -23,16 +22,12 @@ pub fn validate_port_opt(v: &str) -> Result<(), String> {
         Ok(_) => {
             return Ok(())
         },
-        Err(_) => {
-            match lookup_host(a_vec[0]) {
-                Ok(_) => {
-                    return Ok(())
-                },
-                Err(_) => {
-                    return Err(String::from("Please specify ip address or hostname"));
-                },
+        Err(_) => match network::lookup_host_name(a_vec[0].to_string()) {
+            Some(_) => return Ok(()),
+            None => {
+                return Err(String::from("Please specify ip address or hostname"));
             }
-        }
+        },
     }
 }
 
@@ -232,12 +227,12 @@ pub fn is_socketaddr(host: String) -> bool {
 
 #[allow(unused)]
 pub fn is_valid_hostname(host: String) -> bool {
-    match dns_lookup::lookup_host(&host) {
-        Ok(_) => {
+    match network::lookup_host_name(host) {
+        Some(_) => {
             return true;
-        },
-        Err(_) => {
+        }
+        None => {
             return false;
         }
-    } 
+    }
 }
