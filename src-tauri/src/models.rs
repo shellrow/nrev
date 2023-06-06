@@ -35,7 +35,7 @@ impl PortArg {
                 }
             }
         }
-        let mut target: TargetInfo = TargetInfo::new_with_ip_addr(ip_addr);
+        let mut target: TargetInfo = TargetInfo::new_with_ip_addr(ip_addr).with_host_name(self.target_host.clone());
         if self.port_option == String::from("well_known") {
             target.ports = dataset::get_wellknown_ports();
         }else if self.port_option == String::from("custom_list") {
@@ -145,13 +145,13 @@ impl PingArg {
                                 };
         if self.protocol == Protocol::TCP.name() {
             opt.protocol = Protocol::TCP;
-            opt.targets.push(TargetInfo::new_with_socket(target_ip, self.port));
+            opt.targets.push(TargetInfo::new_with_socket(target_ip, self.port).with_host_name(self.target_host.clone()));
         } else if self.protocol == Protocol::UDP.name() {
             opt.protocol = Protocol::UDP;
-            opt.targets.push(TargetInfo::new_with_socket(target_ip, 33435));
+            opt.targets.push(TargetInfo::new_with_socket(target_ip, 33435).with_host_name(self.target_host.clone()));
         } else {
             opt.protocol = Protocol::ICMPv4;
-            opt.targets.push(TargetInfo::new_with_ip_addr(target_ip));
+            opt.targets.push(TargetInfo::new_with_ip_addr(target_ip).with_host_name(self.target_host.clone()));
         }
         opt.count = self.count;
         opt
@@ -188,7 +188,7 @@ impl TracerouteArg {
                                         }
                                     },
                                 };
-        opt.targets.push(TargetInfo::new_with_ip_addr(target_ip));
+        opt.targets.push(TargetInfo::new_with_ip_addr(target_ip).with_host_name(self.target_host.clone()));
         opt.protocol = Protocol::UDP;
         opt.max_hop = self.max_hop;
         opt

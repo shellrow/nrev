@@ -235,13 +235,13 @@ pub async fn run_service_scan(opt: ScanOption, msg_tx: &mpsc::Sender<String>) ->
     }
     // return crate::result::PortScanResult
     if ps_result.results.len() > 0 {
-        let ip = ps_result.results.first().unwrap().ip_addr;
+        let ns_host_info = ps_result.results.first().unwrap();
         let mut ports = ps_result.results.first().unwrap().ports.clone();
         // Sort by port number
         ports.sort_by(|a, b| a.port.cmp(&b.port));
         let tcp_map = opt.tcp_map;
         let t_map: HashMap<u16, String> = HashMap::new();
-        let service_map = sd_result.get(&ip).unwrap_or(&t_map);
+        let service_map = sd_result.get(&ns_host_info.ip_addr).unwrap_or(&t_map);
         // PortInfo
         for port in ports {
             let port_info = crate::result::PortInfo {
@@ -266,8 +266,8 @@ pub async fn run_service_scan(opt: ScanOption, msg_tx: &mpsc::Sender<String>) ->
             OsFingerprint::new()
         };
         let host_info = crate::result::HostInfo {
-            ip_addr: ip.to_string(),
-            host_name: if let Some(target) = opt.targets.first() { target.host_name.clone() } else { network::lookup_ip_addr(ip.to_string()) },
+            ip_addr: ns_host_info.ip_addr.to_string(),
+            host_name: if ns_host_info.host_name.is_empty() { network::lookup_ip_addr(ns_host_info.ip_addr.to_string()) } else { ns_host_info.host_name.clone() },
             mac_addr: String::new(),
             vendor_info: String::new(),
             os_name: os_fingetprint.os_name,

@@ -125,6 +125,10 @@ impl TargetInfo {
             base_domain: String::new(),
         }
     }
+    pub fn with_host_name(&mut self, host_name: String) -> TargetInfo {
+        self.host_name = host_name;
+        self.clone()
+    }
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
