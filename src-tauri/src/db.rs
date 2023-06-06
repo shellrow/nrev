@@ -334,7 +334,31 @@ pub fn get_probed_hosts() -> Vec<DataSetItem> {
             }
         }
     }
-    return results;
+    let mut dataset: Vec<DataSetItem> = vec![];
+    let rows = results.clone();
+    for item in results {
+        let count = rows.iter().filter(|&row| *row.id == item.id).count();
+        if count > 1 {
+            let count = rows.iter().filter(|&row| *row.id == item.id && *row.id != *row.name && *row.name != "".to_owned()).count();
+            if count > 0 {
+                if item.name.is_empty() || item.id == item.name {
+                    continue;
+                }else{
+                    dataset.push(item);
+                }
+            }else{
+                dataset.push(item);
+            }
+        }else{
+            dataset.push(item);
+        }
+    }
+    for row in &mut dataset {
+        if row.name.is_empty() {
+            row.name = row.id.clone();
+        }
+    }
+    return dataset;
 }
 
 #[allow(unused)]
