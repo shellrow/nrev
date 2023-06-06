@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted, onUnmounted } from 'vue';
+import { ref, reactive, onMounted, onUnmounted, computed, watch } from 'vue';
 import { invoke } from '@tauri-apps/api/tauri';
 import { debounce } from 'lodash';
 import * as vNG from "v-network-graph"
@@ -244,6 +244,7 @@ const addNode = () => {
     return;
   }
   const id = getNewNodeId();
+  // TODO: Lookup host name / ip address
   nodes[id] = { name: targetHost.value, ip_addr: "", host_name: "" };
   layouts.nodes[id] = getNewPosition();
   console.log("Node added: " + id + ", " + nodes[id].name);
@@ -359,7 +360,7 @@ const addCheckedNodes = () => {
       const nodeId = getNodeId(host);
       if (nodeId === "") {
         const id = getNewNodeId();
-        nodes[id] = { name: host, ip_addr: "", host_name: "" };
+        nodes[id] = { name: host, ip_addr: host, host_name: getHostName(host) };
         layouts.nodes[id] = getNewPosition();
       }
     });
@@ -393,6 +394,16 @@ const selectMappedHosts = () => {
   prevTargetHosts.value = targetHosts.value;
 }
 
+const getHostName = (ipAddr) => {
+  let hostName = ipAddr;
+  probedHosts.value.forEach(host => {
+    if (host.id === ipAddr || host.name === ipAddr) {
+      hostName = host.name;
+    }
+  });
+  return hostName;
+}
+
 const onTargetHostsChange = (event) => {
   console.log(event); 
   if (event.length > prevTargetHosts.value.length) {
@@ -408,6 +419,43 @@ const onTargetHostRemoved = (event) => {
   if (nodeId !== "") {
     delete nodes[nodeId];
   }
+}
+
+const tooltip = ref<HTMLDivElement>();
+const targetNodeId = ref<string>("");
+const tooltipOpacity = ref(0); // 0 or 1
+const tooltipPos = ref({ left: "0px", top: "0px" });
+const NODE_RADIUS = 16;
+const targetNodePos = computed(() => {
+  const nodePos = layouts.nodes[targetNodeId.value]
+  return nodePos || { x: 0, y: 0 }
+});
+
+// Update `tooltipPos`
+watch(
+  () => [targetNodePos.value, tooltipOpacity.value],
+  () => {
+    if (!graph.value || !tooltip.value) return
+
+    // translate coordinates: SVG -> DOM
+    const domPoint = graph.value.translateFromSvgToDomCoordinates(targetNodePos.value)
+    // calculates top-left position of the tooltip.
+    tooltipPos.value = {
+      left: domPoint.x - tooltip.value.offsetWidth / 2 + "px",
+      top: domPoint.y - NODE_RADIUS - tooltip.value.offsetHeight - 10 + "px",
+    }
+  },
+  { deep: true }
+);
+
+const eventHandlers: vNG.EventHandlers = {
+  "node:pointerover": ({ node }) => {
+    targetNodeId.value = node
+    tooltipOpacity.value = 1 // show
+  },
+  "node:pointerout": _ => {
+    tooltipOpacity.value = 0 // hide
+  },
 }
 
 onMounted(() => {
@@ -430,6 +478,26 @@ onUnmounted(() => {
 
 .item {
   margin-bottom: 18px;
+}
+.tooltip-wrapper {
+  position: relative;
+}
+.tooltip {
+  top: 0;
+  left: 0;
+  opacity: 0;
+  position: absolute;
+  width: 100px;
+  height: 36px;
+  display: grid;
+  place-content: center;
+  text-align: center;
+  font-size: 12px;
+  background-color: #343331a8;
+  border: 1px solid #000000;
+  box-shadow: 2px 2px 2px #555555;
+  transition: opacity 0.2s linear;
+  pointer-events: none;
 }
 </style>
 
@@ -459,7 +527,7 @@ onUnmounted(() => {
         </el-row>
       </el-col>
       <el-col :span="6">
-          <p style="font-size: var(--el-font-size-small)">Hosts</p>
+          <p style="font-size: var(--el-font-size-small)">Probed Hosts</p>
           <el-select
           v-model="targetHosts"
           multiple 
@@ -471,7 +539,7 @@ onUnmounted(() => {
             <el-option
                 v-for="item in probedHosts"
                 :key="item.id"
-                :label="item.name"
+                :label="`${item.name} (${item.id})`"
                 :value="item.id"
             />
           </el-select>
@@ -499,6 +567,7 @@ onUnmounted(() => {
       </el-col>
     </el-row>
   </el-card>
+  <div class="tooltip-wrapper">
     <v-network-graph
         ref="graph"
         v-model:selected-nodes="selectedNodes"
@@ -507,7 +576,17 @@ onUnmounted(() => {
         :edges="edges"
         :layouts="layouts"
         :configs="configs"
+        :event-handlers="eventHandlers"
         :style="'height:'+ (innerHeight - 100).toString() + 'px'"
     >
     </v-network-graph>
+    <!-- Tooltip -->
+    <div
+      ref="tooltip"
+      class="tooltip"
+      :style="{ ...tooltipPos, opacity: tooltipOpacity }"
+    >
+      <div>{{ nodes[targetNodeId]?.host_name ?? "" }}</div>
+    </div>
+  </div>
 </template>
