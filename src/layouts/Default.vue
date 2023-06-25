@@ -77,6 +77,11 @@ onUnmounted(() => {
 .flex-grow {
     flex-grow: 1;
 }
+
+body {
+  user-select: none;
+}
+
 </style>
 
 <template>
@@ -91,7 +96,7 @@ onUnmounted(() => {
                     <!-- <router-link to="/">
                         <img class="img" :src="EnMapLogo" width="40" style="margin-left: 4px; margin-top: 10px" />
                     </router-link> -->
-                    <div class="flex-grow" />
+                    <div class="flex-grow" style="outline: none;" />
                     <el-menu-item index="0" @click="dialogSystemVisible = true">System</el-menu-item>
                     <el-menu-item index="1" @click="dialogAboutVisible = true">About</el-menu-item>
                     <el-switch v-model="mode" @click="changeMode" style="margin-left: 24px; margin-top: 12px;" inline-prompt :active-icon="Sunny" :inactive-icon="Moon" />
