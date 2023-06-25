@@ -792,7 +792,6 @@ dependencies = [
  "tracert",
  "trust-dns-resolver",
  "uuid",
- "windows-sys 0.48.0",
 ]
 
 [[package]]
