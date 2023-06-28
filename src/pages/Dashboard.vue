@@ -96,7 +96,7 @@ onUnmounted(() => {
                 <el-row :gutter="10">
                     <el-col :span="6">
                         <el-card class="box-card">
-                            <el-result title="PortScan" :sub-title="`Count: ${probe_stat.portscan_count}`">
+                            <el-result title="PortScan" sub-title="">
                                 <template #icon>
                                     <span></span>
                                 </template>
@@ -108,7 +108,7 @@ onUnmounted(() => {
                     </el-col>
                     <el-col :span="6">
                         <el-card class="box-card">
-                            <el-result title="HostScan" :sub-title="`Count: ${probe_stat.hostscan_count}`">
+                            <el-result title="HostScan" sub-title="">
                                 <template #icon>
                                     <span></span>
                                 </template>
@@ -120,7 +120,7 @@ onUnmounted(() => {
                     </el-col>
                     <el-col :span="6">
                         <el-card class="box-card">
-                            <el-result title="Ping" :sub-title="`Count: ${probe_stat.ping_count}`">
+                            <el-result title="Ping" sub-title="">
                                 <template #icon>
                                     <span></span>
                                 </template>
@@ -132,7 +132,7 @@ onUnmounted(() => {
                     </el-col>
                     <el-col :span="6">
                         <el-card class="box-card">
-                            <el-result title="Traceroute" :sub-title="`Count: ${probe_stat.traceroute_count}`">
+                            <el-result title="Traceroute" sub-title="">
                                 <template #icon>
                                     <span></span>
                                 </template>
