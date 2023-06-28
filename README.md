@@ -1,5 +1,5 @@
 # enmap
-Easy and Enhanced Network mapper for discovery and management
+The Simple and High-Performance GUI Network Mapper. Optimized for efficient network discovery and management.
 
 ## Features
 - Port Scan
