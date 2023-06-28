@@ -4,11 +4,11 @@ import { invoke } from '@tauri-apps/api/tauri';
 import { debounce } from 'lodash';
 
 const about_app = reactive({
-    name: 'EnMap',
+    name: 'enmap',
     version: 'v0.1.0',
-    release_date: '2023-05-23',
+    release_date: '2023-06-28',
     author: 'shellrow <shellrow@protonmail.com>',
-    description: 'Network mapper for discovery and management',
+    description: 'The Simple and High-Performance GUI Network Mapper. Optimized for efficient network discovery and management.',
     repository: 'https://github.com/shellrow/enmap',
 });
 
