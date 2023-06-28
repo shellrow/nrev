@@ -97,6 +97,22 @@ function setProbedHosts() {
   );
 }
 
+function initMapView() {
+  if (!graph.value) return;
+  graph.value.panTo({
+      x: 40,
+      y: 40,
+  });
+  console.log("panned");
+  graph.value.setViewBox({
+    left: -20,
+    top: -20,
+    right: 540,
+    bottom: 540,
+  });
+  console.log("view box set");
+}
+
 function initMap() {
   targetHost.value =  "";
   targetHosts.value = [];
@@ -113,19 +129,7 @@ function initMap() {
   });
   loadMapData();
   //selectMappedHosts();
-  if (!graph.value) return;
-  console.log("panned");
-  graph.value.panTo({
-      x: 40,
-      y: 40,
-  });
-  graph.value.setViewBox({
-    left: 0,
-    top: 0,
-    right: 540,
-    bottom: 540,
-  });
-  console.log("view box set");
+  initMapView();
 }
 
 function reloadMap() {
@@ -296,6 +300,18 @@ const saveMap = () => {
     });
   });
   Object.keys(layouts.nodes).forEach(key => {
+    if (layouts.nodes[key].x < 0) {
+      layouts.nodes[key].x = 0;
+    }
+    if (layouts.nodes[key].x > 540) {
+      layouts.nodes[key].x = 540;
+    }
+    if (layouts.nodes[key].y < 0) {
+      layouts.nodes[key].y = 0;
+    }
+    if (layouts.nodes[key].y > 540) {
+      layouts.nodes[key].y = 540;
+    }
     layout_array.push({
       map_id: mapInfo.map_id,
       node_id: key,
@@ -567,26 +583,27 @@ onUnmounted(() => {
       </el-col>
     </el-row>
   </el-card>
-  <div class="tooltip-wrapper">
-    <v-network-graph
-        ref="graph"
-        v-model:selected-nodes="selectedNodes"
-        v-model:selected-edges="selectedEdges"
-        :nodes="nodes"
-        :edges="edges"
-        :layouts="layouts"
-        :configs="configs"
-        :event-handlers="eventHandlers"
-        :style="'height:'+ (innerHeight - 100).toString() + 'px'"
-    >
-    </v-network-graph>
-    <!-- Tooltip -->
-    <div
-      ref="tooltip"
-      class="tooltip"
-      :style="{ ...tooltipPos, opacity: tooltipOpacity }"
-    >
-      <div>{{ nodes[targetNodeId]?.host_name ?? "" }}</div>
+  <el-divider />
+    <div class="tooltip-wrapper">
+      <v-network-graph
+          ref="graph"
+          v-model:selected-nodes="selectedNodes"
+          v-model:selected-edges="selectedEdges"
+          :nodes="nodes"
+          :edges="edges"
+          :layouts="layouts"
+          :configs="configs"
+          :event-handlers="eventHandlers"
+          :style="'height:'+ (innerHeight - 100).toString() + 'px'"
+      >
+      </v-network-graph>
+      <!-- Tooltip -->
+      <div
+        ref="tooltip"
+        class="tooltip"
+        :style="{ ...tooltipPos, opacity: tooltipOpacity }"
+      >
+        <div>{{ nodes[targetNodeId]?.host_name ?? "" }}</div>
+      </div>
     </div>
-  </div>
 </template>
