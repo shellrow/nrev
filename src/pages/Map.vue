@@ -103,14 +103,12 @@ function initMapView() {
       x: 40,
       y: 40,
   });
-  console.log("panned");
   graph.value.setViewBox({
     left: -20,
     top: -20,
     right: 540,
     bottom: 540,
   });
-  console.log("view box set");
 }
 
 function initMap() {
@@ -345,7 +343,11 @@ const loadMapData = () => {
     mapInfo.created_at = mapData.map_info.created_at;
     // Nodes
     mapData.nodes.forEach(node => {
-      nodes[node.node_id] = { name: node.node_name, ip_addr: node.ip_addr, host_name: node.host_name };
+      let node_name = node.node_name;
+      if (node.host_name !== "" && node.host_name != node.ip_addr) {
+        node_name = `${node.host_name} (${node.ip_addr})`;
+      }
+      nodes[node.node_id] = { name: node_name, ip_addr: node.ip_addr, host_name: node.host_name };
     });
     // Edges
     mapData.edges.forEach(edge => {
@@ -569,7 +571,7 @@ onUnmounted(() => {
             <el-button type="primary" plain @click="connectNodes">Connect</el-button>
           </el-col>
           <el-col :span="4">
-            <el-button type="primary" plain @click="removeNodes">Remove</el-button>
+            <el-button type="danger" plain @click="removeNodes">Remove</el-button>
           </el-col>
         </el-row>
       </el-col>
@@ -577,7 +579,7 @@ onUnmounted(() => {
         <p style="font-size: var(--el-font-size-small)">Selected Edges</p>
         <el-row :gutter="10">
           <el-col :span="4">
-            <el-button type="primary" plain @click="removeEdges">Remove</el-button>
+            <el-button type="danger" plain @click="removeEdges">Remove</el-button>
           </el-col>
         </el-row>
       </el-col>
@@ -603,7 +605,7 @@ onUnmounted(() => {
         class="tooltip"
         :style="{ ...tooltipPos, opacity: tooltipOpacity }"
       >
-        <div>{{ nodes[targetNodeId]?.host_name ?? "" }}</div>
+        <div>{{ nodes[targetNodeId]?.ip_addr ?? "" }}</div>
       </div>
     </div>
 </template>
