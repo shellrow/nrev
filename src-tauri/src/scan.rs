@@ -268,6 +268,7 @@ pub async fn run_service_scan(opt: ScanOption, msg_tx: &mpsc::Sender<String>) ->
         let host_info = crate::result::HostInfo {
             ip_addr: ns_host_info.ip_addr.to_string(),
             host_name: if ns_host_info.host_name.is_empty() { network::lookup_ip_addr(ns_host_info.ip_addr.to_string()) } else { ns_host_info.host_name.clone() },
+            ttl: ps_result.results.first().unwrap().ttl,
             mac_addr: String::new(),
             vendor_info: String::new(),
             os_name: os_fingetprint.os_name,
@@ -322,6 +323,7 @@ pub async fn run_node_scan(opt: ScanOption, msg_tx: &mpsc::Sender<String>) -> Ho
         let host_info = HostInfo {
             ip_addr: host.ip_addr.to_string(),
             host_name: if host.host_name.is_empty() { dns_map.get(&host.ip_addr).unwrap_or(&String::new()).to_string() } else { host.host_name },
+            ttl: host.ttl,
             mac_addr: mac_map
                 .get(&host.ip_addr)
                 .unwrap_or(&String::new())

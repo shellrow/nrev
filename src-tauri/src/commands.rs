@@ -235,6 +235,7 @@ pub fn get_host_scan_result(probe_id: String) -> json_models::JsonHostScanResult
         let mut host_result: json_models::JsonHostResult = json_models::JsonHostResult::new();
         host_result.ip_addr = host_scan_result.ip_addr;
         host_result.hostname = host_scan_result.host_name;
+        host_result.ttl = 0;
         host_result.os_info = host_scan_result.os_name;
         host_result.mac_addr = host_scan_result.mac_addr;
         host_result.vendor = host_scan_result.vendor;

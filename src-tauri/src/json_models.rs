@@ -74,6 +74,7 @@ impl JsonPortScanResult {
 pub struct JsonHostResult {
     pub ip_addr: String,
     pub hostname: String,
+    pub ttl: u16,
     pub os_info: String,
     pub mac_addr: String,
     pub vendor: String,
@@ -84,6 +85,7 @@ impl JsonHostResult {
         JsonHostResult {
             ip_addr: String::new(),
             hostname: String::new(),
+            ttl: 0,
             os_info: String::new(),
             mac_addr: String::new(),
             vendor: String::new(),

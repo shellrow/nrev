@@ -235,7 +235,7 @@ onUnmounted(() => {
             <el-table :data="result.hosts" style="width: 100%" class="mt-2">
                 <el-table-column prop="ip_addr" label="IP Address" />
                 <el-table-column prop="host_name" label="Host Name"  />
-                <el-table-column prop="os_name" label="OS Name" />
+                <el-table-column prop="ttl" label="TTL" />
                 <el-table-column prop="mac_addr" label="MAC Address" />
                 <el-table-column prop="vendor_info" label="Vendor Info" />
             </el-table>

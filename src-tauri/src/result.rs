@@ -92,6 +92,7 @@ pub struct PortInfo {
 pub struct HostInfo {
     pub ip_addr: String,
     pub host_name: String,
+    pub ttl: u8,
     pub mac_addr: String,
     pub vendor_info: String,
     pub os_name: String,
@@ -102,7 +103,8 @@ impl HostInfo {
     pub fn new() -> HostInfo {
         HostInfo { 
             ip_addr: String::new(), 
-            host_name: String::new(), 
+            host_name: String::new(),
+            ttl: 0, 
             mac_addr: String::new(), 
             vendor_info: String::new(), 
             os_name: String::new(), 
