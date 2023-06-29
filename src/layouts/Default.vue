@@ -39,16 +39,13 @@ const changeMode = (event) => {
 };
 
 const handleSelect = (key, keyPath) => {
-    // Omit!
-    console.log(key, keyPath);
+
 };
 const handleOpen = (key, keyPath) => {
-    // Omit!
-    console.log(key, keyPath);
+
 };
 const handleClose = (key, keyPath) => {
-    // Omit!
-    console.log(key, keyPath);
+    
 };
 const handleCollapse = (event) => {
     isCollapse.value = !isCollapse.value;

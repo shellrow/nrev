@@ -99,14 +99,12 @@ const runHostScan = async() => {
     };
     invoke('exec_hostscan', { "opt": opt }).then((scan_result) => {
         scanning.value = false;
-        console.log(scan_result);
         result.hosts = scan_result.hosts;
         const host_scan_time = parseFloat(`${scan_result.host_scan_time.secs}.${scan_result.host_scan_time.nanos}`);
         const lookup_time = parseFloat(`${scan_result.lookup_time.secs}.${scan_result.lookup_time.nanos}`);
         result.host_scan_time = host_scan_time.toFixed(4);
         result.lookup_time = lookup_time.toFixed(4);
         result.total_scan_time = (host_scan_time + lookup_time).toFixed(4);
-        console.log(result);
     });
 };
 

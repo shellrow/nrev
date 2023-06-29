@@ -249,7 +249,6 @@ const addNode = () => {
   // TODO: Lookup host name / ip address
   nodes[id] = { name: targetHost.value, ip_addr: "", host_name: "" };
   layouts.nodes[id] = getNewPosition();
-  console.log("Node added: " + id + ", " + nodes[id].name);
   targetHost.value = "";
 }
 
@@ -264,8 +263,6 @@ const connectNodes = () => {
   const [source, target] = selectedNodes.value;
   const label = "Edge";
   const edgeId = getNewEdgeId();
-  console.log("Edge added: " + edgeId + ", " + label);
-  console.log(nodes[source].name + " -> " + nodes[target].name);
   edges[edgeId] = { source, target, label };
 }
 
@@ -323,19 +320,13 @@ const saveMap = () => {
     edges: edge_array,
     layouts: layout_array,
   };
-  console.log(mapData);
   invoke('save_map_data', { "mapData": mapData }).then((code) => {
-    if (code === 0) {
-      console.log("Map saved");
-    } else {
-      console.log("Map save failed");
-    }
+
   });
 }
 
 const loadMapData = () => {
   invoke<MapData>('get_map_data', { "mapId": 0 }).then((mapData) => {
-    console.log(mapData);
     // Map Info
     mapInfo.map_id = mapData.map_info.map_id;
     mapInfo.map_name = mapData.map_info.map_name;
@@ -423,7 +414,6 @@ const getHostName = (ipAddr) => {
 }
 
 const onTargetHostsChange = (event) => {
-  console.log(event); 
   if (event.length > prevTargetHosts.value.length) {
     addCheckedNodes();
   } else if (event.length < prevTargetHosts.value.length) {

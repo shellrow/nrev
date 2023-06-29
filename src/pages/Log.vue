@@ -110,29 +110,24 @@ const searchLog = async () => {
 }
 
 const getResult = async (probeId, probeTypeId) => {
-  console.log(`Result ${probeId} ${probeTypeId}}`);
   switch (probeTypeId){
     case 'port_scan':
       invoke('get_port_scan_result', { "probeId": probeId }).then((results) => {
-        console.log(results);
         json_text_area.value = JSON.stringify(results, null, 2);
       });
       break;
     case 'host_scan':
       invoke('get_host_scan_result', { "probeId": probeId }).then((results) => {
-        console.log(results);
         json_text_area.value = JSON.stringify(results, null, 2);
       });
       break;
     case 'ping':
       invoke('get_ping_stat', { "probeId": probeId }).then((results) => {
-        console.log(results);
         json_text_area.value = JSON.stringify(results, null, 2);
       });
       break;
     case 'traceroute':
       invoke('get_trace_result', { "probeId": probeId }).then((results) => {
-        console.log(results);
         json_text_area.value = JSON.stringify(results, null, 2);
       });
       break;
@@ -154,12 +149,10 @@ const clickSearch = (event) => {
       searchOption.start_date = defaultDateRange[0].toISOString();
       searchOption.end_date = defaultDateRange[1].toISOString();
     }
-    console.log(searchOption);
     searchLog();
 }
 
 const handleOpen = (index, row) => {
-  console.log(index, row);
   log_detail.id = row.id;
   log_detail.probe_id = row.probe_id;
   log_detail.probe_type_id = row.probe_type_id;
@@ -188,12 +181,10 @@ async function writeJsonFile() {
 }
 
 const clickExport = (event) => {
-  console.log('Export');
   writeJsonFile();
 }
 
 const clickCopy = (event) => {
-  console.log('Copy');
   navigator.clipboard.writeText(json_text_area.value).then(() => {
       ElMessage({
         message: "JSON Data copied!",

@@ -33,7 +33,6 @@ const initResult = () => {
 
 const runTraceroute = async() => {
   const unlisten = await listen('trace_progress', (event) => {
-    console.log(event);
     trace_progress.value.push(
       {
         content: event.payload,
@@ -51,7 +50,6 @@ const runTraceroute = async() => {
     save_flag: option.save_flag,
   };
   invoke('exec_traceroute', { "opt": opt }).then((trace_result) => {
-    console.log(trace_result);
     trace_result.nodes.forEach(node => {
       result.nodes.push({
         seq: node.seq,
@@ -65,7 +63,6 @@ const runTraceroute = async() => {
     });
     result.status = "";
     result.probe_time = trace_result.probe_time / 1000;
-    console.log(result);
     tracing.value = false;
     trace_progress.value = [];
   });

@@ -58,7 +58,6 @@ const initResult = () => {
 
 const runPing = async() => {
   const unlisten = await listen('ping_progress', (event) => {
-    console.log(event);
     ping_progress.value.push(
       {
         content: event.payload,
@@ -77,7 +76,6 @@ const runPing = async() => {
     save_flag: option.save_flag,
   };
   invoke('exec_ping', { "opt": opt }).then((ping_stat) => {
-    console.log(ping_stat);
     ping_stat.ping_results.forEach(ping_result => {
       result.ping_results.push({
         protocol: ping_result.protocol,
@@ -98,7 +96,6 @@ const runPing = async() => {
     result.min = ping_stat.min / 1000;
     result.avg = ping_stat.avg / 1000;
     result.max = ping_stat.max / 1000;
-    console.log(result);
     pinging.value = false;
     ping_progress.value = [];
   });
