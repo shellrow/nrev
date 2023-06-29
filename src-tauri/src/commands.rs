@@ -249,17 +249,18 @@ pub fn get_host_scan_result(probe_id: String) -> json_models::JsonHostScanResult
 #[tauri::command]
 pub fn get_ping_stat(probe_id: String) -> json_models::JsonPingStat {
     let probe_result: db_models::ProbeResult = db_models::ProbeResult::get(probe_id.clone());
+    let ping_stat: db_models::PingStat = db_models::PingStat::get(probe_id.clone());
     let ping_results: Vec<db_models::PingResult> = db_models::PingResult::get(probe_id);
     let mut result: json_models::JsonPingStat = json_models::JsonPingStat::new();
     result.probe_id = probe_result.probe_id;
     result.ip_addr = probe_result.probe_target_addr;
     result.hostname = probe_result.probe_target_name;
     result.protocol = probe_result.protocol_id;
-    result.transmitted = probe_result.transmitted_count.unwrap_or(0);
-    result.received = probe_result.received_count.unwrap_or(0);
-    result.min = probe_result.min_value.unwrap_or(0);
-    result.avg = probe_result.avg_value.unwrap_or(0);
-    result.max = probe_result.max_value.unwrap_or(0);
+    result.transmitted = ping_stat.transmitted_count;
+    result.received = ping_stat.received_count;
+    result.min = ping_stat.min_rtt;
+    result.avg = ping_stat.avg_rtt;
+    result.max = ping_stat.max_rtt;
     for ping_result in ping_results {
         let mut json_ping_result: json_models::JsonPingResult = json_models::JsonPingResult::new();
         json_ping_result.seq = ping_result.seq;

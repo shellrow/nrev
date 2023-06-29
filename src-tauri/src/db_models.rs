@@ -21,15 +21,6 @@ pub struct ProbeResult {
     pub probe_target_name: String,
     pub protocol_id: String,
     pub probe_option: Option<String>,
-    pub scan_time: Option<u64>,
-    pub service_detection_time: Option<u64>,
-    pub os_detection_time: Option<u64>,
-    pub probe_time: Option<u64>,
-    pub transmitted_count: Option<u64>,
-    pub received_count: Option<u64>,
-    pub min_value: Option<u64>,
-    pub avg_value: Option<u64>,
-    pub max_value: Option<u64>,
     pub issued_at: String,
 }
 
@@ -43,21 +34,12 @@ impl ProbeResult {
             probe_target_name: String::new(),
             protocol_id: String::new(),
             probe_option: None,
-            scan_time: None,
-            service_detection_time: None,
-            os_detection_time: None,
-            probe_time: None,
-            transmitted_count: None,
-            received_count: None,
-            min_value: None,
-            avg_value: None,
-            max_value: None,
             issued_at: String::new(),
         }
     }
     pub fn get(probe_id: String) -> ProbeResult {
         let conn = db::connect_db().unwrap();
-        let mut stmt = conn.prepare("SELECT id, probe_id, probe_type_id, probe_target_addr, probe_target_name, protocol_id, probe_option, scan_time, service_detection_time, os_detection_time, probe_time, transmitted_count, received_count, min_value, avg_value, max_value, issued_at FROM probe_result WHERE probe_id = ?1").unwrap();
+        let mut stmt = conn.prepare("SELECT id, probe_id, probe_type_id, probe_target_addr, probe_target_name, protocol_id, probe_option, issued_at FROM probe_result WHERE probe_id = ?1").unwrap();
         let mut rows = stmt.query(params![probe_id]).unwrap();
         let mut probe_result = ProbeResult::new();
         while let Some(row) = rows.next().unwrap() {
@@ -68,16 +50,7 @@ impl ProbeResult {
             probe_result.probe_target_name = row.get(4).unwrap();
             probe_result.protocol_id = row.get(5).unwrap();
             probe_result.probe_option = row.get(6).unwrap();
-            probe_result.scan_time = row.get(7).unwrap();
-            probe_result.service_detection_time = row.get(8).unwrap();
-            probe_result.os_detection_time = row.get(9).unwrap();
-            probe_result.probe_time = row.get(10).unwrap();
-            probe_result.transmitted_count = row.get(11).unwrap();
-            probe_result.received_count = row.get(12).unwrap();
-            probe_result.min_value = row.get(13).unwrap();
-            probe_result.avg_value = row.get(14).unwrap();
-            probe_result.max_value = row.get(15).unwrap();
-            probe_result.issued_at = row.get(16).unwrap();
+            probe_result.issued_at = row.get(7).unwrap();
         }
         probe_result
     }
@@ -193,7 +166,6 @@ impl HostScanResult {
     }
 }
 
-#[allow(unused)]
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PingResult {
     pub id: u32,
@@ -246,6 +218,53 @@ impl PingResult {
             ping_results.push(ping_result);
         }
         ping_results
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct PingStat {
+    pub probe_id: String,
+    pub ip_addr: String,
+    pub host_name: String,
+    pub transmitted_count: u64,
+    pub received_count: u64,
+    pub min_rtt: u64,
+    pub avg_rtt: u64,
+    pub max_rtt: u64,
+    pub issued_at: String,
+}
+
+impl PingStat {
+    pub fn new() -> PingStat {
+        PingStat {
+            probe_id: String::new(),
+            ip_addr: String::new(),
+            host_name: String::new(),
+            transmitted_count: 0,
+            received_count: 0,
+            min_rtt: 0,
+            avg_rtt: 0,
+            max_rtt: 0,
+            issued_at: String::new(),
+        }
+    }
+    pub fn get(probe_id: String) -> PingStat {
+        let conn = db::connect_db().unwrap();
+        let mut stmt = conn.prepare("SELECT probe_id, ip_addr, host_name, transmitted_count, received_count, min_rtt, avg_rtt, max_rtt, issued_at FROM ping_stat WHERE probe_id = ?1").unwrap();
+        let mut rows = stmt.query(params![probe_id]).unwrap();
+        let mut ping_stat = PingStat::new();
+        while let Some(row) = rows.next().unwrap() {
+            ping_stat.probe_id = row.get(0).unwrap();
+            ping_stat.ip_addr = row.get(1).unwrap();
+            ping_stat.host_name = row.get(2).unwrap();
+            ping_stat.transmitted_count = row.get(3).unwrap();
+            ping_stat.received_count = row.get(4).unwrap();
+            ping_stat.min_rtt = row.get(5).unwrap();
+            ping_stat.avg_rtt = row.get(6).unwrap();
+            ping_stat.max_rtt = row.get(7).unwrap();
+            ping_stat.issued_at = row.get(8).unwrap();
+        }
+        ping_stat
     }
 }
 

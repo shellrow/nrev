@@ -31,23 +31,15 @@ pub fn insert_port_scan_result(conn:&Connection, probe_id: String, scan_result: 
         probe_target_name,
         protocol_id,
         probe_option,
-        scan_time, 
-        service_detection_time, 
-        os_detection_time, 
-        probe_time, 
         issued_at)  
-        VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10, datetime(CURRENT_TIMESTAMP, 'localtime'));";
+        VALUES (?1,?2,?3,?4,?5,?6, datetime(CURRENT_TIMESTAMP, 'localtime'));";
     let params_vec: &[&dyn rusqlite::ToSql] = params![
         probe_id,
         option::CommandType::PortScan.id(),
         scan_result.host.ip_addr,
         scan_result.host.host_name,
         option::Protocol::TCP.id(),
-        option_value,
-        scan_result.port_scan_time.as_micros() as u64,
-        scan_result.service_detection_time.as_micros() as u64,
-        scan_result.os_detection_time.as_micros() as u64,
-        scan_result.total_scan_time.as_micros() as u64
+        option_value
     ];
     match conn.execute(sql, params_vec) {
         Ok(row_count) => {
@@ -109,19 +101,15 @@ pub fn insert_host_scan_result(conn:&Connection, probe_id: String, scan_result: 
         probe_target_name,
         protocol_id,
         probe_option,
-        scan_time, 
-        probe_time, 
         issued_at)  
-        VALUES (?1,?2,?3,?4,?5,?6,?7,?8,datetime(CURRENT_TIMESTAMP, 'localtime'));";
+        VALUES (?1,?2,?3,?4,?5,?6,datetime(CURRENT_TIMESTAMP, 'localtime'));";
     let params_vec: &[&dyn rusqlite::ToSql] = params![
         probe_id,
         option::CommandType::HostScan.id(),
         String::new(),
         String::new(),
         scan_result.protocol.id(),
-        option_value,
-        scan_result.host_scan_time.as_micros() as u64,
-        scan_result.total_scan_time.as_micros() as u64
+        option_value
     ];   
     match conn.execute(sql, params_vec) {
         Ok(row_count) => {
@@ -164,28 +152,35 @@ pub fn insert_ping_result(conn:&Connection, probe_id: String, ping_stat: PingSta
         probe_target_name,
         protocol_id,
         probe_option, 
-        probe_time, 
-        transmitted_count,
-        received_count,
-        min_value,
-        avg_value,
-        max_value,
         issued_at)  
-        VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,datetime(CURRENT_TIMESTAMP, 'localtime'));";
+        VALUES (?1,?2,?3,?4,?5,?6,datetime(CURRENT_TIMESTAMP, 'localtime'));";
     let params_vec: &[&dyn rusqlite::ToSql] = params![
         probe_id,
         option::CommandType::Ping.id(),
         ping_result.ip_addr.to_string(),
         ping_result.host_name,
         ping_result.protocol,
-        option_value,
-        ping_stat.probe_time,
+        option_value
+    ];   
+    match conn.execute(sql, params_vec) {
+        Ok(row_count) => {
+            affected_row_count += row_count;
+        },
+        Err(e) => return Err(e),
+    };
+    // insert ping_stat
+    let sql: &str = "INSERT INTO ping_stat (probe_id, ip_addr, host_name, transmitted_count, received_count, min_rtt, avg_rtt, max_rtt, issued_at)
+    VALUES (?1,?2,?3,?4,?5,?6,?7,?8,datetime(CURRENT_TIMESTAMP, 'localtime'));";
+    let params_vec: &[&dyn rusqlite::ToSql] = params![
+        probe_id,
+        ping_result.ip_addr.to_string(),
+        ping_result.host_name,
         ping_stat.transmitted_count,
         ping_stat.received_count,
         ping_stat.min,
         ping_stat.avg,
         ping_stat.max
-    ];   
+    ];
     match conn.execute(sql, params_vec) {
         Ok(row_count) => {
             affected_row_count += row_count;
@@ -225,18 +220,16 @@ pub fn insert_trace_result(conn:&Connection, probe_id: String, trace_result: Tra
         probe_target_addr,
         probe_target_name,
         protocol_id,
-        probe_option, 
-        probe_time, 
+        probe_option,
         issued_at)  
-        VALUES (?1,?2,?3,?4,?5,?6,?7,datetime(CURRENT_TIMESTAMP, 'localtime'));";
+        VALUES (?1,?2,?3,?4,?5,?6,datetime(CURRENT_TIMESTAMP, 'localtime'));";
     let params_vec: &[&dyn rusqlite::ToSql] = params![
         probe_id,
         option::CommandType::Traceroute.id(),
         first_node.ip_addr.to_string(),
         first_node.host_name,
         option::Protocol::UDP.id(),
-        option_value,
-        trace_result.probe_time
+        option_value
     ];   
     match conn.execute(sql, params_vec) {
         Ok(row_count) => {
