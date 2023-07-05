@@ -456,6 +456,57 @@ watch(
   { deep: true }
 );
 
+// Context Menu Event Handler
+function showContextMenu(element: HTMLElement, event: MouseEvent) {
+  element.style.left = event.x + "px"
+  element.style.top = event.y + "px"
+  element.style.visibility = "visible"
+  const handler = (event: PointerEvent) => {
+    if (!event.target || !element.contains(event.target as HTMLElement)) {
+      element.style.visibility = "hidden"
+      document.removeEventListener("pointerdown", handler, { capture: true })
+    }
+  }
+  document.addEventListener("pointerdown", handler, { passive: true, capture: true })
+}
+
+const viewMenu = ref<HTMLDivElement>()
+function showViewContextMenu(params: vNG.ViewEvent<MouseEvent>) {
+  const { event } = params
+  // Disable browser's default context menu
+  event.stopPropagation()
+  event.preventDefault()
+  if (viewMenu.value) {
+    showContextMenu(viewMenu.value, event)
+  }
+}
+
+const nodeMenu = ref<HTMLDivElement>()
+const menuTargetNode = ref("")
+function showNodeContextMenu(params: vNG.NodeEvent<MouseEvent>) {
+  const { node, event } = params
+  // Disable browser's default context menu
+  event.stopPropagation()
+  event.preventDefault()
+  if (nodeMenu.value) {
+    menuTargetNode.value = nodes[node].name ?? ""
+    showContextMenu(nodeMenu.value, event)
+  }
+}
+
+const edgeMenu = ref<HTMLDivElement>()
+const menuTargetEdges = ref<string[]>([])
+function showEdgeContextMenu(params: vNG.EdgeEvent<MouseEvent>) {
+  const { event } = params
+  // Disable browser's default context menu
+  event.stopPropagation()
+  event.preventDefault()
+  if (edgeMenu.value) {
+    menuTargetEdges.value = params.summarized ? params.edges : [params.edge]
+    showContextMenu(edgeMenu.value, event)
+  }
+}
+
 const eventHandlers: vNG.EventHandlers = {
   "node:pointerover": ({ node }) => {
     targetNodeId.value = node
@@ -464,7 +515,11 @@ const eventHandlers: vNG.EventHandlers = {
   "node:pointerout": _ => {
     tooltipOpacity.value = 0 // hide
   },
+  "view:contextmenu": showViewContextMenu,
+  "node:contextmenu": showNodeContextMenu,
+  "edge:contextmenu": showEdgeContextMenu,
 }
+
 
 onMounted(() => {
   window.addEventListener('resize', debounce(checkWindowSize, 100));
@@ -507,6 +562,23 @@ onUnmounted(() => {
   transition: opacity 0.2s linear;
   pointer-events: none;
 }
+
+.context-menu {
+  width: 180px;
+  background-color: #343331a8;
+  padding: 10px;
+  position: fixed;
+  visibility: hidden;
+  font-size: 12px;
+  border: 1px solid #000000;
+  box-shadow: 2px 2px 2px #555555;
+  > div {
+    border: 1px dashed #aaa;
+    padding: 4px;
+    margin-top: 8px;
+  }
+}
+
 </style>
 
 <template>
@@ -596,6 +668,16 @@ onUnmounted(() => {
         :style="{ ...tooltipPos, opacity: tooltipOpacity }"
       >
         <div>{{ nodes[targetNodeId]?.ip_addr ?? "" }}</div>
+      </div>
+      <!-- Context Menu -->
+      <div ref="viewMenu" class="context-menu">View Manu</div>
+      <div ref="nodeMenu" class="context-menu">
+        Node Menu
+        <div>{{ menuTargetNode }}</div>
+      </div>
+      <div ref="edgeMenu" class="context-menu">
+        Edge Menu
+        <div>{{ menuTargetEdges.join(", ") }}</div>
       </div>
     </div>
 </template>
