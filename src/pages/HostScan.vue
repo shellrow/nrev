@@ -211,10 +211,8 @@ onUnmounted(() => {
             </el-col>
         </el-row>
         <el-row :gutter="20">
-            <el-col :span="4">
+            <el-col :span="12">
                 <el-checkbox v-model="option.async_flag" label="Async" />
-            </el-col>
-            <el-col :span="4">
                 <el-checkbox v-model="option.dsn_lookup_flag" label="DNS Lookup" />
             </el-col>
         </el-row>
