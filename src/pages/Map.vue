@@ -557,26 +557,21 @@ onUnmounted(() => {
   text-align: center;
   font-size: 12px;
   background-color: #343331a8;
-  border: 1px solid #000000;
-  box-shadow: 2px 2px 2px #555555;
+  border: 1px solid #555555;
   transition: opacity 0.2s linear;
   pointer-events: none;
+  border-radius: 8px;
 }
 
 .context-menu {
-  width: 180px;
+  width: 140px;
   background-color: #343331a8;
   padding: 10px;
   position: fixed;
   visibility: hidden;
   font-size: 12px;
-  border: 1px solid #000000;
-  box-shadow: 2px 2px 2px #555555;
-  > div {
-    border: 1px dashed #aaa;
-    padding: 4px;
-    margin-top: 8px;
-  }
+  border: 1px solid #555555;
+  border-radius: 8px;
 }
 
 </style>
@@ -670,14 +665,31 @@ onUnmounted(() => {
         <div>{{ nodes[targetNodeId]?.ip_addr ?? "" }}</div>
       </div>
       <!-- Context Menu -->
-      <div ref="viewMenu" class="context-menu">View Manu</div>
+      <div ref="viewMenu" class="context-menu">
+        <el-button type="primary" text size="small">Refresh</el-button>
+      </div>
       <div ref="nodeMenu" class="context-menu">
-        Node Menu
-        <div>{{ menuTargetNode }}</div>
+        <el-descriptions
+          :title="menuTargetNode"
+          :column="1"
+          size="small"
+          direction="vertical"
+        >
+          <el-descriptions-item><el-button type="primary" text size="small">PortScan</el-button></el-descriptions-item>
+          <el-descriptions-item><el-button type="primary" text size="small">Ping</el-button></el-descriptions-item>
+          <el-descriptions-item><el-button type="primary" text size="small">Traceroute</el-button></el-descriptions-item>
+          <el-descriptions-item><el-button type="danger" text size="small">Remove</el-button></el-descriptions-item>
+        </el-descriptions>
       </div>
       <div ref="edgeMenu" class="context-menu">
-        Edge Menu
-        <div>{{ menuTargetEdges.join(", ") }}</div>
+        <el-descriptions
+          :title="menuTargetEdges.length + ' edge(s)'"
+          :column="1"
+          size="small"
+          direction="vertical"
+        >
+          <el-descriptions-item><el-button type="danger" text size="small">Remove</el-button></el-descriptions-item>
+        </el-descriptions>
       </div>
     </div>
 </template>
