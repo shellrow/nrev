@@ -169,11 +169,11 @@ pub async fn lookup_host_name_async(host_name: String) -> Option<IpAddr> {
 }
 
 pub fn lookup_ip_addr(ip_addr: String) -> String {
-    let ips: Vec<String> = resolve_ip(ip_addr);
-    if ips.len() > 0 {
-        return ips[0].clone();
+    let names: Vec<String> = resolve_ip(ip_addr.clone());
+    if names.len() > 0 {
+        return names[0].clone();
     } else {
-        return String::new();
+        return ip_addr;
     }
 }
 
