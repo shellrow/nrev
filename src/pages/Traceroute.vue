@@ -6,8 +6,10 @@ import { debounce } from 'lodash';
 import { ElMessage } from 'element-plus';
 import {sleep} from '../logic/shared.js';
 import {isIpv4NetworkAddress, isIpv6NetworkAddress, isValidHostname, isValidIPaddress} from '../logic/shared';
+import { useRoute } from 'vue-router';
 
 const tracing = ref(false);
+const route = useRoute();
 
 const option = reactive({
     target_host: "",
@@ -95,7 +97,9 @@ const clickScan = (event) => {
 };
 
 onMounted(() => {
-  
+  if (route.params.host) {
+    option.target_host = route.params.host;
+  }
 });
 
 onUnmounted(() => {

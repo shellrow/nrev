@@ -29,6 +29,11 @@ const routes = [
     component: PortScan,
   },
   {
+    path: '/port/:host',
+    name: 'PortScanIp',
+    component: PortScan,
+  },
+  {
     path: '/host',
     name: 'HostScan',
     component: HostScan,
@@ -39,8 +44,18 @@ const routes = [
     component: Ping,
   },
   {
+    path: '/ping/:host',
+    name: 'PingIp',
+    component: Ping,
+  },
+  {
     path: '/trace',
     name: 'Traceroute',
+    component: Traceroute,
+  },
+  {
+    path: '/trace/:host',
+    name: 'TracerouteIp',
     component: Traceroute,
   },
   {

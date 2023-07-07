@@ -4,12 +4,15 @@ import { invoke } from '@tauri-apps/api/tauri';
 import { debounce } from 'lodash';
 import * as vNG from "v-network-graph"
 import {Refresh} from '@element-plus/icons-vue';
+import { isIpv4NetworkAddress, isIpv6NetworkAddress, isValidHostname, isValidIPaddress } from '../logic/shared';
+import { useRouter } from 'vue-router';
 
 const innerWidth = ref(window.innerWidth);
 const innerHeight = ref(window.innerHeight);
 const nodeLabelColor = ref("#ffffff");
 const darkBgThemes = ["","dark", "night", "dracula", "halloween"];
 const graph = ref<vNG.Instance>();
+const router = useRouter();
 
 type DataSetItem = {
   id: string;
@@ -241,13 +244,28 @@ const getNodeId = (targetName) => {
   return nodeId;
 }
 
-const addNode = () => {
+const addNode = async() => {
   if (!targetHost.value) {
     return;
   }
+  if (!isValidIPaddress(targetHost.value) && !isValidHostname(targetHost.value)) {
+    return;
+  }
+  let ipAddr = targetHost.value;
+  let hostName = targetHost.value;
+  if (isValidIPaddress(targetHost.value)) {
+    ipAddr = targetHost.value;
+    hostName = await lookupIpAddr(targetHost.value);
+  } else if (isValidHostname(targetHost.value)) {
+    ipAddr = await lookupHostName(targetHost.value);
+    hostName = targetHost.value;
+  }
   const id = getNewNodeId();
-  // TODO: Lookup host name / ip address
-  nodes[id] = { name: targetHost.value, ip_addr: "", host_name: "" };
+  let name = targetHost.value; 
+  if (hostName != ipAddr) {
+    name = `${hostName} (${ipAddr})`
+  };
+  nodes[id] = { name: name, ip_addr: ipAddr, host_name: hostName };
   layouts.nodes[id] = getNewPosition();
   targetHost.value = "";
 }
@@ -256,6 +274,10 @@ const removeNodes = () => {
   for (const nodeId of selectedNodes.value) {
     delete nodes[nodeId]
   }
+}
+
+const removeNode = (nodeId) => {
+  delete nodes[nodeId]
 }
 
 const connectNodes = () => {
@@ -268,6 +290,9 @@ const connectNodes = () => {
 
 const removeEdges = () => {
   for (const edgeId of selectedEdges.value) {
+    delete edges[edgeId]
+  }
+  for (const edgeId of menuTargetEdges.value) {
     delete edges[edgeId]
   }
 }
@@ -481,15 +506,21 @@ function showViewContextMenu(params: vNG.ViewEvent<MouseEvent>) {
   }
 }
 
-const nodeMenu = ref<HTMLDivElement>()
-const menuTargetNode = ref("")
+const nodeMenu = ref<HTMLDivElement>();
+const menuTargetNode = ref<MapNode>();
 function showNodeContextMenu(params: vNG.NodeEvent<MouseEvent>) {
   const { node, event } = params
   // Disable browser's default context menu
   event.stopPropagation()
   event.preventDefault()
   if (nodeMenu.value) {
-    menuTargetNode.value = nodes[node].name ?? ""
+    menuTargetNode.value = {
+      map_id: mapInfo.map_id,
+      node_id: node,
+      node_name: nodes[node].name ?? "",
+      ip_addr: nodes[node].ip_addr ?? "",
+      host_name: nodes[node].host_name ?? "",
+    };
     showContextMenu(nodeMenu.value, event)
   }
 }
@@ -520,6 +551,51 @@ const eventHandlers: vNG.EventHandlers = {
   "edge:contextmenu": showEdgeContextMenu,
 }
 
+const lookupIpAddr = async (ipAddr) => {
+  let hostName = ipAddr;
+  await invoke<string>('lookup_ipaddr',{ipaddr:ipAddr}).then((hostname) => {
+    hostName = hostname;
+  });
+  return hostName;
+}
+
+const lookupHostName = async (hostName) => {
+  let ipAddr = "";
+  await invoke<string>('lookup_hostname',{hostname:hostName}).then((ipaddr) => {
+    ipAddr = ipaddr;
+  });
+  return ipAddr;
+}
+
+const clickPortScan = () => {
+  if (menuTargetNode.value === undefined) return;
+  if (menuTargetNode.value.ip_addr === "" && menuTargetNode.value.host_name === "") return;
+  if (menuTargetNode.value.host_name === "") {
+    router.push({ path: `/port/${menuTargetNode.value?.ip_addr}` });
+  }else {
+    router.push({ path: `/port/${menuTargetNode.value?.host_name}` });
+  }
+}
+
+const clickPing = () => {
+  if (menuTargetNode.value === undefined) return;
+  if (menuTargetNode.value.ip_addr === "" && menuTargetNode.value.host_name === "") return;
+  if (menuTargetNode.value.host_name === "") {
+    router.push({ path: `/ping/${menuTargetNode.value?.ip_addr}` });
+  }else {
+    router.push({ path: `/ping/${menuTargetNode.value?.host_name}` });
+  }
+}
+
+const clickTraceroute = () => {
+  if (menuTargetNode.value === undefined) return;
+  if (menuTargetNode.value.ip_addr === "" && menuTargetNode.value.host_name === "") return;
+  if (menuTargetNode.value.host_name === "") {
+    router.push({ path: `/trace/${menuTargetNode.value?.ip_addr}` });
+  }else {
+    router.push({ path: `/trace/${menuTargetNode.value?.host_name}` });
+  }
+}
 
 onMounted(() => {
   window.addEventListener('resize', debounce(checkWindowSize, 100));
@@ -666,19 +742,27 @@ onUnmounted(() => {
       </div>
       <!-- Context Menu -->
       <div ref="viewMenu" class="context-menu">
-        <el-button type="primary" text size="small">Refresh</el-button>
-      </div>
-      <div ref="nodeMenu" class="context-menu">
         <el-descriptions
-          :title="menuTargetNode"
+          title="Map"
           :column="1"
           size="small"
           direction="vertical"
         >
-          <el-descriptions-item><el-button type="primary" text size="small">PortScan</el-button></el-descriptions-item>
-          <el-descriptions-item><el-button type="primary" text size="small">Ping</el-button></el-descriptions-item>
-          <el-descriptions-item><el-button type="primary" text size="small">Traceroute</el-button></el-descriptions-item>
-          <el-descriptions-item><el-button type="danger" text size="small">Remove</el-button></el-descriptions-item>
+          <el-descriptions-item><el-button type="primary" text size="small" @click="saveMap">Save</el-button></el-descriptions-item>
+          <el-descriptions-item><el-button type="primary" text size="small" @click="reloadMap">Refresh</el-button></el-descriptions-item>
+        </el-descriptions>
+      </div>
+      <div ref="nodeMenu" class="context-menu">
+        <el-descriptions
+          :title="menuTargetNode?.node_name"
+          :column="1"
+          size="small"
+          direction="vertical"
+        >
+          <el-descriptions-item><el-button type="primary" text size="small" @click="clickPortScan">PortScan</el-button></el-descriptions-item>
+          <el-descriptions-item><el-button type="primary" text size="small" @click="clickPing">Ping</el-button></el-descriptions-item>
+          <el-descriptions-item><el-button type="primary" text size="small" @click="clickTraceroute">Traceroute</el-button></el-descriptions-item>
+          <el-descriptions-item><el-button type="danger" text size="small" @click="removeNode(menuTargetNode?.node_id)">Remove</el-button></el-descriptions-item>
         </el-descriptions>
       </div>
       <div ref="edgeMenu" class="context-menu">
@@ -688,7 +772,7 @@ onUnmounted(() => {
           size="small"
           direction="vertical"
         >
-          <el-descriptions-item><el-button type="danger" text size="small">Remove</el-button></el-descriptions-item>
+          <el-descriptions-item><el-button type="danger" text size="small" @click="removeEdges">Remove</el-button></el-descriptions-item>
         </el-descriptions>
       </div>
     </div>

@@ -6,9 +6,11 @@ import { ElMessage } from 'element-plus';
 //import {sleep} from '../logic/shared.js';
 import {PORT_OPTION_DEFAULT,PORT_OPTION_WELL_KNOWN,PORT_OPTION_CUSTOM_LIST,PORTSCAN_TYPE_TCP_SYN,PORTSCAN_TYPE_TCP_CONNECT,OS_TYPE_WINDOWS} from '../define.js';
 import { isIpv4NetworkAddress, isIpv6NetworkAddress, isValidHostname, isValidIPaddress } from '../logic/shared';
+import { useRoute } from 'vue-router';
 
 const scanning = ref(false);
 const dialog_list_visible = ref(false);
+const route = useRoute();
 
 //Port Tags
 const tag_input_value = ref('');
@@ -181,7 +183,9 @@ const clickScan = (event) => {
 };
 
 onMounted(() => {
-    
+  if (route.params.host) {
+    option.target_host = route.params.host;
+  }
 });
 
 onUnmounted(() => {

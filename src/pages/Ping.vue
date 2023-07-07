@@ -7,8 +7,10 @@ import { ElMessage } from 'element-plus';
 import {sleep} from '../logic/shared.js';
 import {PROTOCOL_ICMPv4, PROTOCOL_TCP, PROTOCOL_UDP}  from '../define.js';
 import {isIpv4NetworkAddress, isIpv6NetworkAddress, isValidHostname, isValidIPaddress} from '../logic/shared';
+import { useRoute } from 'vue-router';
 
 const pinging = ref(false);
+const route = useRoute();
 
 const option = reactive({
   target_host: "",
@@ -128,7 +130,9 @@ const clickScan = (event) => {
 };
 
 onMounted(() => {
-    
+  if (route.params.host) {
+    option.target_host = route.params.host;
+  }
 });
 
 onUnmounted(() => {
