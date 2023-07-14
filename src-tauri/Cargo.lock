@@ -605,11 +605,28 @@ version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b06254cc7a9b82a9e3e78849eab1af3dbef006bf629b2928b882534d84ded6b9"
 dependencies = [
- "dlopen2",
+ "dlopen2 0.4.1",
  "libc",
  "memalloc",
- "netlink-packet-core",
- "netlink-packet-route",
+ "netlink-packet-core 0.5.0",
+ "netlink-packet-route 0.15.0",
+ "netlink-sys",
+ "once_cell",
+ "system-configuration",
+ "windows 0.48.0",
+]
+
+[[package]]
+name = "default-net"
+version = "0.16.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ae47401ee27418babbf80e20de5ff240a19c850ec6000326342cdb198b341687"
+dependencies = [
+ "dlopen2 0.5.0",
+ "libc",
+ "memalloc",
+ "netlink-packet-core 0.7.0",
+ "netlink-packet-route 0.17.0",
  "netlink-sys",
  "once_cell",
  "system-configuration",
@@ -673,6 +690,17 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b121caccfc363e4d9a4589528f3bef7c71b83c6ed01c8dc68cbeeb7fd29ec698"
 dependencies = [
  "dlopen2_derive",
+ "libc",
+ "once_cell",
+ "winapi",
+]
+
+[[package]]
+name = "dlopen2"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "09b4f5f101177ff01b8ec4ecc81eead416a8aa42819a2869311b3420fa114ffa"
+dependencies = [
  "libc",
  "once_cell",
  "winapi",
@@ -774,7 +802,7 @@ name = "enmap"
 version = "0.1.0"
 dependencies = [
  "async-io",
- "default-net",
+ "default-net 0.16.1",
  "domainscan",
  "futures",
  "ipnet",
@@ -1940,6 +1968,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "netlink-packet-core"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "72724faf704479d67b388da142b186f916188505e7e0b26719019c525882eda4"
+dependencies = [
+ "anyhow",
+ "byteorder",
+ "netlink-packet-utils",
+]
+
+[[package]]
 name = "netlink-packet-route"
 version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1949,7 +1988,21 @@ dependencies = [
  "bitflags",
  "byteorder",
  "libc",
- "netlink-packet-core",
+ "netlink-packet-core 0.5.0",
+ "netlink-packet-utils",
+]
+
+[[package]]
+name = "netlink-packet-route"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f6de2fe935f44cbdfcab77dce2150d68eda75be715cd42d4d6f52b0bd4dcc5b1"
+dependencies = [
+ "anyhow",
+ "bitflags",
+ "byteorder",
+ "libc",
+ "netlink-packet-core 0.7.0",
  "netlink-packet-utils",
 ]
 
@@ -1983,7 +2036,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "97133d0bd7613fb4cbe660649ddac10bfea45445eafdf02a6fc87508cb30e251"
 dependencies = [
  "async-io",
- "default-net",
+ "default-net 0.15.0",
  "dns-lookup",
  "futures",
  "futures-lite",
@@ -2002,7 +2055,7 @@ version = "0.15.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "f8ccfa7e3d2b4ebc641eeb29fd18beec18d2b1e132d1e363a3ead0200ba56c07"
 dependencies = [
- "default-net",
+ "default-net 0.15.0",
  "pnet_datalink",
  "pnet_packet",
  "rand 0.8.5",
@@ -2163,9 +2216,9 @@ dependencies = [
 
 [[package]]
 name = "once_cell"
-version = "1.17.1"
+version = "1.18.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b7e5500299e16ebb147ae15a00a942af264cf3688f47923b8fc2cd5858f23ad3"
+checksum = "dd8b5dd2ae5ed71462c540258bedcb51965123ad7e7ccf4b9a8cafaa4a63576d"
 
 [[package]]
 name = "open"
@@ -3385,9 +3438,9 @@ dependencies = [
 
 [[package]]
 name = "system-configuration"
-version = "0.5.0"
+version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d75182f12f490e953596550b65ee31bda7c8e043d9386174b353bda50838c3fd"
+checksum = "ba3a3adc5c275d719af8cb4272ea1c4a6d668a777f37e115f6d11ddbc1c8e0e7"
 dependencies = [
  "bitflags",
  "core-foundation",
@@ -3862,7 +3915,7 @@ version = "0.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0a69867e12149d7a6028be277a43a2b972b9a059d4c3367da8464ba59800cfa9"
 dependencies = [
- "default-net",
+ "default-net 0.15.0",
  "dns-lookup",
  "pnet_packet",
  "rand 0.8.5",
