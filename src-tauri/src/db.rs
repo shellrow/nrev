@@ -1,10 +1,10 @@
 use std::{env, vec};
-use std::path::{PathBuf};
+use std::path::PathBuf;
 use rusqlite::{Connection, Result, params, Transaction, Statement, Rows};
 use uuid::Uuid;
 use crate::{define, option, sys};
 use crate::result::{PortScanResult, HostScanResult, PingStat, PingResult, TraceResult, Node};
-use crate::db_models::{ProbeLog, DataSetItem, MapInfo, MapNode, MapEdge, MapLayout, MapData, ProbeStat, TcpService, OsTtl, OsFingerprint};
+use crate::db_models::{ProbeLog, DataSetItem, MapInfo, MapNode, MapEdge, MapLayout, MapData, ProbeStat, TcpService, OsTtl, OsFingerprint, UserProbeData, UserHostGroup, UserHostTag};
 
 pub fn connect_db() -> Result<Connection,rusqlite::Error> {
     let mut path: PathBuf = env::current_exe().unwrap();
@@ -915,4 +915,96 @@ pub fn get_os_family(initial_ttl: u8) -> OsTtl {
         };
     }
     os_ttl
+}
+
+pub fn save_user_probe_data(tran:&Transaction, user_data: UserProbeData) -> Result<usize, rusqlite::Error> {
+    let mut affected_row_count: usize = 0;
+
+    match user_data.host.delete(&tran) {
+        Ok(count) => {
+            affected_row_count += count;
+        },
+        Err(e) => {
+            println!("Error: {}", e);
+            return Err(e);
+        }
+    }
+    match user_data.host.insert(&tran) {
+        Ok(count) => {
+            affected_row_count += count;
+        },
+        Err(e) => {
+            println!("Error: {}", e);
+            return Err(e);
+        }
+    }
+    for service in user_data.services {
+        match service.delete(&tran) {
+            Ok(count) => {
+                affected_row_count += count;
+            },
+            Err(e) => {
+                println!("Error: {}", e);
+                return Err(e);
+            }
+        }
+        match service.insert(&tran) {
+            Ok(count) => {
+                affected_row_count += count;
+            },
+            Err(e) => {
+                println!("Error: {}", e);
+                return Err(e);
+            }
+        }
+    }
+    for group_id in user_data.groups {
+        let host_group: UserHostGroup = UserHostGroup {
+            host_id: user_data.host_id.clone(),
+            group_id: group_id.clone()
+        };
+        match host_group.delete(&tran) {
+            Ok(count) => {
+                affected_row_count += count;
+            },
+            Err(e) => {
+                println!("Error: {}", e);
+                return Err(e);
+            }
+        }
+        match host_group.insert(&tran) {
+            Ok(count) => {
+                affected_row_count += count;
+            },
+            Err(e) => {
+                println!("Error: {}", e);
+                return Err(e);
+            }
+        }
+    }
+    for tag_id in user_data.tags {
+        let host_tag: UserHostTag = UserHostTag {
+            host_id: user_data.host_id.clone(),
+            tag_id: tag_id.clone()
+        };
+        match host_tag.delete(&tran) {
+            Ok(count) => {
+                affected_row_count += count;
+            },
+            Err(e) => {
+                println!("Error: {}", e);
+                return Err(e);
+            }
+        }
+        match host_tag.insert(&tran) {
+            Ok(count) => {
+                affected_row_count += count;
+            },
+            Err(e) => {
+                println!("Error: {}", e);
+                return Err(e);
+            }
+        }
+    }
+    Ok(affected_row_count)
 }

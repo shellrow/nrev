@@ -36,7 +36,10 @@ use commands::{
   get_host_scan_result,
   get_ping_stat,
   get_trace_result,
-  get_os_type
+  get_os_type,
+  save_user_probe_data,
+  save_user_group,
+  save_user_tag
 };
 
 fn main() {
@@ -64,7 +67,10 @@ fn main() {
       get_host_scan_result,
       get_ping_stat,
       get_trace_result,
-      get_os_type
+      get_os_type,
+      save_user_probe_data,
+      save_user_group,
+      save_user_tag
       ])
       .setup(|app| {
         let app_handle = app.handle();

@@ -1,6 +1,6 @@
-use std::{vec};
+use std::vec;
 use serde::{Deserialize, Serialize};
-use rusqlite::{params};
+use rusqlite::{params, Transaction};
 use crate::db;
 
 // DB models
@@ -523,4 +523,148 @@ impl ProbeStat {
 pub struct DataSetItem {
     pub id: String,
     pub name: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct UserGroup {
+    pub group_id: String,
+    pub group_name: String,
+    pub group_description: String,
+    pub created_at: String,
+}
+
+impl UserGroup {
+    pub fn insert(&self, tran:&Transaction) -> Result<usize,rusqlite::Error> {
+        let sql: &str = "INSERT INTO user_group (group_id, group_name, group_description, created_at) VALUES (?1,?2,?3,?4);";
+        let params_vec: &[&dyn rusqlite::ToSql] = params![self.group_id, self.group_name, self.group_description, self.created_at];
+        tran.execute(sql, params_vec)
+    }
+    pub fn delete(&self, tran:&Transaction) -> Result<usize,rusqlite::Error> {
+        let sql: &str = "DELETE FROM user_group WHERE group_id = ?1;";
+        let params_vec: &[&dyn rusqlite::ToSql] = params![self.group_id];
+        tran.execute(sql, params_vec)
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct UserTag {
+    pub tag_id: String,
+    pub tag_name: String,
+    pub tag_description: String,
+    pub created_at: String,
+}
+
+impl UserTag {
+    pub fn insert(&self, tran:&Transaction) -> Result<usize,rusqlite::Error> {
+        let sql: &str = "INSERT INTO user_tag (tag_id, tag_name, tag_description, created_at) VALUES (?1,?2,?3,?4);";
+        let params_vec: &[&dyn rusqlite::ToSql] = params![self.tag_id, self.tag_name, self.tag_description, self.created_at];
+        tran.execute(sql, params_vec)
+    }
+    pub fn delete(&self, tran:&Transaction) -> Result<usize,rusqlite::Error> {
+        let sql: &str = "DELETE FROM user_tag WHERE tag_id = ?1;";
+        let params_vec: &[&dyn rusqlite::ToSql] = params![self.tag_id];
+        tran.execute(sql, params_vec)
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct UserHost {
+    pub host_id: String,
+    pub ip_addr: String,
+    pub host_name: String,
+    pub mac_addr: String,
+    pub vendor_name: String,
+    pub os_name: String,
+    pub os_cpe: String,
+}
+
+impl UserHost {  
+    pub fn insert(&self, tran:&Transaction) -> Result<usize,rusqlite::Error> {
+        let sql: &str = "INSERT INTO user_host (host_id, ip_addr, host_name, mac_addr, vendor_name, os_name, os_cpe) VALUES (?1,?2,?3,?4,?5,?6,?7);";
+        let params_vec: &[&dyn rusqlite::ToSql] = params![self.host_id, self.ip_addr, self.host_name, self.mac_addr, self.vendor_name, self.os_name, self.os_cpe];
+        tran.execute(sql, params_vec)
+    }
+    pub fn delete(&self, tran:&Transaction) -> Result<usize,rusqlite::Error> {
+        let sql: &str = "DELETE FROM user_host WHERE host_id = ?1;";
+        let params_vec: &[&dyn rusqlite::ToSql] = params![self.host_id];
+        tran.execute(sql, params_vec)
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct UserService {
+    pub host_id: String,
+    pub port: u16,
+    pub protocol: String,
+    pub service_name: String,
+    pub service_description: String,
+    pub service_cpe: String,
+}
+
+impl UserService {    
+    pub fn insert(&self, tran:&Transaction) -> Result<usize,rusqlite::Error> {
+        let sql: &str = "INSERT INTO user_service (host_id, port, protocol, service_name, service_description, service_cpe) VALUES (?1,?2,?3,?4,?5,?6);";
+        let params_vec: &[&dyn rusqlite::ToSql] = params![self.host_id, self.port, self.protocol, self.service_name, self.service_description, self.service_cpe];
+        tran.execute(sql, params_vec)
+    }
+    pub fn delete(&self, tran:&Transaction) -> Result<usize,rusqlite::Error> {
+        let sql: &str = "DELETE FROM user_service WHERE host_id = ?1 AND port = ?2 AND protocol = ?3;";
+        let params_vec: &[&dyn rusqlite::ToSql] = params![self.host_id, self.port, self.protocol];
+        tran.execute(sql, params_vec)
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct UserHostGroup {
+    pub host_id: String,
+    pub group_id: String,
+}
+
+impl UserHostGroup { 
+    pub fn insert(&self, tran:&Transaction) -> Result<usize,rusqlite::Error> {
+        let sql: &str = "INSERT INTO user_host_group (host_id, group_id) VALUES (?1,?2);";
+        let params_vec: &[&dyn rusqlite::ToSql] = params![self.host_id, self.group_id];
+        tran.execute(sql, params_vec)
+    }
+    pub fn delete(&self, tran:&Transaction) -> Result<usize,rusqlite::Error> {
+        let sql: &str = "DELETE FROM user_host_group WHERE host_id = ?1 AND group_id = ?2;";
+        let params_vec: &[&dyn rusqlite::ToSql] = params![self.host_id, self.group_id];
+        tran.execute(sql, params_vec)
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct UserHostTag {
+    pub host_id: String,
+    pub tag_id: String,
+}
+
+impl UserHostTag {
+    pub fn insert(&self, tran:&Transaction) -> Result<usize,rusqlite::Error> {
+        let sql: &str = "INSERT INTO user_host_tag (host_id, tag_id) VALUES (?1,?2);";
+        let params_vec: &[&dyn rusqlite::ToSql] = params![self.host_id, self.tag_id];
+        tran.execute(sql, params_vec)
+    }
+    pub fn delete(&self, tran:&Transaction) -> Result<usize,rusqlite::Error> {
+        let sql: &str = "DELETE FROM user_host_tag WHERE host_id = ?1 AND tag_id = ?2;";
+        let params_vec: &[&dyn rusqlite::ToSql] = params![self.host_id, self.tag_id];
+        tran.execute(sql, params_vec)
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct UserServiceTag {
+    pub host_id: String,
+    pub port: u16,
+    pub protocol: String,
+    pub tag_id: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct UserProbeData {
+    pub host_id: String,
+    pub host: UserHost,
+    pub services: Vec<UserService>,
+    pub groups: Vec<String>,
+    pub tags: Vec<String>,
 }

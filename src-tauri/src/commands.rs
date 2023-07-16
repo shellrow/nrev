@@ -1,8 +1,9 @@
 use std::sync::mpsc::{channel ,Sender, Receiver};
 use std::thread;
 use tauri::Manager;
+use rusqlite::{Connection, Transaction};
 use crate::db_models::{self, ProbeLog, DataSetItem, ProbeStat};
-use crate::option::{ScanOption};
+use crate::option::ScanOption;
 use crate::result::{PortScanResult, HostScanResult, PingStat, TraceResult};
 use crate::{scan, sys};
 use crate::network;
@@ -300,4 +301,113 @@ pub fn get_trace_result(probe_id: String) -> json_models::JsonTracerouteStat {
 #[tauri::command]
 pub fn get_os_type() -> String {
     sys::get_os_type()
+}
+
+#[tauri::command]
+pub fn save_user_group(user_group: Vec<crate::db_models::UserGroup>) -> u32 {
+    let mut conn: Connection = match crate::db::connect_db() {
+        Ok(c) => c, 
+        Err(e) => {
+            println!("Error: {}", e);
+            return 1;
+        }
+    };
+    let tran: Transaction = conn.transaction().unwrap();
+    for group in user_group {
+        match group.delete(&tran) {
+            Ok(_row_count) => {},
+            Err(e) => {
+                tran.rollback().unwrap();
+                println!("Error: {}", e);
+                return 1;
+            }
+        }
+        match group.insert(&tran) {
+            Ok(_row_count) => {},
+            Err(e) => {
+                tran.rollback().unwrap();
+                println!("Error: {}", e);
+                return 1;
+            }
+        }
+    }
+    match tran.commit() {
+        Ok(_) => {
+            return 0;
+        },
+        Err(e) => {
+            println!("Error: {}", e);
+            return 1;
+        }
+    }
+}
+
+#[tauri::command]
+pub fn save_user_tag(user_tag: Vec<crate::db_models::UserTag>) -> u32 {
+    let mut conn: Connection = match crate::db::connect_db() {
+        Ok(c) => c, 
+        Err(e) => {
+            println!("Error: {}", e);
+            return 1;
+        }
+    };
+    let tran: Transaction = conn.transaction().unwrap();
+    for tag in user_tag {
+        match tag.delete(&tran) {
+            Ok(_row_count) => {},
+            Err(e) => {
+                tran.rollback().unwrap();
+                println!("Error: {}", e);
+                return 1;
+            }
+        }
+        match tag.insert(&tran) {
+            Ok(_row_count) => {},
+            Err(e) => {
+                tran.rollback().unwrap();
+                println!("Error: {}", e);
+                return 1;
+            }
+        }
+    }
+    match tran.commit() {
+        Ok(_) => {
+            return 0;
+        },
+        Err(e) => {
+            println!("Error: {}", e);
+            return 1;
+        }
+    }
+}
+
+#[tauri::command]
+pub fn save_user_probe_data(probe_data: Vec<crate::db_models::UserProbeData>) -> u32 {
+    let mut conn: Connection = match crate::db::connect_db() {
+        Ok(c) => c, 
+        Err(e) => {
+            println!("Error: {}", e);
+            return 1;
+        }
+    };
+    let tran: Transaction = conn.transaction().unwrap();
+    for data in probe_data {
+        match crate::db::save_user_probe_data(&tran, data) {
+            Ok(_row_count) => {},
+            Err(e) => {
+                tran.rollback().unwrap();
+                println!("Error: {}", e);
+                return 1;
+            }
+        }
+    }
+    match tran.commit() {
+        Ok(_) => {
+            return 0;
+        },
+        Err(e) => {
+            println!("Error: {}", e);
+            return 1;
+        }
+    }
 }

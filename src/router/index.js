@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import Dashboard from '../pages/Dashboard.vue';
 import Map from '../pages/Map.vue';
+import Tree from '../pages/Tree.vue';
 import PortScan from '../pages/PortScan.vue';
 import HostScan from '../pages/HostScan.vue';
 import Ping from '../pages/Ping.vue';
@@ -21,7 +22,7 @@ const routes = [
   {
     path: '/map',
     name: 'Map',
-    component: Map,
+    component: Tree,
   },
   {
     path: '/port',
