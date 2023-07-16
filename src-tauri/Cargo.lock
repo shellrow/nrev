@@ -618,9 +618,9 @@ dependencies = [
 
 [[package]]
 name = "default-net"
-version = "0.16.1"
+version = "0.16.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ae47401ee27418babbf80e20de5ff240a19c850ec6000326342cdb198b341687"
+checksum = "cfe553014b8511f63a1324f7cc9b91cf0117289321ad14b4781ef4fed005f30c"
 dependencies = [
  "dlopen2 0.5.0",
  "libc",
@@ -802,7 +802,7 @@ name = "enmap"
 version = "0.1.0"
 dependencies = [
  "async-io",
- "default-net 0.16.1",
+ "default-net 0.16.2",
  "domainscan",
  "futures",
  "ipnet",
