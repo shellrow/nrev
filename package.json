@@ -9,7 +9,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@tauri-apps/api": "^1.2.0",
+    "@tauri-apps/api": "^1.4.0",
+    "@tauri-apps/cli": "^1.4.0",
     "element-plus": "^2.2.27",
     "v-network-graph": "^0.8.1",
     "vue": "^3.2.45",
