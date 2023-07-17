@@ -177,7 +177,6 @@ onUnmounted(() => {
     <el-table-column label="OS Name" prop="os_name" />
     <el-table-column label="Actions">
       <template #default="props">
-        <el-button size="small" type="primary" plain @click="clickTemp">Probe</el-button>
         <el-button size="small" type="primary" plain @click="clickTemp">Edit</el-button>
         <el-button size="small" type="danger" plain @click="clickTemp">Delete</el-button>
       </template>
@@ -198,6 +197,7 @@ onUnmounted(() => {
     <template #footer>
       <span class="dialog-footer">
         <el-button @click="dialogVisible = false">Close</el-button>
+        <el-button @click="dialogVisible = false" type="primary">Save</el-button>
       </span>
     </template>
   </el-dialog>
