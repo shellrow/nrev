@@ -19,9 +19,10 @@ const tableRef = ref<InstanceType<typeof ElTable>>();
 const multipleTableRef = ref<InstanceType<typeof ElTable>>();
 const multipleSelection = ref<Host[]>([]);
 const toggleSelection = (rows?: Host[]) => {
+  console.log(rows);
   if (rows) {
     rows.forEach((row) => {
-      multipleTableRef.value!.toggleRowSelection(row, true)
+      multipleTableRef.value!.toggleRowSelection(row, true);
     })
   } else {
     multipleTableRef.value!.clearSelection()
@@ -62,8 +63,25 @@ type UserHost = {
   valid_flag: string
 }
 
+type UserService = {
+  host_id: string
+  port: number
+  protocol: string
+  service_name: string
+  service_description: string
+  service_cpe: string
+}
+
+type UserProbeData = {
+  host_id: string,
+  host: UserHost,
+  services: UserService[],
+  groups: string[],
+  tags: string[]
+}
+
 const tdHosts = ref<Host[]>([]);
-const tdSelectedHosts = ref<Host[]>([]);
+const tdSelectedHosts = ref<UserProbeData[]>([]);
 
 const targetHost = ref("");
 
@@ -71,9 +89,22 @@ const clickTemp = () => {
   console.log("click temp");
 }
 
-const loadHosts = () => {
+const syncSelection = () => {
+  let selectedIds: string[] = [];
+  tdSelectedHosts.value.forEach((host) => {
+    selectedIds.push(host.host_id);
+  });
+  console.log(selectedIds);
+  tdHosts.value.forEach((host) => {
+    if (selectedIds.includes(host.host_id)) {
+      multipleTableRef.value!.toggleRowSelection(host, true);
+    }
+  });
+}
+
+const loadHosts = async () => {
   tdHosts.value.splice(0, tdHosts.value.length);
-  invoke<Array<UserHost>>("get_user_hosts").then((res) => {
+  await invoke<Array<UserHost>>("get_user_hosts").then((res) => {
     res.forEach((user_host) => {
       tdHosts.value.push({
         host_id: user_host.host_id,
@@ -89,9 +120,9 @@ const loadHosts = () => {
   });
 }
 
-const loadSelectedHosts = () => {
+/* const loadSelectedHosts = async () => {
   tdSelectedHosts.value.splice(0, tdSelectedHosts.value.length);
-  invoke<Array<UserHost>>("get_user_hosts").then((res) => {
+  await invoke<Array<UserHost>>("get_valid_user_hosts").then((res) => {
     res.forEach((user_host) => {
       tdSelectedHosts.value.push({
         host_id: user_host.host_id,
@@ -103,14 +134,56 @@ const loadSelectedHosts = () => {
         os_name: user_host.os_name,
         services: []
       });
-      console.log(user_host.host_id);
+    });
+  });
+} */
+
+const loadSelectedHosts = async () => {
+  tdSelectedHosts.value.splice(0, tdSelectedHosts.value.length);
+  await invoke<Array<UserProbeData>>("get_all_user_probe_data").then((res) => {
+    res.forEach((user_host) => {
+      tdSelectedHosts.value.push(user_host);
     });
   });
 }
 
+const addUserHost = (event) => {
+
+}
+
+const editUserHost = (event) => {
+
+}
+
+const deleteUserHost = (event) => {
+
+}
+
+const enableUserHosts = () => {
+  //enable_user_host
+  let ids: string[] = [];
+  multipleSelection.value.forEach((host) => {
+    ids.push(host.host_id);
+  });
+  invoke<number>("enable_user_host", { ids: ids }).then((res) => {
+    if (res === 0) {
+      ElMessage.success("Hosts updated successfully");
+      loadSelectedHosts();
+    } else {
+      ElMessage.error("Failed to update hosts");
+    }
+  });
+  dialogVisible.value = false;
+}
+
 onMounted(() => {
-  loadSelectedHosts();
   loadHosts();
+  loadSelectedHosts();
+  /* loadHosts().then(() => {
+    loadSelectedHosts().then(() => {
+      syncSelection();
+    });
+  }); */
   window.addEventListener('resize', checkWindowSize);
 });
 
@@ -165,16 +238,15 @@ onUnmounted(() => {
           <el-table :data="props.row.services">
             <el-table-column label="Port" prop="port" />
             <el-table-column label="Protocol" prop="protocol" />
-            <el-table-column label="Name" prop="name" />
-            <el-table-column label="Version" prop="version" />
-            <el-table-column label="CPE" prop="cpe" />
+            <el-table-column label="Name" prop="service_name" />
+            <el-table-column label="Version" prop="service_description" />
           </el-table>
         </div>
       </template>
     </el-table-column>
-    <el-table-column label="IP Address" prop="ip_addr" />
-    <el-table-column label="Host Name" prop="host_name" />
-    <el-table-column label="OS Name" prop="os_name" />
+    <el-table-column label="IP Address" prop="host.ip_addr" />
+    <el-table-column label="Host Name" prop="host.host_name" />
+    <el-table-column label="OS Name" prop="host.os_name" />
     <el-table-column label="Actions">
       <template #default="props">
         <el-button size="small" type="primary" plain @click="clickTemp">Edit</el-button>
@@ -182,9 +254,10 @@ onUnmounted(() => {
       </template>
     </el-table-column>
   </el-table>
-  <!-- Dialog -->
+
+  <!-- Select Dialog -->
   <el-dialog v-model="dialogVisible" title="Select hosts to display">
-    <el-table ref="multipleTableRef" :data="tdHosts" size="small" style="width: 100%" class="mt-2" max-height="250">
+    <el-table ref="multipleTableRef" :data="tdHosts" size="small" style="width: 100%" class="mt-2" max-height="250" @selection-change="handleSelectionChange">
       <el-table-column type="selection" width="55" />
       <el-table-column label="IP Address" prop="ip_addr" />
       <el-table-column label="Host Name" prop="host_name" />
@@ -197,9 +270,19 @@ onUnmounted(() => {
     <template #footer>
       <span class="dialog-footer">
         <el-button @click="dialogVisible = false">Close</el-button>
-        <el-button @click="dialogVisible = false" type="primary">Save</el-button>
+        <el-button @click="enableUserHosts" type="primary">Add</el-button>
       </span>
     </template>
   </el-dialog>
-  <!-- Dialog -->
+  <!-- Select Dialog -->
+
+  <!-- Add Dialog -->
+  <!-- Add Dialog -->
+
+  <!-- Delete Dialog -->
+  <!-- Delete Dialog -->
+
+  <!-- Delete Dialog -->
+  <!-- Delete Dialog -->
+
 </template>
