@@ -2,7 +2,7 @@ use std::sync::mpsc::{channel ,Sender, Receiver};
 use std::thread;
 use tauri::Manager;
 use rusqlite::{Connection, Transaction};
-use crate::db_models::{self, ProbeLog, DataSetItem, ProbeStat};
+use crate::db_models::{self, ProbeLog, DataSetItem, ProbeStat, UserProbeData};
 use crate::option::ScanOption;
 use crate::result::{PortScanResult, HostScanResult, PingStat, TraceResult};
 use crate::{scan, sys};
@@ -33,14 +33,16 @@ pub async fn exec_portscan(opt: models::PortArg) -> PortScanResult {
                 }
             }
             let user_probe_data = crate::db_models::UserProbeData::from_port_scan_result(result.clone());
-            let tran: Transaction = conn.transaction().unwrap();
-            match crate::db::save_user_probe_data(&tran, user_probe_data) {
-                Ok(_affected_rows) => {
-                    tran.commit().unwrap();
-                },
-                Err(e) => {
-                    tran.rollback().unwrap();
-                    println!("{}", e);
+            if !UserProbeData::exists(user_probe_data.host_id.clone()) {
+                let tran: Transaction = conn.transaction().unwrap();
+                match crate::db::save_user_probe_data(&tran, user_probe_data) {
+                    Ok(_affected_rows) => {
+                        tran.commit().unwrap();
+                    },
+                    Err(e) => {
+                        tran.rollback().unwrap();
+                        println!("{}", e);
+                    }
                 }
             }
             result
@@ -76,6 +78,9 @@ pub async fn exec_hostscan(opt: models::HostArg) -> HostScanResult {
             let tran: Transaction = conn.transaction().unwrap();
             let mut no_error: bool = true;
             for data in user_probe_data {
+                if UserProbeData::exists(data.host_id.clone()) {
+                    continue;
+                }
                 match crate::db::save_user_probe_data(&tran, data) {
                     Ok(_affected_rows) => {},
                     Err(e) => {
@@ -124,14 +129,16 @@ pub async fn exec_ping(opt: models::PingArg, app_handle: tauri::AppHandle) -> Pi
             }
             if result.ping_results.len() > 0 {
                 let user_probe_data = crate::db_models::UserProbeData::from_ping_result(result.ping_results[0].clone());
-                let tran: Transaction = conn.transaction().unwrap();
-                match crate::db::save_user_probe_data(&tran, user_probe_data) {
-                    Ok(_affected_rows) => {
-                        tran.commit().unwrap();
-                    },
-                    Err(e) => {
-                        tran.rollback().unwrap();
-                        println!("{}", e);
+                if !UserProbeData::exists(user_probe_data.host_id.clone()) {
+                    let tran: Transaction = conn.transaction().unwrap();
+                    match crate::db::save_user_probe_data(&tran, user_probe_data) {
+                        Ok(_affected_rows) => {
+                            tran.commit().unwrap();
+                        },
+                        Err(e) => {
+                            tran.rollback().unwrap();
+                            println!("{}", e);
+                        }
                     }
                 }
             }
@@ -172,6 +179,9 @@ pub async fn exec_traceroute(opt: models::TracerouteArg, app_handle: tauri::AppH
             let tran: Transaction = conn.transaction().unwrap();
             let mut no_error: bool = true;
             for data in user_probe_data {
+                if UserProbeData::exists(data.host_id.clone()) {
+                    continue;
+                }
                 match crate::db::save_user_probe_data(&tran, data) {
                     Ok(_affected_rows) => {},
                     Err(e) => {

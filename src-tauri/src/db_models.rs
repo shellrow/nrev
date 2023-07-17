@@ -726,6 +726,15 @@ impl UserProbeData {
         }
         user_probe_data
     }
+    pub fn exists(host_id: String) -> bool {
+        let conn = db::connect_db().unwrap();
+        let mut stmt = conn.prepare("SELECT host_id FROM user_host WHERE host_id = ?1").unwrap();
+        let mut rows = stmt.query(params![host_id]).unwrap();
+        if let Some(_row) = rows.next().unwrap() {
+            return true;
+        }
+        false
+    }
     pub fn from_port_scan_result(scan_result: crate::result::PortScanResult) -> UserProbeData {
         let host_id = 
             if scan_result.host.host_name.is_empty() {
