@@ -1017,7 +1017,7 @@ pub fn save_user_probe_data(tran:&Transaction, user_data: UserProbeData) -> Resu
 pub fn get_user_probe_data() -> Vec<UserProbeData> {
     let mut user_probe_data_list: Vec<UserProbeData> = Vec::new();
     let conn = crate::db::connect_db().unwrap();
-    let mut stmt = conn.prepare("SELECT host_id, ip_addr, host_name, mac_addr, vendor_name, os_name, os_cpe FROM user_host;").unwrap();
+    let mut stmt = conn.prepare("SELECT host_id, ip_addr, host_name, mac_addr, vendor_name, os_name, os_cpe, valid_flag FROM user_host WHERE valid_flag = 1;").unwrap();
     let user_host_iter = stmt.query_map(params![], |row| {
         Ok(crate::db_models::UserHost {
             host_id: row.get(0)?,
@@ -1027,6 +1027,7 @@ pub fn get_user_probe_data() -> Vec<UserProbeData> {
             vendor_name: row.get(4)?,
             os_name: row.get(5)?,
             os_cpe: row.get(6)?,
+            valid_flag: row.get(7)?
         })
     }).unwrap();
     for user_host in user_host_iter {
@@ -1069,7 +1070,7 @@ pub fn get_user_probe_data() -> Vec<UserProbeData> {
 pub fn get_user_hosts() -> Vec<UserHost> {
     let mut user_hosts: Vec<UserHost> = Vec::new();
     let conn = crate::db::connect_db().unwrap();
-    let mut stmt = conn.prepare("SELECT host_id, ip_addr, host_name, mac_addr, vendor_name, os_name, os_cpe FROM user_host;").unwrap();
+    let mut stmt = conn.prepare("SELECT host_id, ip_addr, host_name, mac_addr, vendor_name, os_name, os_cpe, valid_flag FROM user_host;").unwrap();
     let user_host_iter = stmt.query_map(params![], |row| {
         Ok(crate::db_models::UserHost {
             host_id: row.get(0)?,
@@ -1079,6 +1080,29 @@ pub fn get_user_hosts() -> Vec<UserHost> {
             vendor_name: row.get(4)?,
             os_name: row.get(5)?,
             os_cpe: row.get(6)?,
+            valid_flag: row.get(7)?
+        })
+    }).unwrap();
+    for user_host in user_host_iter {
+        user_hosts.push(user_host.unwrap());
+    }
+    user_hosts
+}
+
+pub fn get_valid_user_hosts() -> Vec<UserHost> {
+    let mut user_hosts: Vec<UserHost> = Vec::new();
+    let conn = crate::db::connect_db().unwrap();
+    let mut stmt = conn.prepare("SELECT host_id, ip_addr, host_name, mac_addr, vendor_name, os_name, os_cpe, valid_flag FROM user_host WHERE valid_flag = 1;").unwrap();
+    let user_host_iter = stmt.query_map(params![], |row| {
+        Ok(crate::db_models::UserHost {
+            host_id: row.get(0)?,
+            ip_addr: row.get(1)?,
+            host_name: row.get(2)?,
+            mac_addr: row.get(3)?,
+            vendor_name: row.get(4)?,
+            os_name: row.get(5)?,
+            os_cpe: row.get(6)?,
+            valid_flag: row.get(7)?
         })
     }).unwrap();
     for user_host in user_host_iter {

@@ -576,16 +576,39 @@ pub struct UserHost {
     pub vendor_name: String,
     pub os_name: String,
     pub os_cpe: String,
+    pub valid_flag: u32,
 }
 
 impl UserHost {  
+    pub fn new() -> UserHost {
+        UserHost {
+            host_id: String::new(),
+            ip_addr: String::new(),
+            host_name: String::new(),
+            mac_addr: String::new(),
+            vendor_name: String::new(),
+            os_name: String::new(),
+            os_cpe: String::new(),
+            valid_flag: 0,
+        }
+    }
     pub fn insert(&self, tran:&Transaction) -> Result<usize,rusqlite::Error> {
-        let sql: &str = "INSERT INTO user_host (host_id, ip_addr, host_name, mac_addr, vendor_name, os_name, os_cpe) VALUES (?1,?2,?3,?4,?5,?6,?7);";
-        let params_vec: &[&dyn rusqlite::ToSql] = params![self.host_id, self.ip_addr, self.host_name, self.mac_addr, self.vendor_name, self.os_name, self.os_cpe];
+        let sql: &str = "INSERT INTO user_host (host_id, ip_addr, host_name, mac_addr, vendor_name, os_name, os_cpe, valid_flag) VALUES (?1,?2,?3,?4,?5,?6,?7,?8);";
+        let params_vec: &[&dyn rusqlite::ToSql] = params![self.host_id, self.ip_addr, self.host_name, self.mac_addr, self.vendor_name, self.os_name, self.os_cpe, self.valid_flag];
         tran.execute(sql, params_vec)
     }
     pub fn delete(&self, tran:&Transaction) -> Result<usize,rusqlite::Error> {
         let sql: &str = "DELETE FROM user_host WHERE host_id = ?1;";
+        let params_vec: &[&dyn rusqlite::ToSql] = params![self.host_id];
+        tran.execute(sql, params_vec)
+    }
+    pub fn enable(&self, tran:&Transaction) -> Result<usize,rusqlite::Error> {
+        let sql: &str = "UPDATE user_host SET valid_flag = 1 WHERE host_id = ?1;";
+        let params_vec: &[&dyn rusqlite::ToSql] = params![self.host_id];
+        tran.execute(sql, params_vec)
+    }
+    pub fn disable(&self, tran:&Transaction) -> Result<usize,rusqlite::Error> {
+        let sql: &str = "UPDATE user_host SET valid_flag = 0 WHERE host_id = ?1;";
         let params_vec: &[&dyn rusqlite::ToSql] = params![self.host_id];
         tran.execute(sql, params_vec)
     }
@@ -681,6 +704,7 @@ impl UserProbeData {
                 vendor_name: String::new(),
                 os_name: String::new(),
                 os_cpe: String::new(),
+                valid_flag: 0,
             },
             services: vec![],
             groups: vec![],
@@ -752,6 +776,7 @@ impl UserProbeData {
             vendor_name: scan_result.host.vendor_info,
             os_name: scan_result.host.os_name,
             os_cpe: scan_result.host.cpe,
+            valid_flag: 0,
         };
         for service in scan_result.ports {
             if service.port_status.to_lowercase() != "open".to_owned() {
@@ -787,6 +812,7 @@ impl UserProbeData {
                 vendor_name: host.vendor_info,
                 os_name: host.os_name,
                 os_cpe: host.cpe,
+                valid_flag: 0,
             };
             if scan_result.protocol == crate::option::Protocol::TCP {
                 user_probe_data.services.push(UserService {
@@ -819,6 +845,7 @@ impl UserProbeData {
             vendor_name: String::new(),
             os_name: String::new(),
             os_cpe: String::new(),
+            valid_flag: 0,
         };
         if ping_result.protocol == crate::option::Protocol::TCP.name() {
             user_probe_data.services.push(UserService {
@@ -851,6 +878,7 @@ impl UserProbeData {
                 vendor_name: String::new(),
                 os_name: String::new(),
                 os_cpe: String::new(),
+                valid_flag: 0,
             };
             user_probe_data_list.push(user_probe_data);
         }

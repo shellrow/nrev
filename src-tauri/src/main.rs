@@ -42,7 +42,10 @@ use commands::{
   save_user_tag,
   get_user_probe_data,
   get_all_user_probe_data,
-  get_user_hosts
+  get_user_hosts,
+  get_valid_user_hosts,
+  enable_user_host,
+  disable_user_host
 };
 
 fn main() {
@@ -76,7 +79,10 @@ fn main() {
       save_user_tag,
       get_user_probe_data,
       get_all_user_probe_data,
-      get_user_hosts
+      get_user_hosts,
+      get_valid_user_hosts,
+      enable_user_host,
+      disable_user_host
       ])
       .setup(|app| {
         let app_handle = app.handle();

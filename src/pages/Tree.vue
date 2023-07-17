@@ -59,6 +59,7 @@ type UserHost = {
   vendor_name: string
   os_cpe: string
   os_name: string
+  valid_flag: string
 }
 
 const tdHosts = ref<Host[]>([]);

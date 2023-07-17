@@ -494,3 +494,74 @@ pub fn get_user_probe_data(host_id: String) -> crate::db_models::UserProbeData {
 pub fn get_user_hosts() -> Vec<crate::db_models::UserHost> {
     crate::db::get_user_hosts()
 }
+
+#[tauri::command]
+pub fn get_valid_user_hosts() -> Vec<crate::db_models::UserHost> {
+    crate::db::get_valid_user_hosts()
+}
+
+#[tauri::command]
+pub fn enable_user_host(ids: Vec<String>) -> u32 {
+    let mut conn: Connection = match crate::db::connect_db() {
+        Ok(c) => c, 
+        Err(e) => {
+            println!("Error: {}", e);
+            return 1;
+        }
+    };
+    let tran: Transaction = conn.transaction().unwrap();
+    for id in ids {
+        let mut host: crate::db_models::UserHost = crate::db_models::UserHost::new();
+        host.host_id = id;
+        match host.enable(&tran) {
+            Ok(_row_count) => {},
+            Err(e) => {
+                tran.rollback().unwrap();
+                println!("Error: {}", e);
+                return 1;
+            }
+        }
+    }
+    match tran.commit() {
+        Ok(_) => {
+            return 0;
+        },
+        Err(e) => {
+            println!("Error: {}", e);
+            return 1;
+        }
+    }
+}
+
+#[tauri::command]
+pub fn disable_user_host(ids: Vec<String>) -> u32 {
+    let mut conn: Connection = match crate::db::connect_db() {
+        Ok(c) => c, 
+        Err(e) => {
+            println!("Error: {}", e);
+            return 1;
+        }
+    };
+    let tran: Transaction = conn.transaction().unwrap();
+    for id in ids {
+        let mut host: crate::db_models::UserHost = crate::db_models::UserHost::new();
+        host.host_id = id;
+        match host.disable(&tran) {
+            Ok(_row_count) => {},
+            Err(e) => {
+                tran.rollback().unwrap();
+                println!("Error: {}", e);
+                return 1;
+            }
+        }
+    }
+    match tran.commit() {
+        Ok(_) => {
+            return 0;
+        },
+        Err(e) => {
+            println!("Error: {}", e);
+            return 1;
+        }
+    }
+}
