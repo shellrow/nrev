@@ -62,7 +62,7 @@ const checkWindowSize = () => {
 };
 
 onMounted(() => {
-    window.addEventListener('resize', debounce(checkWindowSize, 100));
+    window.addEventListener('resize', checkWindowSize);
 });
 
 onUnmounted(() => {

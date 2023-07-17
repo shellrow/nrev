@@ -4,11 +4,35 @@ import { invoke } from '@tauri-apps/api/tauri';
 import { save, open } from "@tauri-apps/api/dialog";
 import { writeTextFile, readTextFile } from "@tauri-apps/api/fs";
 import { debounce } from 'lodash';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElTable } from 'element-plus';
 import { Refresh } from '@element-plus/icons-vue';
 
+const innerWidth = ref(window.innerWidth);
+const innerHeight = ref(window.innerHeight);
+const checkWindowSize = () => {
+    innerWidth.value = window.innerWidth;
+    innerHeight.value = window.innerHeight;
+};
+
+const dialogVisible = ref(false);
+const tableRef = ref<InstanceType<typeof ElTable>>();
+const multipleTableRef = ref<InstanceType<typeof ElTable>>();
+const multipleSelection = ref<Host[]>([]);
+const toggleSelection = (rows?: Host[]) => {
+  if (rows) {
+    rows.forEach((row) => {
+      multipleTableRef.value!.toggleRowSelection(row, true)
+    })
+  } else {
+    multipleTableRef.value!.clearSelection()
+  }
+}
+const handleSelectionChange = (val: Host[]) => {
+  multipleSelection.value = val
+}
+
 type Service = {
-  host_id: number
+  host_id: string
   port: number
   protocol: string
   name: string
@@ -17,45 +41,28 @@ type Service = {
 }
 
 type Host = {
-  host_id: number
+  host_id: string
   ip_addr: string
   host_name: string
   mac_addr: string
-  vendor: string
-  os_name: string
+  vendor_name: string
   os_cpe: string
+  os_name: string
   services?: Service[]
 }
 
-const tableData: Host[] = [
-  {
-    host_id: 1,
-    ip_addr: "1.1.1.1",
-    host_name: "one.one.one.one",
-    mac_addr: "",
-    vendor: "",
-    os_name: "Linux",
-    os_cpe: "",
-  },
-  {
-    host_id: 2,
-    ip_addr: "8.8.8.8",
-    host_name: "dns.google",
-    mac_addr: "",
-    vendor: "",
-    os_name: "Windows",
-    os_cpe: "",
-  },
-  {
-    host_id: 3,
-    ip_addr: "45.33.32.156",
-    host_name: "scanme.nmap.org",
-    mac_addr: "",
-    vendor: "",
-    os_name: "Linux",
-    os_cpe: "",
-  },
-]
+type UserHost = {
+  host_id: string
+  ip_addr: string
+  host_name: string
+  mac_addr: string
+  vendor_name: string
+  os_cpe: string
+  os_name: string
+}
+
+const tdHosts = ref<Host[]>([]);
+const tdSelectedHosts = ref<Host[]>([]);
 
 const targetHost = ref("");
 
@@ -63,12 +70,51 @@ const clickTemp = () => {
   console.log("click temp");
 }
 
+const loadHosts = () => {
+  tdHosts.value.splice(0, tdHosts.value.length);
+  invoke<Array<UserHost>>("get_user_hosts").then((res) => {
+    res.forEach((user_host) => {
+      tdHosts.value.push({
+        host_id: user_host.host_id,
+        ip_addr: user_host.ip_addr,
+        host_name: user_host.host_name,
+        mac_addr: user_host.mac_addr,
+        vendor_name: user_host.vendor_name,
+        os_cpe: user_host.os_cpe,
+        os_name: user_host.os_name,
+        services: []
+      });
+    });
+  });
+}
+
+const loadSelectedHosts = () => {
+  tdSelectedHosts.value.splice(0, tdSelectedHosts.value.length);
+  invoke<Array<UserHost>>("get_user_hosts").then((res) => {
+    res.forEach((user_host) => {
+      tdSelectedHosts.value.push({
+        host_id: user_host.host_id,
+        ip_addr: user_host.ip_addr,
+        host_name: user_host.host_name,
+        mac_addr: user_host.mac_addr,
+        vendor_name: user_host.vendor_name,
+        os_cpe: user_host.os_cpe,
+        os_name: user_host.os_name,
+        services: []
+      });
+      console.log(user_host.host_id);
+    });
+  });
+}
+
 onMounted(() => {
-  
+  loadSelectedHosts();
+  loadHosts();
+  window.addEventListener('resize', checkWindowSize);
 });
 
 onUnmounted(() => {
-
+  window.removeEventListener('resize', checkWindowSize);
 });
 
 </script>
@@ -95,20 +141,23 @@ onUnmounted(() => {
     </template>
     <!-- Header -->
     <el-row :gutter="10">
-      <el-col :span="14">
+      <el-col :span="16">
         <p style="font-size: var(--el-font-size-small)">Host</p>
         <el-row :gutter="10">
-          <el-col :span="12">
+          <el-col :span="10">
             <el-input v-model="targetHost" placeholder="Address or Name" @keyup.enter="clickTemp"></el-input>
           </el-col>
-          <el-col :span="4">
-            <el-button type="primary" plain @click="clickTemp">Add Host</el-button>
+          <el-col :span="3">
+            <el-button type="primary" plain @click="clickTemp">Add</el-button>
+          </el-col>
+          <el-col :span="3">
+            <el-button type="primary" plain @click="dialogVisible = true">Select</el-button>
           </el-col>
         </el-row>
       </el-col>
     </el-row>
   </el-card>
-  <el-table :data="tableData" style="width: 100%" class="mt-2">
+  <el-table ref="tableRef" :data="tdSelectedHosts" style="width: 100%" class="mt-2" :max-height="innerHeight - 300">
     <el-table-column type="expand">
       <template #default="props">
         <div m="4">
@@ -133,4 +182,23 @@ onUnmounted(() => {
       </template>
     </el-table-column>
   </el-table>
+  <!-- Dialog -->
+  <el-dialog v-model="dialogVisible" title="Select hosts to display">
+    <el-table ref="multipleTableRef" :data="tdHosts" size="small" style="width: 100%" class="mt-2" max-height="250">
+      <el-table-column type="selection" width="55" />
+      <el-table-column label="IP Address" prop="ip_addr" />
+      <el-table-column label="Host Name" prop="host_name" />
+      <el-table-column label="Actions">
+        <template #default="props">
+          <el-button size="small" type="danger" plain @click="clickTemp">Delete</el-button>
+        </template>
+      </el-table-column>
+    </el-table>
+    <template #footer>
+      <span class="dialog-footer">
+        <el-button @click="dialogVisible = false">Close</el-button>
+      </span>
+    </template>
+  </el-dialog>
+  <!-- Dialog -->
 </template>
