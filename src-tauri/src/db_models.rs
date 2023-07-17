@@ -668,3 +668,183 @@ pub struct UserProbeData {
     pub groups: Vec<String>,
     pub tags: Vec<String>,
 }
+
+impl UserProbeData {
+    pub fn new() -> UserProbeData {
+        UserProbeData {
+            host_id: String::new(),
+            host: UserHost {
+                host_id: String::new(),
+                ip_addr: String::new(),
+                host_name: String::new(),
+                mac_addr: String::new(),
+                vendor_name: String::new(),
+                os_name: String::new(),
+                os_cpe: String::new(),
+            },
+            services: vec![],
+            groups: vec![],
+            tags: vec![],
+        }
+    }
+    pub fn get(host_id: String) -> UserProbeData {
+        let mut user_probe_data = UserProbeData::new();
+        user_probe_data.host_id = host_id.clone();
+        let conn = db::connect_db().unwrap();
+        let mut stmt = conn.prepare("SELECT host_id, ip_addr, host_name, mac_addr, vendor_name, os_name, os_cpe FROM user_host WHERE host_id = ?1").unwrap();
+        let mut rows = stmt.query(params![host_id]).unwrap();
+        while let Some(row) = rows.next().unwrap() {
+            user_probe_data.host.host_id = row.get(0).unwrap();
+            user_probe_data.host.ip_addr = row.get(1).unwrap();
+            user_probe_data.host.host_name = row.get(2).unwrap();
+            user_probe_data.host.mac_addr = row.get(3).unwrap();
+            user_probe_data.host.vendor_name = row.get(4).unwrap();
+            user_probe_data.host.os_name = row.get(5).unwrap();
+            user_probe_data.host.os_cpe = row.get(6).unwrap();
+        }
+        let mut stmt = conn.prepare("SELECT host_id, port, protocol, service_name, service_description, service_cpe FROM user_service WHERE host_id = ?1").unwrap();
+        let mut rows = stmt.query(params![host_id]).unwrap();
+        while let Some(row) = rows.next().unwrap() {
+            user_probe_data.services.push(UserService {
+                host_id: row.get(0).unwrap(),
+                port: row.get(1).unwrap(),
+                protocol: row.get(2).unwrap(),
+                service_name: row.get(3).unwrap(),
+                service_description: row.get(4).unwrap(),
+                service_cpe: row.get(5).unwrap(),
+            });
+        }
+        let mut stmt = conn.prepare("SELECT group_id FROM user_host_group WHERE host_id = ?1").unwrap();
+        let mut rows = stmt.query(params![host_id]).unwrap();
+        while let Some(row) = rows.next().unwrap() {
+            user_probe_data.groups.push(row.get(0).unwrap());
+        }
+        let mut stmt = conn.prepare("SELECT tag_id FROM user_host_tag WHERE host_id = ?1").unwrap();
+        let mut rows = stmt.query(params![host_id]).unwrap();
+        while let Some(row) = rows.next().unwrap() {
+            user_probe_data.tags.push(row.get(0).unwrap());
+        }
+        user_probe_data
+    }
+    pub fn from_port_scan_result(scan_result: crate::result::PortScanResult) -> UserProbeData {
+        let host_id = 
+            if scan_result.host.host_name.is_empty() {
+                db::get_host_id(scan_result.host.ip_addr.clone())
+            }else{
+                db::get_host_id(scan_result.host.host_name.clone())
+            };
+        let mut user_probe_data = UserProbeData::new();
+        user_probe_data.host_id = host_id.clone();
+        user_probe_data.host = UserHost {
+            host_id: host_id.clone(),
+            ip_addr: scan_result.host.ip_addr,
+            host_name: scan_result.host.host_name,
+            mac_addr: scan_result.host.mac_addr,
+            vendor_name: scan_result.host.vendor_info,
+            os_name: scan_result.host.os_name,
+            os_cpe: scan_result.host.cpe,
+        };
+        for service in scan_result.ports {
+            if service.port_status.to_lowercase() != "open".to_owned() {
+                continue;
+            }
+            user_probe_data.services.push(UserService {
+                host_id: host_id.clone(),
+                port: service.port_number,
+                protocol: "TCP".to_owned(),
+                service_name: service.service_name,
+                service_description: service.service_version,
+                service_cpe: String::new(),
+            });
+        }
+        user_probe_data
+    }
+    pub fn from_host_scan_result(scan_result: crate::result::HostScanResult) -> Vec<UserProbeData> {
+        let mut user_probe_data_list: Vec<UserProbeData> = Vec::new();
+        for host in scan_result.hosts {
+            let host_id = 
+                if host.host_name.is_empty() {
+                    db::get_host_id(host.ip_addr.clone())
+                }else{
+                    db::get_host_id(host.host_name.clone())
+                };
+            let mut user_probe_data = UserProbeData::new();
+            user_probe_data.host_id = host_id.clone();
+            user_probe_data.host = UserHost {
+                host_id: host_id.clone(),
+                ip_addr: host.ip_addr,
+                host_name: host.host_name,
+                mac_addr: host.mac_addr,
+                vendor_name: host.vendor_info,
+                os_name: host.os_name,
+                os_cpe: host.cpe,
+            };
+            if scan_result.protocol == crate::option::Protocol::TCP {
+                user_probe_data.services.push(UserService {
+                    host_id: host_id.clone(),
+                    port: scan_result.port_number,
+                    protocol: scan_result.protocol.name(),
+                    service_name: String::new(),
+                    service_description: String::new(),
+                    service_cpe: String::new(),
+                });
+            }
+            user_probe_data_list.push(user_probe_data);
+        }
+        user_probe_data_list
+    }
+    pub fn from_ping_result(ping_result: crate::result::PingResult) -> UserProbeData {
+        let host_id = 
+            if ping_result.host_name.is_empty() {
+                db::get_host_id(ping_result.ip_addr.to_string())
+            }else{
+                db::get_host_id(ping_result.host_name.clone())
+            };
+        let mut user_probe_data = UserProbeData::new();
+        user_probe_data.host_id = host_id.clone();
+        user_probe_data.host = UserHost {
+            host_id: host_id.clone(),
+            ip_addr: ping_result.ip_addr.to_string(),
+            host_name: ping_result.host_name,
+            mac_addr: String::new(),
+            vendor_name: String::new(),
+            os_name: String::new(),
+            os_cpe: String::new(),
+        };
+        if ping_result.protocol == crate::option::Protocol::TCP.name() {
+            user_probe_data.services.push(UserService {
+                host_id: host_id.clone(),
+                port: ping_result.port_number.unwrap_or(0),
+                protocol: ping_result.protocol,
+                service_name: String::new(),
+                service_description: String::new(),
+                service_cpe: String::new(),
+            });
+        }
+        user_probe_data
+    }
+    pub fn from_trace_result(trace_result: crate::result::TraceResult) -> Vec<UserProbeData> {
+        let mut user_probe_data_list: Vec<UserProbeData> = Vec::new();
+        for node in trace_result.nodes {
+            let host_id = 
+                if node.host_name.is_empty() {
+                    db::get_host_id(node.ip_addr.to_string())
+                }else{
+                    db::get_host_id(node.host_name.clone())
+                };
+            let mut user_probe_data = UserProbeData::new();
+            user_probe_data.host_id = host_id.clone();
+            user_probe_data.host = UserHost {
+                host_id: host_id.clone(),
+                ip_addr: node.ip_addr.to_string(),
+                host_name: node.host_name,
+                mac_addr: String::new(),
+                vendor_name: String::new(),
+                os_name: String::new(),
+                os_cpe: String::new(),
+            };
+            user_probe_data_list.push(user_probe_data);
+        }
+        user_probe_data_list
+    }
+}

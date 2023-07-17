@@ -4,7 +4,7 @@ use rusqlite::{Connection, Result, params, Transaction, Statement, Rows};
 use uuid::Uuid;
 use crate::{define, option, sys};
 use crate::result::{PortScanResult, HostScanResult, PingStat, PingResult, TraceResult, Node};
-use crate::db_models::{ProbeLog, DataSetItem, MapInfo, MapNode, MapEdge, MapLayout, MapData, ProbeStat, TcpService, OsTtl, OsFingerprint, UserProbeData, UserHostGroup, UserHostTag};
+use crate::db_models::{ProbeLog, DataSetItem, MapInfo, MapNode, MapEdge, MapLayout, MapData, ProbeStat, TcpService, OsTtl, OsFingerprint, UserProbeData, UserHostGroup, UserHostTag, UserHost};
 
 pub fn connect_db() -> Result<Connection,rusqlite::Error> {
     let mut path: PathBuf = env::current_exe().unwrap();
@@ -19,6 +19,11 @@ pub fn connect_db() -> Result<Connection,rusqlite::Error> {
 
 pub fn get_probe_id() -> String {
     let id = Uuid::new_v4();
+    id.to_string().replace("-", "")
+}
+
+pub fn get_host_id(hostname: String) -> String {
+    let id = Uuid::new_v5(&Uuid::NAMESPACE_DNS, hostname.as_bytes());
     id.to_string().replace("-", "")
 }
 
@@ -1007,4 +1012,77 @@ pub fn save_user_probe_data(tran:&Transaction, user_data: UserProbeData) -> Resu
         }
     }
     Ok(affected_row_count)
+}
+
+pub fn get_user_probe_data() -> Vec<UserProbeData> {
+    let mut user_probe_data_list: Vec<UserProbeData> = Vec::new();
+    let conn = crate::db::connect_db().unwrap();
+    let mut stmt = conn.prepare("SELECT host_id, ip_addr, host_name, mac_addr, vendor_name, os_name, os_cpe FROM user_host;").unwrap();
+    let user_host_iter = stmt.query_map(params![], |row| {
+        Ok(crate::db_models::UserHost {
+            host_id: row.get(0)?,
+            ip_addr: row.get(1)?,
+            host_name: row.get(2)?,
+            mac_addr: row.get(3)?,
+            vendor_name: row.get(4)?,
+            os_name: row.get(5)?,
+            os_cpe: row.get(6)?,
+        })
+    }).unwrap();
+    for user_host in user_host_iter {
+        let mut user_probe_data = UserProbeData::new();
+        user_probe_data.host_id = user_host.as_ref().unwrap().host_id.clone();
+        user_probe_data.host = user_host.unwrap();
+        let mut stmt = conn.prepare("SELECT host_id, port, protocol, service_name, service_description, service_cpe FROM user_service WHERE host_id = ?1;").unwrap();
+        let user_service_iter = stmt.query_map(params![user_probe_data.host_id.clone()], |row| {
+            Ok(crate::db_models::UserService {
+                host_id: row.get(0)?,
+                port: row.get(1)?,
+                protocol: row.get(2)?,
+                service_name: row.get(3)?,
+                service_description: row.get(4)?,
+                service_cpe: row.get(5)?,
+            })
+        }).unwrap();
+        for user_service in user_service_iter {
+            user_probe_data.services.push(user_service.unwrap());
+        }
+        let mut stmt = conn.prepare("SELECT group_id FROM user_host_group WHERE host_id = ?1;").unwrap();
+        let user_host_group_iter = stmt.query_map(params![user_probe_data.host_id.clone()], |row| {
+            Ok(row.get(0)?)
+        }).unwrap();
+        for user_host_group in user_host_group_iter {
+            user_probe_data.groups.push(user_host_group.unwrap());
+        }
+        let mut stmt = conn.prepare("SELECT tag_id FROM user_host_tag WHERE host_id = ?1;").unwrap();
+        let user_host_tag_iter = stmt.query_map(params![user_probe_data.host_id.clone()], | row| {
+            Ok(row.get(0)?)
+        }).unwrap();
+        for user_host_tag in user_host_tag_iter {
+            user_probe_data.tags.push(user_host_tag.unwrap());
+        }
+        user_probe_data_list.push(user_probe_data);
+    }
+    user_probe_data_list
+}
+
+pub fn get_user_hosts() -> Vec<UserHost> {
+    let mut user_hosts: Vec<UserHost> = Vec::new();
+    let conn = crate::db::connect_db().unwrap();
+    let mut stmt = conn.prepare("SELECT host_id, ip_addr, host_name, mac_addr, vendor_name, os_name, os_cpe FROM user_host;").unwrap();
+    let user_host_iter = stmt.query_map(params![], |row| {
+        Ok(crate::db_models::UserHost {
+            host_id: row.get(0)?,
+            ip_addr: row.get(1)?,
+            host_name: row.get(2)?,
+            mac_addr: row.get(3)?,
+            vendor_name: row.get(4)?,
+            os_name: row.get(5)?,
+            os_cpe: row.get(6)?,
+        })
+    }).unwrap();
+    for user_host in user_host_iter {
+        user_hosts.push(user_host.unwrap());
+    }
+    user_hosts
 }

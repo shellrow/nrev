@@ -10,7 +10,7 @@ use netscan::async_io::{PortScanner as AsyncPortScanner, HostScanner as AsyncHos
 use netscan::os::{Fingerprinter, ProbeTarget, ProbeType, ProbeResult};
 use netscan::service::{ServiceDetector, PortDatabase};
 use tracert::trace::Tracer;
-use tracert::ping::{Pinger};
+use tracert::ping::Pinger;
 use crate::option::{TargetInfo, Protocol};
 use crate::result::{PortScanResult, HostScanResult, HostInfo, PingStat, PingResult, ProbeStatus, TraceResult, Node, NodeType};
 use crate::db_models::OsFingerprint;

@@ -25,10 +25,21 @@ pub async fn exec_portscan(opt: models::PortArg) -> PortScanResult {
         Ok(result) => {
             // DB Insert
             let probe_id = crate::db::get_probe_id();
-            let conn = crate::db::connect_db().unwrap();
+            let mut conn = crate::db::connect_db().unwrap();
             match crate::db::insert_port_scan_result(&conn, probe_id, result.clone(), String::new()) {
                 Ok(_affected_rows) => {},
                 Err(e) => {
+                    println!("{}", e);
+                }
+            }
+            let user_probe_data = crate::db_models::UserProbeData::from_port_scan_result(result.clone());
+            let tran: Transaction = conn.transaction().unwrap();
+            match crate::db::save_user_probe_data(&tran, user_probe_data) {
+                Ok(_affected_rows) => {
+                    tran.commit().unwrap();
+                },
+                Err(e) => {
+                    tran.rollback().unwrap();
                     println!("{}", e);
                 }
             }
@@ -54,12 +65,29 @@ pub async fn exec_hostscan(opt: models::HostArg) -> HostScanResult {
         Ok(result) => {
             // DB Insert
             let probe_id = crate::db::get_probe_id();
-            let conn = crate::db::connect_db().unwrap();
+            let mut conn = crate::db::connect_db().unwrap();
             match crate::db::insert_host_scan_result(&conn, probe_id, result.clone(), String::new()) {
                 Ok(_affected_rows) => {},
                 Err(e) => {
                     println!("{}", e);
                 }
+            }
+            let user_probe_data: Vec<db_models::UserProbeData> = crate::db_models::UserProbeData::from_host_scan_result(result.clone());
+            let tran: Transaction = conn.transaction().unwrap();
+            let mut no_error: bool = true;
+            for data in user_probe_data {
+                match crate::db::save_user_probe_data(&tran, data) {
+                    Ok(_affected_rows) => {},
+                    Err(e) => {
+                        no_error = false;
+                        println!("{}", e);
+                    }
+                }
+            }
+            if no_error {
+                tran.commit().unwrap();
+            }else{
+                tran.rollback().unwrap();
             }
             result
         },
@@ -87,11 +115,24 @@ pub async fn exec_ping(opt: models::PingArg, app_handle: tauri::AppHandle) -> Pi
         Ok(result) => {
             // DB Insert
             let probe_id = crate::db::get_probe_id();
-            let conn = crate::db::connect_db().unwrap();
+            let mut conn = crate::db::connect_db().unwrap();
             match crate::db::insert_ping_result(&conn, probe_id, result.clone(), String::new()) {
                 Ok(_affected_rows) => {},
                 Err(e) => {
                     println!("{}", e);
+                }
+            }
+            if result.ping_results.len() > 0 {
+                let user_probe_data = crate::db_models::UserProbeData::from_ping_result(result.ping_results[0].clone());
+                let tran: Transaction = conn.transaction().unwrap();
+                match crate::db::save_user_probe_data(&tran, user_probe_data) {
+                    Ok(_affected_rows) => {
+                        tran.commit().unwrap();
+                    },
+                    Err(e) => {
+                        tran.rollback().unwrap();
+                        println!("{}", e);
+                    }
                 }
             }
             result
@@ -120,12 +161,29 @@ pub async fn exec_traceroute(opt: models::TracerouteArg, app_handle: tauri::AppH
         Ok(result) => {
             // DB Insert
             let probe_id = crate::db::get_probe_id();
-            let conn = crate::db::connect_db().unwrap();
+            let mut conn = crate::db::connect_db().unwrap();
             match crate::db::insert_trace_result(&conn, probe_id, result.clone(), String::new()) {
                 Ok(_affected_rows) => {},
                 Err(e) => {
                     println!("{}", e);
                 }
+            }
+            let user_probe_data: Vec<db_models::UserProbeData> = crate::db_models::UserProbeData::from_trace_result(result.clone());
+            let tran: Transaction = conn.transaction().unwrap();
+            let mut no_error: bool = true;
+            for data in user_probe_data {
+                match crate::db::save_user_probe_data(&tran, data) {
+                    Ok(_affected_rows) => {},
+                    Err(e) => {
+                        no_error = false;
+                        println!("{}", e);
+                    }
+                }
+            }
+            if no_error {
+                tran.commit().unwrap();
+            }else{
+                tran.rollback().unwrap();
             }
             result
         },
@@ -410,4 +468,19 @@ pub fn save_user_probe_data(probe_data: Vec<crate::db_models::UserProbeData>) ->
             return 1;
         }
     }
+}
+
+#[tauri::command]
+pub fn get_all_user_probe_data() -> Vec<crate::db_models::UserProbeData> {
+    crate::db::get_user_probe_data()
+}
+
+#[tauri::command]
+pub fn get_user_probe_data(host_id: String) -> crate::db_models::UserProbeData {
+    crate::db_models::UserProbeData::get(host_id)
+}
+
+#[tauri::command]
+pub fn get_user_hosts() -> Vec<crate::db_models::UserHost> {
+    crate::db::get_user_hosts()
 }

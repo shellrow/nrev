@@ -39,7 +39,10 @@ use commands::{
   get_os_type,
   save_user_probe_data,
   save_user_group,
-  save_user_tag
+  save_user_tag,
+  get_user_probe_data,
+  get_all_user_probe_data,
+  get_user_hosts
 };
 
 fn main() {
@@ -70,7 +73,10 @@ fn main() {
       get_os_type,
       save_user_probe_data,
       save_user_group,
-      save_user_tag
+      save_user_tag,
+      get_user_probe_data,
+      get_all_user_probe_data,
+      get_user_hosts
       ])
       .setup(|app| {
         let app_handle = app.handle();
