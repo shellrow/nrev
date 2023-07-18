@@ -19,7 +19,6 @@ const tableRef = ref<InstanceType<typeof ElTable>>();
 const multipleTableRef = ref<InstanceType<typeof ElTable>>();
 const multipleSelection = ref<Host[]>([]);
 const toggleSelection = (rows?: Host[]) => {
-  console.log(rows);
   if (rows) {
     rows.forEach((row) => {
       multipleTableRef.value!.toggleRowSelection(row, true);
@@ -29,7 +28,7 @@ const toggleSelection = (rows?: Host[]) => {
   }
 }
 const handleSelectionChange = (val: Host[]) => {
-  multipleSelection.value = val
+  multipleSelection.value = val;
 }
 
 type Service = {
@@ -94,10 +93,9 @@ const syncSelection = () => {
   tdSelectedHosts.value.forEach((host) => {
     selectedIds.push(host.host_id);
   });
-  console.log(selectedIds);
   tdHosts.value.forEach((host) => {
     if (selectedIds.includes(host.host_id)) {
-      multipleTableRef.value!.toggleRowSelection(host, true);
+      toggleSelection([host]);
     }
   });
 }
@@ -147,6 +145,10 @@ const loadSelectedHosts = async () => {
   });
 }
 
+const openHostDialog = () => {
+  dialogVisible.value = true;
+}
+
 const addUserHost = (event) => {
 
 }
@@ -172,18 +174,21 @@ const enableUserHosts = () => {
     } else {
       ElMessage.error("Failed to update hosts");
     }
-  });
+  }); 
   dialogVisible.value = false;
+}
+
+const getRowKey = (row: Host) => {
+  return row.host_id;
+}
+
+const onDialogOpened = () => {
+  syncSelection();
 }
 
 onMounted(() => {
   loadHosts();
   loadSelectedHosts();
-  /* loadHosts().then(() => {
-    loadSelectedHosts().then(() => {
-      syncSelection();
-    });
-  }); */
   window.addEventListener('resize', checkWindowSize);
 });
 
@@ -225,7 +230,7 @@ onUnmounted(() => {
             <el-button type="primary" plain @click="clickTemp">Add</el-button>
           </el-col>
           <el-col :span="3">
-            <el-button type="primary" plain @click="dialogVisible = true">Select</el-button>
+            <el-button type="primary" plain @click="openHostDialog">Select</el-button>
           </el-col>
         </el-row>
       </el-col>
@@ -256,9 +261,9 @@ onUnmounted(() => {
   </el-table>
 
   <!-- Select Dialog -->
-  <el-dialog v-model="dialogVisible" title="Select hosts to display">
-    <el-table ref="multipleTableRef" :data="tdHosts" size="small" style="width: 100%" class="mt-2" max-height="250" @selection-change="handleSelectionChange">
-      <el-table-column type="selection" width="55" />
+  <el-dialog v-model="dialogVisible" title="Select hosts to display" @opened="onDialogOpened">
+    <el-table ref="multipleTableRef" :data="tdHosts" size="small" style="width: 100%" class="mt-2" max-height="250" @selection-change="handleSelectionChange" :row-key="getRowKey">
+      <el-table-column type="selection" width="55" :reserve-selection="true" />
       <el-table-column label="IP Address" prop="ip_addr" />
       <el-table-column label="Host Name" prop="host_name" />
       <el-table-column label="Actions">
@@ -270,7 +275,7 @@ onUnmounted(() => {
     <template #footer>
       <span class="dialog-footer">
         <el-button @click="dialogVisible = false">Close</el-button>
-        <el-button @click="enableUserHosts" type="primary">Add</el-button>
+        <el-button @click="enableUserHosts" type="primary">Save</el-button>
       </span>
     </template>
   </el-dialog>
