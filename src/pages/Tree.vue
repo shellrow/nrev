@@ -241,9 +241,10 @@ onUnmounted(() => {
       <template #default="props">
         <div m="4">
           <el-table :data="props.row.services">
-            <el-table-column label="Port" prop="port" />
-            <el-table-column label="Protocol" prop="protocol" />
-            <el-table-column label="Name" prop="service_name" />
+            <el-table-column width="50" />
+            <el-table-column label="Port" width="80" prop="port" />
+            <el-table-column label="Protocol" width="120" prop="protocol" />
+            <el-table-column label="Name" width="120" prop="service_name" />
             <el-table-column label="Version" prop="service_description" />
           </el-table>
         </div>
