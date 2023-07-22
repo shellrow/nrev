@@ -45,7 +45,8 @@ use commands::{
   get_user_hosts,
   get_valid_user_hosts,
   enable_user_host,
-  disable_user_host
+  disable_user_host,
+  delete_user_host
 };
 
 fn main() {
@@ -82,7 +83,8 @@ fn main() {
       get_user_hosts,
       get_valid_user_hosts,
       enable_user_host,
-      disable_user_host
+      disable_user_host,
+      delete_user_host
       ])
       .setup(|app| {
         let app_handle = app.handle();

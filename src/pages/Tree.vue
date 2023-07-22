@@ -15,6 +15,11 @@ const checkWindowSize = () => {
 };
 
 const dialogVisible = ref(false);
+const removeDialogVisible = ref(false);
+const deleteDialogVisible = ref(false);
+const checkDelete = ref(false);
+const currentRemoveHostId = ref("");
+const currentDeleteHostId = ref("");
 const tableRef = ref<InstanceType<typeof ElTable>>();
 const multipleTableRef = ref<InstanceType<typeof ElTable>>();
 const multipleSelection = ref<Host[]>([]);
@@ -157,20 +162,90 @@ const editUserHost = (event) => {
 
 }
 
-const deleteUserHost = (event) => {
+const openRemoveDialog = (row) => {
+  checkDelete.value = false;
+  removeDialogVisible.value = true;
+  currentRemoveHostId.value = row.host_id;
+}
 
+const openDeleteDialog = (row) => {
+  deleteDialogVisible.value = true;
+  currentDeleteHostId.value = row.host_id;
+}
+const closeRemoveDialog = (event) => {
+  checkDelete.value = false;
+  removeDialogVisible.value = false;
+}
+
+const removeUserHost = (event) => {
+  if (currentRemoveHostId.value === "") {
+    ElMessage.error("Failed to delete host");
+    return;
+  }
+  if (checkDelete.value === true) {
+    invoke<number>("delete_user_host", { ids: [currentRemoveHostId.value] }).then((res) => {
+      if (res === 0) {
+        ElMessage.success("Host deleted successfully");
+        loadHosts();
+        loadSelectedHosts();
+      } else {
+        ElMessage.error("Failed to delete host");
+      }
+    });
+  } else {
+    invoke<number>("disable_user_host", { ids: [currentRemoveHostId.value] }).then((res) => {
+      if (res === 0) {
+        ElMessage.success("Host deleted successfully");
+        loadHosts();
+        loadSelectedHosts();
+      } else {
+        ElMessage.error("Failed to delete host");
+      }
+    });
+  }
+  checkDelete.value = false;
+  removeDialogVisible.value = false;
+}
+
+const closeDeleteDialog = (event) => {
+  deleteDialogVisible.value = false;
+}
+
+const deleteUserHost = (event) => {
+  invoke<number>("delete_user_host", { ids: [currentDeleteHostId.value] }).then((res) => {
+      if (res === 0) {
+        ElMessage.success("Host deleted successfully");
+        loadHosts();
+        loadSelectedHosts();
+      } else {
+        ElMessage.error("Failed to delete host");
+      }
+    });
+  deleteDialogVisible.value = false;
 }
 
 const enableUserHosts = () => {
   //enable_user_host
-  let ids: string[] = [];
+  let validIds: string[] = [];
+  let invalidIds: string[] = [];
   multipleSelection.value.forEach((host) => {
-    ids.push(host.host_id);
+    validIds.push(host.host_id);
   });
-  invoke<number>("enable_user_host", { ids: ids }).then((res) => {
+  tdHosts.value.forEach((host) => {
+    if (!validIds.includes(host.host_id)) {
+      invalidIds.push(host.host_id);
+    }
+  });
+  invoke<number>("enable_user_host", { ids: validIds }).then((res) => {
     if (res === 0) {
-      ElMessage.success("Hosts updated successfully");
-      loadSelectedHosts();
+      invoke<number>("disable_user_host", {ids: invalidIds}).then((res) => {
+        if (res === 0) {
+          ElMessage.success("Hosts updated successfully");
+          loadSelectedHosts();
+        } else {
+          ElMessage.error("Failed to update hosts");
+        }
+      });
     } else {
       ElMessage.error("Failed to update hosts");
     }
@@ -256,7 +331,7 @@ onUnmounted(() => {
     <el-table-column label="Actions">
       <template #default="props">
         <el-button size="small" type="primary" plain @click="clickTemp">Edit</el-button>
-        <el-button size="small" type="danger" plain @click="clickTemp">Delete</el-button>
+        <el-button size="small" type="danger" plain @click="openRemoveDialog(props.row)">Remove</el-button>
       </template>
     </el-table-column>
   </el-table>
@@ -269,7 +344,7 @@ onUnmounted(() => {
       <el-table-column label="Host Name" prop="host_name" />
       <el-table-column label="Actions">
         <template #default="props">
-          <el-button size="small" type="danger" plain @click="clickTemp">Delete</el-button>
+          <el-button size="small" type="danger" plain @click="openDeleteDialog(props.row)">Delete</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -286,9 +361,36 @@ onUnmounted(() => {
   <!-- Add Dialog -->
 
   <!-- Delete Dialog -->
+  <el-dialog v-model="removeDialogVisible" title="Warning" width="30%" center>
+    <span>
+      Are you sure you want to remove the selected host?
+    </span>
+    <el-checkbox v-model="checkDelete" label="Delete completely" size="large" />
+    <template #footer>
+      <span class="dialog-footer">
+        <el-button @click="closeRemoveDialog">Cancel</el-button>
+        <el-button type="danger" @click="removeUserHost">
+          Remove
+        </el-button>
+      </span>
+    </template>
+  </el-dialog>
   <!-- Delete Dialog -->
 
   <!-- Delete Dialog -->
+  <el-dialog v-model="deleteDialogVisible" title="Warning" width="30%" center>
+    <span>
+      Are you sure you want to delete the selected host?
+    </span>
+    <template #footer>
+      <span class="dialog-footer">
+        <el-button @click="closeDeleteDialog">Cancel</el-button>
+        <el-button type="danger" @click="deleteUserHost">
+          Delete
+        </el-button>
+      </span>
+    </template>
+  </el-dialog>
   <!-- Delete Dialog -->
 
 </template>

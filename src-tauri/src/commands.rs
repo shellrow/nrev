@@ -565,3 +565,36 @@ pub fn disable_user_host(ids: Vec<String>) -> u32 {
         }
     }
 }
+
+#[tauri::command]
+pub fn delete_user_host(ids: Vec<String>) -> u32 {
+    let mut conn: Connection = match crate::db::connect_db() {
+        Ok(c) => c, 
+        Err(e) => {
+            println!("Error: {}", e);
+            return 1;
+        }
+    };
+    let tran: Transaction = conn.transaction().unwrap();
+    for id in ids {
+        let mut host: crate::db_models::UserHost = crate::db_models::UserHost::new();
+        host.host_id = id;
+        match host.delete(&tran) {
+            Ok(_row_count) => {},
+            Err(e) => {
+                tran.rollback().unwrap();
+                println!("Error: {}", e);
+                return 1;
+            }
+        }
+    }
+    match tran.commit() {
+        Ok(_) => {
+            return 0;
+        },
+        Err(e) => {
+            println!("Error: {}", e);
+            return 1;
+        }
+    }
+}
