@@ -14,7 +14,8 @@ const checkWindowSize = () => {
     innerHeight.value = window.innerHeight;
 };
 
-const dialogVisible = ref(false);
+const hostDialogVisible = ref(false);
+const selectDialogVisible = ref(false);
 const removeDialogVisible = ref(false);
 const deleteDialogVisible = ref(false);
 const checkDelete = ref(false);
@@ -22,6 +23,7 @@ const currentRemoveHostId = ref("");
 const currentDeleteHostId = ref("");
 const tableRef = ref<InstanceType<typeof ElTable>>();
 const multipleTableRef = ref<InstanceType<typeof ElTable>>();
+const serviceTableRef = ref<InstanceType<typeof ElTable>>();
 const multipleSelection = ref<Host[]>([]);
 const toggleSelection = (rows?: Host[]) => {
   if (rows) {
@@ -89,6 +91,13 @@ const tdSelectedHosts = ref<UserProbeData[]>([]);
 
 const targetHost = ref("");
 
+const currentHost = reactive({
+    ip_addr: "",
+    host_name: "",
+    os_name: "",
+    services: [],
+});
+
 const clickTemp = () => {
   console.log("click temp");
 }
@@ -123,24 +132,6 @@ const loadHosts = async () => {
   });
 }
 
-/* const loadSelectedHosts = async () => {
-  tdSelectedHosts.value.splice(0, tdSelectedHosts.value.length);
-  await invoke<Array<UserHost>>("get_valid_user_hosts").then((res) => {
-    res.forEach((user_host) => {
-      tdSelectedHosts.value.push({
-        host_id: user_host.host_id,
-        ip_addr: user_host.ip_addr,
-        host_name: user_host.host_name,
-        mac_addr: user_host.mac_addr,
-        vendor_name: user_host.vendor_name,
-        os_cpe: user_host.os_cpe,
-        os_name: user_host.os_name,
-        services: []
-      });
-    });
-  });
-} */
-
 const loadSelectedHosts = async () => {
   tdSelectedHosts.value.splice(0, tdSelectedHosts.value.length);
   await invoke<Array<UserProbeData>>("get_all_user_probe_data").then((res) => {
@@ -150,12 +141,16 @@ const loadSelectedHosts = async () => {
   });
 }
 
-const openHostDialog = () => {
-  dialogVisible.value = true;
+const openSelectDialog = () => {
+  selectDialogVisible.value = true;
+}
+
+const openHostDialog = (event) => {
+  hostDialogVisible.value = true;
 }
 
 const addUserHost = (event) => {
-
+  console.log(currentHost);
 }
 
 const editUserHost = (event) => {
@@ -250,7 +245,7 @@ const enableUserHosts = () => {
       ElMessage.error("Failed to update hosts");
     }
   }); 
-  dialogVisible.value = false;
+  selectDialogVisible.value = false;
 }
 
 const getRowKey = (row: Host) => {
@@ -302,10 +297,10 @@ onUnmounted(() => {
             <el-input v-model="targetHost" placeholder="Address or Name" @keyup.enter="clickTemp"></el-input>
           </el-col>
           <el-col :span="3">
-            <el-button type="primary" plain @click="clickTemp">Add</el-button>
+            <el-button type="primary" plain @click="openHostDialog">Add</el-button>
           </el-col>
           <el-col :span="3">
-            <el-button type="primary" plain @click="openHostDialog">Select</el-button>
+            <el-button type="primary" plain @click="openSelectDialog">Select</el-button>
           </el-col>
         </el-row>
       </el-col>
@@ -337,7 +332,7 @@ onUnmounted(() => {
   </el-table>
 
   <!-- Select Dialog -->
-  <el-dialog v-model="dialogVisible" title="Select hosts to display" @opened="onDialogOpened">
+  <el-dialog v-model="selectDialogVisible" title="Select hosts to display" @opened="onDialogOpened">
     <el-table ref="multipleTableRef" :data="tdHosts" size="small" style="width: 100%" class="mt-2" max-height="250" @selection-change="handleSelectionChange" :row-key="getRowKey">
       <el-table-column type="selection" width="55" :reserve-selection="true" />
       <el-table-column label="IP Address" prop="ip_addr" />
@@ -350,15 +345,54 @@ onUnmounted(() => {
     </el-table>
     <template #footer>
       <span class="dialog-footer">
-        <el-button @click="dialogVisible = false">Close</el-button>
+        <el-button @click="selectDialogVisible = false">Close</el-button>
         <el-button @click="enableUserHosts" type="primary">Save</el-button>
       </span>
     </template>
   </el-dialog>
   <!-- Select Dialog -->
 
-  <!-- Add Dialog -->
-  <!-- Add Dialog -->
+  <!-- Host Dialog -->
+  <el-dialog v-model="hostDialogVisible" title="Add Host" width="30%" center>
+    <el-form label-position="top" size="small">
+      <el-form-item label="Host Name">
+        <el-input placeholder="Host Name" v-model="currentHost.host_name"/>
+      </el-form-item>
+      <el-form-item label="IP Address">
+        <el-input placeholder="IP Address" v-model="currentHost.ip_addr" />
+      </el-form-item>
+      <el-form-item label="OS Name">
+        <el-input placeholder="OS Name" v-model="currentHost.os_name" />
+      </el-form-item>
+    </el-form>
+    <el-row :gutter="10">
+      <el-col :span="6">
+        <el-input placeholder="Port" size="small"></el-input>
+      </el-col>
+      <el-col :span="14">
+        <el-input placeholder="Service" size="small"></el-input>
+      </el-col>
+      <el-col :span="3">
+        <el-button type="primary" plain @click="clickTemp" size="small">Add</el-button>
+      </el-col>
+    </el-row>
+    <el-table ref="serviceTableRef" :data="currentHost.services" size="small" style="width: 100%" class="mt-2" max-height="200">
+      <el-table-column label="Port" prop="port" />
+      <el-table-column label="Service Name" prop="service_name" />
+      <el-table-column label="Actions">
+        <template #default="props">
+          <el-button size="small" type="danger" plain @click="openDeleteDialog(props.row)">Delete</el-button>
+        </template>
+      </el-table-column>
+    </el-table>
+    <template #footer>
+      <span class="dialog-footer">
+        <el-button @click="hostDialogVisible = false">Cancel</el-button>
+        <el-button type="primary" @click="addUserHost">Add</el-button>
+      </span>
+    </template>
+  </el-dialog>
+  <!-- Host Dialog -->
 
   <!-- Delete Dialog -->
   <el-dialog v-model="removeDialogVisible" title="Warning" width="30%" center>
