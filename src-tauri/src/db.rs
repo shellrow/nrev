@@ -4,7 +4,7 @@ use rusqlite::{Connection, Result, params, Transaction, Statement, Rows};
 use uuid::Uuid;
 use crate::{define, option, sys};
 use crate::result::{PortScanResult, HostScanResult, PingStat, PingResult, TraceResult, Node};
-use crate::db_models::{ProbeLog, DataSetItem, MapInfo, MapNode, MapEdge, MapLayout, MapData, ProbeStat, TcpService, OsTtl, OsFingerprint, UserProbeData, UserHostGroup, UserHostTag, UserHost};
+use crate::db_models::{ProbeLog, DataSetItem, MapInfo, MapNode, MapEdge, MapLayout, MapData, ProbeStat, TcpService, OsTtl, OsFingerprint, UserProbeData, UserHostGroup, UserHostTag, UserHost, UserService};
 
 pub fn connect_db() -> Result<Connection,rusqlite::Error> {
     let mut path: PathBuf = env::current_exe().unwrap();
@@ -943,8 +943,17 @@ pub fn save_user_probe_data(tran:&Transaction, user_data: UserProbeData) -> Resu
             return Err(e);
         }
     }
+    match UserService::delete_by_host_id(&tran, user_data.host_id.clone()){
+        Ok(count) => {
+            affected_row_count += count;
+        },
+        Err(e) => {
+            println!("Error: {}", e);
+            return Err(e);
+        }
+    }
     for service in user_data.services {
-        match service.delete(&tran) {
+        /* match service.delete(&tran) {
             Ok(count) => {
                 affected_row_count += count;
             },
@@ -952,7 +961,7 @@ pub fn save_user_probe_data(tran:&Transaction, user_data: UserProbeData) -> Resu
                 println!("Error: {}", e);
                 return Err(e);
             }
-        }
+        } */
         match service.insert(&tran) {
             Ok(count) => {
                 affected_row_count += count;

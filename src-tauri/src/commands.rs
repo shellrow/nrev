@@ -598,3 +598,8 @@ pub fn delete_user_host(ids: Vec<String>) -> u32 {
         }
     }
 }
+
+#[tauri::command]
+pub fn get_new_host_id(hostname: String) -> String {
+    crate::db::get_host_id(hostname)
+}

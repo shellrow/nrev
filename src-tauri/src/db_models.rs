@@ -630,9 +630,15 @@ impl UserService {
         let params_vec: &[&dyn rusqlite::ToSql] = params![self.host_id, self.port, self.protocol, self.service_name, self.service_description, self.service_cpe];
         tran.execute(sql, params_vec)
     }
+    #[allow(dead_code)]
     pub fn delete(&self, tran:&Transaction) -> Result<usize,rusqlite::Error> {
         let sql: &str = "DELETE FROM user_service WHERE host_id = ?1 AND port = ?2 AND protocol = ?3;";
         let params_vec: &[&dyn rusqlite::ToSql] = params![self.host_id, self.port, self.protocol];
+        tran.execute(sql, params_vec)
+    }
+    pub fn delete_by_host_id(tran:&Transaction, host_id: String) -> Result<usize,rusqlite::Error> {
+        let sql: &str = "DELETE FROM user_service WHERE host_id = ?1;";
+        let params_vec: &[&dyn rusqlite::ToSql] = params![host_id];
         tran.execute(sql, params_vec)
     }
 }
