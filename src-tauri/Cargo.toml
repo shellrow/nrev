@@ -1,6 +1,6 @@
 [package]
 name = "enmap"
-version = "0.1.0"
+version = "0.2.0"
 description = "The Simple and High-Performance GUI Network Mapper for discovery and management."
 authors = ["shellrow <shellrow@protonmail.com>"]
 license = "MIT"
