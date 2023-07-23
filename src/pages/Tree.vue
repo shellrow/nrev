@@ -1,9 +1,6 @@
 <script lang="ts" setup>
 import { ref, reactive, onMounted, onUnmounted } from 'vue';
 import { invoke } from '@tauri-apps/api/tauri';
-import { save, open } from "@tauri-apps/api/dialog";
-import { writeTextFile, readTextFile } from "@tauri-apps/api/fs";
-import { debounce } from 'lodash';
 import { ElMessage, ElTable } from 'element-plus';
 import { Refresh } from '@element-plus/icons-vue';
 
@@ -120,10 +117,6 @@ const currentHost: UserProbeData = reactive({
   groups: [],
   tags: []
 });
-
-const clickTemp = () => {
-  console.log("click temp");
-}
 
 const syncSelection = () => {
   let selectedIds: string[] = [];
@@ -398,6 +391,11 @@ const onDialogOpened = () => {
   syncSelection();
 }
 
+const reloadHosts = () => {
+  loadHosts();
+  loadSelectedHosts();
+}
+
 onMounted(() => {
   loadHosts();
   loadSelectedHosts();
@@ -425,8 +423,7 @@ onUnmounted(() => {
         <div class="card-header">
             <span>Map</span>
             <div>
-              <el-button type="primary" plain @click="clickTemp"><el-icon><Refresh /></el-icon></el-button>
-              <el-button type="primary" plain @click="clickTemp">Save</el-button>
+              <el-button type="primary" plain @click="reloadHosts"><el-icon><Refresh /></el-icon></el-button>
             </div>
         </div>
     </template>
