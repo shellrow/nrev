@@ -1,7 +1,7 @@
 [package]
 name = "netprobe"
 version = "0.1.0"
-description = "The Simple and High-Performance GUI Network Mapper for discovery and management."
+description = "The Simple and High-Performance Network Mapper for discovery and management."
 authors = ["shellrow <shellrow@protonmail.com>"]
 license = "MIT"
 repository = ""
