@@ -4,7 +4,7 @@ import { invoke } from '@tauri-apps/api/tauri';
 
 const about_app = reactive({
     name: 'NetProbe',
-    version: 'v0.0.0',
+    version: 'v0.1.0',
     release_date: '2023-07-24',
     author: 'shellrow <shellrow@protonmail.com>',
     description: 'The Simple and High-Performance GUI Network Mapper. Optimized for efficient network discovery and management.',

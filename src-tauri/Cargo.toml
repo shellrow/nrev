@@ -1,6 +1,6 @@
 [package]
 name = "netprobe"
-version = "0.0.0"
+version = "0.1.0"
 description = "The Simple and High-Performance GUI Network Mapper for discovery and management."
 authors = ["shellrow <shellrow@protonmail.com>"]
 license = "MIT"
@@ -8,8 +8,6 @@ repository = ""
 edition = "2021"
 keywords = ["network", "security", "scan", "gui", "cross-platform"]
 categories = ["network-programming"]
-
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [build-dependencies]
 tauri-build = { version = "1.4", features = [] }
