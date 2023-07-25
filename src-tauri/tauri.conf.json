@@ -25,6 +25,7 @@
       "active": true,
       "targets": "all",
       "identifier": "com.intsigma.netprobe",
+      "resources": ["resources/*"],
       "longDescription": "The Simple and High-Performance GUI Network Mapper. Optimized for efficient network discovery and management.",
       "icon": [
         "icons/32x32.png",
