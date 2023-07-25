@@ -1,9 +1,21 @@
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted } from 'vue';
 import { invoke } from '@tauri-apps/api/tauri';
 import { save, open } from "@tauri-apps/api/dialog";
 import { writeTextFile, readTextFile } from "@tauri-apps/api/fs";
 import { ElMessage } from 'element-plus';
+
+type ProbeLog = {
+    id: number,
+    probe_id: string,
+    probe_type_id: string,
+    probe_type_name: string,
+    probe_target_addr: string,
+    probe_target_name: string,
+    protocol_id: string,
+    probe_option: string,
+    issued_at: string,
+};
 
 const log_detail_visible = ref(false);
 const searching = ref(false);
@@ -42,7 +54,7 @@ const log_detail = reactive({
 
 const json_text_area = ref('');
 
-const getLocalTime = (date) => {
+const getLocalTime = (date: string | number | Date) => {
     const d = new Date(date);
     const offset = d.getTimezoneOffset() * 60000;
     return new Date(d.getTime() - offset);
@@ -98,17 +110,17 @@ const searchOption = reactive({
     end_date: ""
 });
 
-const searchResult = ref([]);
+const searchResult = ref<ProbeLog[]>([]);
 
 const searchLog = async () => {
     searching.value = true;
-    invoke('get_probe_log', { "opt": searchOption }).then((results) => {
+    invoke<Array<ProbeLog>>('get_probe_log', { "opt": searchOption }).then((results) => {
       searchResult.value = results;
       searching.value = false;
     });
 }
 
-const getResult = async (probeId, probeTypeId) => {
+const getResult = async (probeId: any, probeTypeId: any) => {
   switch (probeTypeId){
     case 'port_scan':
       invoke('get_port_scan_result', { "probeId": probeId }).then((results) => {
@@ -135,7 +147,7 @@ const getResult = async (probeId, probeTypeId) => {
   }
 }
 
-const clickSearch = (event) => {
+const clickSearch = (event: any) => {
     if (optionDateRange.value) {
       if (optionDateRange.value.length > 0 && (optionDateRange.value[0] && optionDateRange.value[1])) {
         searchOption.start_date = getLocalTime(optionDateRange.value[0]).toISOString();
@@ -151,6 +163,7 @@ const clickSearch = (event) => {
     searchLog();
 }
 
+// @ts-ignore
 const handleOpen = (index, row) => {
   log_detail.id = row.id;
   log_detail.probe_id = row.probe_id;
@@ -179,11 +192,11 @@ async function writeJsonFile() {
   }
 }
 
-const clickExport = (event) => {
+const clickExport = (event: any) => {
   writeJsonFile();
 }
 
-const clickCopy = (event) => {
+const clickCopy = (event: any) => {
   navigator.clipboard.writeText(json_text_area.value).then(() => {
       ElMessage({
         message: "JSON Data copied!",

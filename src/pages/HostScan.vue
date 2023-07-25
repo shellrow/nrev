@@ -1,16 +1,71 @@
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted, nextTick } from 'vue';
 import { invoke } from '@tauri-apps/api/tauri';
 import { ElMessage } from 'element-plus';
 import {sleep, isValidIPaddress, isValidHostname, isIpv4NetworkAddress, isValidIPv6Address} from '../logic/shared';
 import {PROTOCOL_ICMPv4, PROTOCOL_TCP, HOSTSCAN_TYPE_NETWORK, HOSTSCAN_TYPE_CUSTOM_HOSTS} from '../config/define';
 
+type Host = {
+    ip_addr: string,
+    host_name: string,
+};
+
+type HostInfo = {
+    ip_addr: string,
+    host_name: string,
+    ttl: number,
+    mac_addr: string,
+    vendor_info: string,
+    os_name: string,
+    cpe: string,
+};
+
+type HostScanResult = {
+    hosts: HostInfo[],
+    protocol: string,
+    port_number: number,
+    host_scan_time: {
+        secs: number,
+        nanos: number,
+    },
+    lookup_time: {
+        secs: number,
+        nanos: number,
+    },
+    total_scan_time: {
+        secs: number,
+        nanos: number,
+    },
+};
+
+type ScanResult = {
+    hosts: HostInfo[],
+    protocol: string,
+    port_number: number,
+    host_scan_time: string,
+    lookup_time: string,
+    total_scan_time: string,
+};
+
 const scanning = ref(false);
 const dialog_list_visible = ref(false);
 const target_host = ref("");
-const target_hosts = ref([]);
+const target_hosts = ref<Host[]>([]);
 
-const option = reactive({
+interface HostOption {
+    network_address: string,
+    prefix_len: number,
+    protocol: string,
+    port: number,
+    target_hosts: string[],
+    scan_type: string,
+    async_flag: boolean,
+    dsn_lookup_flag: boolean,
+    os_detection_flag: boolean,
+    save_flag: boolean,
+};
+
+const option: HostOption = reactive({
   network_address: "",
   prefix_len: 24,
   protocol: "ICMPv4",
@@ -23,8 +78,10 @@ const option = reactive({
   save_flag: false,
 });
 
-const result = reactive({
+const result: ScanResult = reactive({
   hosts: [],
+  protocol: "",
+  port_number: 0,
   host_scan_time: "",
   lookup_time: "",
   total_scan_time: "",
@@ -56,7 +113,7 @@ const addTargetHost = () => {
     if (target_host.value) {
         let target = {ip_addr: target_host.value, host_name: target_host.value};
         if (isValidIPaddress(target_host.value)) {
-            invoke('lookup_ipaddr',{ipaddr:target_host.value}).then((hostname) => {
+            invoke<string>('lookup_ipaddr',{ipaddr:target_host.value}).then((hostname) => {
                 target.host_name = hostname; 
                 if (!target_hosts.value.includes(target)){
                     target_hosts.value.push(target);
@@ -64,7 +121,7 @@ const addTargetHost = () => {
             });
         }else{
             if (isValidHostname(target_host.value)){
-                invoke('lookup_hostname',{hostname:target_host.value}).then((ip_addr) => {
+                invoke<string>('lookup_hostname',{hostname:target_host.value}).then((ip_addr) => {
                     target.ip_addr = ip_addr;
                     if (!target_hosts.value.includes(target)){
                         target_hosts.value.push(target);
@@ -77,7 +134,7 @@ const addTargetHost = () => {
     target_host.value = "";
 };
 
-const deleteRow = (index) => {
+const deleteRow = (index: number) => {
     target_hosts.value.splice(index, 1);
     option.target_hosts.splice(index, 1);
 }
@@ -96,7 +153,7 @@ const runHostScan = async() => {
         os_detection_flag: option.os_detection_flag,
         save_flag: option.save_flag,
     };
-    invoke('exec_hostscan', { "opt": opt }).then((scan_result) => {
+    invoke<HostScanResult>('exec_hostscan', { "opt": opt }).then((scan_result) => {
         scanning.value = false;
         result.hosts = scan_result.hosts;
         const host_scan_time = parseFloat(`${scan_result.host_scan_time.secs}.${scan_result.host_scan_time.nanos}`);
@@ -125,7 +182,7 @@ const validateInput = () => {
     return "OK";
 }
 
-const clickScan = (event) => {
+const clickScan = (event: any) => {
     const inputStatus = validateInput();
     if (inputStatus != "OK") {
         ElMessage({

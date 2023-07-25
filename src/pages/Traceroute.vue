@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted } from 'vue';
 import { invoke } from '@tauri-apps/api/tauri';
 import { listen } from '@tauri-apps/api/event';
@@ -17,22 +17,43 @@ const option = reactive({
     save_flag: false,
 });
 
-const result = reactive({
+const result: TraceResult = reactive({
     nodes: [],
     status: "",
-    probe_time: "",
+    probe_time: 0,
 });
 
-const trace_progress = ref([]);
+interface TraceProgress {
+  content: string;
+  timestamp: string;
+}
+
+const trace_progress = ref<TraceProgress[]>([]);
 
 const initResult = () => {
   result.nodes = [];
   result.status = "";
-  result.probe_time = "";
+  result.probe_time = 0;
+}
+
+type Node = {
+  seq: number;
+  ip_addr: string;
+  host_name: string;
+  ttl: number;
+  hop: number;
+  rtt: number;
+  node_type: string;
+}
+
+type TraceResult = {
+  nodes: Node[];
+  status: string;
+  probe_time: number;
 }
 
 const runTraceroute = async() => {
-  const unlisten = await listen('trace_progress', (event) => {
+  const unlisten = await listen<string>('trace_progress', (event) => {
     trace_progress.value.push(
       {
         content: event.payload,
@@ -49,7 +70,7 @@ const runTraceroute = async() => {
     os_detection_flag: option.os_detection_flag,
     save_flag: option.save_flag,
   };
-  invoke('exec_traceroute', { "opt": opt }).then((trace_result) => {
+  invoke<TraceResult>('exec_traceroute', { "opt": opt }).then((trace_result) => {
     trace_result.nodes.forEach(node => {
       result.nodes.push({
         seq: node.seq,
@@ -82,7 +103,7 @@ const validateInput = () => {
   }
 }
 
-const clickScan = (event) => {
+const clickScan = () => {
   const inputStatus = validateInput();
   if (inputStatus != "OK") {
     ElMessage({
@@ -96,7 +117,7 @@ const clickScan = (event) => {
 
 onMounted(() => {
   if (route.params.host) {
-    option.target_host = route.params.host;
+    option.target_host = route.params.host.toString();
   }
 });
 

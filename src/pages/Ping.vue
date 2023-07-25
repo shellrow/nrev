@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted } from 'vue';
 import { invoke } from '@tauri-apps/api/tauri';
 import { listen } from '@tauri-apps/api/event';
@@ -10,6 +10,15 @@ import { useRoute } from 'vue-router';
 const pinging = ref(false);
 const route = useRoute();
 
+interface PingOption {
+  target_host: string;
+  protocol: string;
+  port: number;
+  count: number;
+  os_detection_flag: boolean;
+  save_flag: boolean;
+}
+
 const option = reactive({
   target_host: "",
   protocol: PROTOCOL_ICMPv4,
@@ -19,14 +28,14 @@ const option = reactive({
   save_flag: false,
 });
 
-const result = reactive({
+const result: PingStat = reactive({
   ping_results: [],
-  probe_time: "",
+  probe_time: 0,
   transmitted_count: 0,
   received_count: 0,
-  min: "",
-  avg: "", 
-  max: "",
+  min: 0,
+  avg: 0, 
+  max: 0,
 });
 
 const protocol_options = [
@@ -44,20 +53,47 @@ const protocol_options = [
   },
 ];
 
-const ping_progress = ref([]);
+type PingProgress = {
+  content: string;
+  timestamp: string;
+}
+
+const ping_progress = ref<PingProgress[]>([]);
 
 const initResult = () => {
   result.ping_results = [];
-  result.probe_time = "";
+  result.probe_time = 0;
   result.transmitted_count = 0;
   result.received_count = 0;
-  result.min = "";
-  result.avg = ""; 
-  result.max = "";
+  result.min = 0;
+  result.avg = 0; 
+  result.max = 0;
+}
+
+type PingResult = {
+  protocol: string;
+  seq: number;
+  ip_addr: string;
+  host_name: string;
+  port_number: number;
+  ttl: number;
+  hop: number;
+  rtt: number;
+  status: string;
+}
+
+type PingStat = {
+  ping_results: PingResult[];
+  probe_time: number;
+  transmitted_count: number;
+  received_count: number;
+  min: number;
+  avg: number;
+  max: number;
 }
 
 const runPing = async() => {
-  const unlisten = await listen('ping_progress', (event) => {
+  const unlisten = await listen<string>('ping_progress', (event) => {
     ping_progress.value.push(
       {
         content: event.payload,
@@ -75,7 +111,7 @@ const runPing = async() => {
     os_detection_flag: option.os_detection_flag,
     save_flag: option.save_flag,
   };
-  invoke('exec_ping', { "opt": opt }).then((ping_stat) => {
+  invoke<PingStat>('exec_ping', { "opt": opt }).then((ping_stat) => {
     ping_stat.ping_results.forEach(ping_result => {
       result.ping_results.push({
         protocol: ping_result.protocol,
@@ -115,7 +151,7 @@ const validateInput = () => {
   }
 }
 
-const clickScan = (event) => {
+const clickScan = () => {
   const inputStatus = validateInput();
   if (inputStatus != "OK") {
     ElMessage({
@@ -129,7 +165,7 @@ const clickScan = (event) => {
 
 onMounted(() => {
   if (route.params.host) {
-    option.target_host = route.params.host;
+    option.target_host = route.params.host.toString();
   }
 });
 

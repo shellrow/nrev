@@ -1,7 +1,7 @@
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted, nextTick } from 'vue';
 import { invoke } from '@tauri-apps/api/tauri';
-import { ElMessage } from 'element-plus';
+import { ElMessage, ElInput } from 'element-plus';
 import {PORT_OPTION_DEFAULT,PORT_OPTION_WELL_KNOWN,PORT_OPTION_CUSTOM_LIST,PORTSCAN_TYPE_TCP_SYN,PORTSCAN_TYPE_TCP_CONNECT,OS_TYPE_WINDOWS} from '../config/define';
 import { isIpv4NetworkAddress, isIpv6NetworkAddress, isValidHostname, isValidIPaddress } from '../logic/shared';
 import { useRoute } from 'vue-router';
@@ -11,19 +11,19 @@ const dialog_list_visible = ref(false);
 const route = useRoute();
 
 //Port Tags
-const tag_input_value = ref('');
-const port_tags = ref([]);
+const tag_input_value = ref<string>('');
+const port_tags = ref<string[]>([]);
 const tag_input_visible = ref(false);
-const tag_input_ref = ref(null);
+const tag_input_ref = ref<InstanceType<typeof ElInput>>();
 
-const handleTagClose = (tag) => {
+const handleTagClose = (tag: any) => {
   port_tags.value.splice(port_tags.value.indexOf(tag), 1);
 };
 
 const showTagInput = () => {
   tag_input_visible.value = true;
   nextTick(() => {
-    tag_input_ref.value.input.focus();
+    tag_input_ref.value!.input!.focus();
   });
 };
 
@@ -37,7 +37,45 @@ const handleInputConfirm = () => {
   tag_input_value.value = '';
 };
 
-const option = reactive({
+type PortInfo = {
+  port_number: number,
+  port_status: string,
+  service_name: string,
+  service_version: string,
+  remark: string,
+};
+
+type HostInfo = {
+  ip_addr: string,
+  host_name: string,
+  ttl: number,
+  mac_addr: string,
+  vendor_info: string,
+  os_name: string,
+  cpe: string,
+};
+
+type PortScanResult = {
+  ports: PortInfo[],
+  host: HostInfo,
+  port_scan_time: number,
+  service_detection_time: number,
+  os_detection_time: number,
+  total_scan_time: number,
+}
+
+interface Option {
+  target_host: string;
+  port_option: string;
+  ports: number[];
+  scan_type: string;
+  async_flag: boolean;
+  service_detection_flag: boolean;
+  os_detection_flag: boolean;
+  save_flag: boolean;
+}
+
+const option: Option = reactive({
     target_host: "",
     port_option: PORT_OPTION_DEFAULT,
     ports:[],
@@ -48,7 +86,19 @@ const option = reactive({
     save_flag: false,
 });
 
-const result = reactive({
+interface UiResult {
+  ip_addr: string;
+  host_name: string;
+  ports: PortInfo[];
+  mac_addr: string;
+  vendor_name: string;
+  os_name: string;
+  os_version: string;
+  cpe: string;
+  cpe_detail: string;
+}
+
+const result: UiResult = reactive({
     ip_addr: "",
     host_name: "",
     ports: [],
@@ -110,9 +160,9 @@ const runPortScan = async() => {
     os_detection_flag: option.os_detection_flag,
     save_flag: option.save_flag,
   };
-  invoke('exec_portscan', { "opt": opt }).then((scan_result) => {
+  invoke<PortScanResult>('exec_portscan', { "opt": opt }).then((scan_result) => {
     scanning.value = false;
-    let open_ports = [];
+    let open_ports: PortInfo[] = [];
     scan_result.ports.forEach(port => {
       if (port.port_status === "Open"){
         open_ports.push(port);
@@ -166,7 +216,7 @@ const clearResult = () => {
   result.cpe_detail = "";  
 }
 
-const clickScan = (event) => {
+const clickScan = (event: any) => {
   validateInput().then((inputStatus) => {
     if (inputStatus != "OK") {
       ElMessage({
@@ -182,7 +232,7 @@ const clickScan = (event) => {
 
 onMounted(() => {
   if (route.params.host) {
-    option.target_host = route.params.host;
+    option.target_host = route.params.host.toString();
   }
 });
 

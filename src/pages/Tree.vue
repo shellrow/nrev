@@ -161,6 +161,7 @@ const openSelectDialog = () => {
   selectDialogVisible.value = true;
 }
 
+// @ts-ignore
 const openHostDialog = (actionId, row) => {
   if (actionId === "add") {
     currentHostDialogAction.value = "Add";
@@ -178,7 +179,7 @@ const openHostDialog = (actionId, row) => {
       currentHost.host.os_cpe = row.host.os_cpe;
       currentHost.host.os_name = row.host.os_name;
       currentHost.services.splice(0, currentHost.services.length);
-      row.services.forEach((service) => {
+      row.services.forEach((service: { host_id: any; port: any; protocol: any; service_name: any; service_description: any; service_cpe: any; }) => {
         currentHost.services.push({
           host_id: service.host_id,
           port: service.port,
@@ -205,7 +206,7 @@ const saveHosts = async (hosts: Array<UserProbeData>) => {
   });
 }
 
-const addService = (event) => {
+const addService = (event: any) => {
   if (newService.port === 0) {
     ElMessage.error("Port is required");
     return;
@@ -224,7 +225,7 @@ const addService = (event) => {
   serviceDialogVisible.value = false;
 }
 
-const saveUserHost = (event) => {
+const saveUserHost = (event: any) => {
   if (currentHost.host.host_name === "" || currentHost.host.ip_addr === "") {
     ElMessage.error("Host Name and IP Address are required");
     return;
@@ -269,28 +270,28 @@ const saveUserHost = (event) => {
   });
 }
 
-const openRemoveDialog = (row) => {
+const openRemoveDialog = (row: { host_id: string; }) => {
   checkDelete.value = false;
   removeDialogVisible.value = true;
   currentRemoveHostId.value = row.host_id;
 }
 
-const openDeleteDialog = (row) => {
+const openDeleteDialog = (row: { host_id: string; }) => {
   deleteDialogVisible.value = true;
   currentDeleteHostId.value = row.host_id;
 }
 
-const openDeleteServiceDialog = (index) => {
+const openDeleteServiceDialog = (index: number) => {
   deleteServiceDialogVisible.value = true;
   currentDeleteServiceIndex.value = index;
 }
 
-const closeRemoveDialog = (event) => {
+const closeRemoveDialog = (event: any) => {
   checkDelete.value = false;
   removeDialogVisible.value = false;
 }
 
-const removeUserHost = (event) => {
+const removeUserHost = (event: any) => {
   if (currentRemoveHostId.value === "") {
     ElMessage.error("Failed to delete host");
     return;
@@ -320,11 +321,11 @@ const removeUserHost = (event) => {
   removeDialogVisible.value = false;
 }
 
-const closeDeleteDialog = (event) => {
+const closeDeleteDialog = (event: any) => {
   deleteDialogVisible.value = false;
 }
 
-const deleteUserHost = (event) => {
+const deleteUserHost = (event: any) => {
   invoke<number>("delete_user_host", { ids: [currentDeleteHostId.value] }).then((res) => {
       if (res === 0) {
         ElMessage.success("Host deleted successfully");
@@ -366,7 +367,7 @@ const enableUserHosts = () => {
   selectDialogVisible.value = false;
 }
 
-const closeDeleteServiceDialog = (event) => {
+const closeDeleteServiceDialog = (event: any) => {
   deleteServiceDialogVisible.value = false;
 }
 

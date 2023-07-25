@@ -1,9 +1,24 @@
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted } from 'vue';
 import { invoke } from '@tauri-apps/api/tauri';
 import {Refresh} from '@element-plus/icons-vue';
 
-const network_interface = reactive({
+interface NetworkInterface {
+    index: number;
+    name: string;
+    friendly_name: string;
+    description: string;
+    if_type: string;
+    mac_addr: string;
+    ipv4: string[];
+    ipv4_csv: string;
+    ipv6: string[];
+    ipv6_csv: string;
+    gateway_mac_addr: string;
+    gateway_ip_addr: string;
+}
+
+const network_interface: NetworkInterface = reactive({
     index: 0,
     name: '',
     friendly_name: '',
@@ -30,8 +45,21 @@ function reloadSysInfo() {
     getNetworkInfo();
 }
 
+type NetworkInterfaceModel = {
+    index: number;
+    name: string;
+    friendly_name: string;
+    description: string;
+    if_type: string;
+    mac_addr: string;
+    ipv4: string[];
+    ipv6: string[];
+    gateway_mac_addr: string;
+    gateway_ip_addr: string;
+}
+
 function getNetworkInfo() {
-    invoke('get_default_interface').then((res) => {
+    invoke<NetworkInterfaceModel>('get_default_interface').then((res) => {
         network_interface.index = res.index;
         network_interface.name = res.name;
         network_interface.friendly_name = res.friendly_name;

@@ -1,4 +1,4 @@
-<script setup>
+<script setup lang="ts">
 import {ref ,onMounted, onUnmounted} from 'vue';
 import {debounce} from 'lodash';
 import {Document, Menu as IconMenu, Setting, Sunny, Moon, Expand, Fold, View, Histogram} from '@element-plus/icons-vue';
@@ -26,7 +26,7 @@ if (localStorage.theme === 'dark') {
     mode.value = true;
 }
 
-const changeMode = (event) => {
+const changeMode = () => {
     if (mode.value) {
         theme.value = 'light';
     }else{
@@ -38,16 +38,16 @@ const changeMode = (event) => {
     localStorage.theme = theme.value;
 };
 
-const handleSelect = (key, keyPath) => {
+const handleSelect = (key: any, keyPath: any) => {
 
 };
-const handleOpen = (key, keyPath) => {
+const handleOpen = (key: any, keyPath: any) => {
 
 };
-const handleClose = (key, keyPath) => {
+const handleClose = (key: any, keyPath: any) => {
     
 };
-const handleCollapse = (event) => {
+const handleCollapse = (event: any) => {
     isCollapse.value = !isCollapse.value;
 };
 

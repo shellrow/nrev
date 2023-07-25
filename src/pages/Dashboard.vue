@@ -1,32 +1,30 @@
-<script setup>
+<script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted } from 'vue';
 import { invoke } from '@tauri-apps/api/tauri';
 import {Refresh} from '@element-plus/icons-vue';
 
-const activities = ref([]);
-const probe_stat = reactive({
-    portscan_count: 0,
-    hostscan_count: 0,
-    ping_count: 0,
-    traceroute_count: 0,
-});
+type ProbeLog = {
+    id: number,
+    probe_id: string,
+    probe_type_id: string,
+    probe_type_name: string,
+    probe_target_addr: string,
+    probe_target_name: string,
+    protocol_id: string,
+    probe_option: string,
+    issued_at: string,
+};
 
-function setProbeStat() {
-    invoke('get_probe_stat').then((res) => {
-        probe_stat.portscan_count = res.portscan_count;
-        probe_stat.hostscan_count = res.hostscan_count;
-        probe_stat.ping_count = res.ping_count;
-        probe_stat.traceroute_count = res.traceroute_count;
-    }).catch((err) => {
-        console.log(err);
-    }).finally(() => {
-        
-    });
-}
+type Activity = {
+    content: string,
+    timestamp: string,
+};
+
+const activities = ref<Activity[]>([]);
 
 function setRecentActivities() {
     activities.value = [];
-    invoke('get_top_probe_hist').then((res) => {
+    invoke<Array<ProbeLog>>('get_top_probe_hist').then((res) => {
         res.forEach((log) => {
             activities.value.push({
                 content: `[${log.id}] ${log.probe_type_name} ${log.probe_target_name} ${log.probe_target_addr}` ,
@@ -42,7 +40,6 @@ function setRecentActivities() {
 
 function reloadDashboard() {
     setRecentActivities();
-    setProbeStat();
 }
 
 onMounted(() => {
