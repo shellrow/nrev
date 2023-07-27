@@ -22,11 +22,11 @@ onUnmounted(() => {
 </script>
 
 <template>
-<el-descriptions :title="about_app.name" :column="1" border>
+<el-descriptions :title="about_app.name" :column="1" size="small" border>
     <template #extra>
         <!-- <el-button type="primary">Check for Update</el-button> -->
     </template>
-    <el-descriptions-item label="Version">
+    <el-descriptions-item label="Version" label-class-name="field-label" width="80px">
         <el-tag size="small">{{ about_app.version }}</el-tag>
     </el-descriptions-item>
     <el-descriptions-item label="Release Date">{{ about_app.release_date }}</el-descriptions-item>

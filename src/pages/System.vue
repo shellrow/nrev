@@ -124,7 +124,7 @@ onUnmounted(() => {
         size="small"
         border
         >
-            <el-descriptions-item>
+            <el-descriptions-item width="120px">
                 <template #label>
                     <div class="cell-item">
                     Index

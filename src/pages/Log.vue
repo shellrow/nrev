@@ -275,7 +275,7 @@ onUnmounted(() => {
                 multiple 
                 collapse-tags 
                 placeholder="Select"
-                style="width: 240px"
+                
                 >
                 <el-option
                     v-for="item in probeTypes"
@@ -315,7 +315,7 @@ onUnmounted(() => {
                 border
             >
             </el-descriptions>
-            <el-table :data="searchResult" style="width: 100%" class="mt-2">
+            <el-table :data="searchResult" style="width: 100%" class="mt-2" size="small">
                 <el-table-column prop="id" label="ID" width="80">
                     <template #default="scope">
                         <el-popover effect="light" trigger="hover" placement="top" width="auto">

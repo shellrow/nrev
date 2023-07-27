@@ -8,10 +8,10 @@ import AboutPage from '../pages/About.vue';
 
 const innerWidth = ref(window.innerWidth);
 const innerHeight = ref(window.innerHeight);
-const theme = ref('light');
+const theme = ref('dark');
 const activeIndex = ref('0');
 const mode = ref(true);
-const isCollapse = ref(innerWidth.value < 1200 ? true : false);
+const isCollapse = ref(innerWidth.value < 800 ? true : false);
 
 const dialogSystemVisible = ref(false);
 const dialogAboutVisible = ref(false);
@@ -52,8 +52,8 @@ const handleCollapse = (event: any) => {
 };
 
 const checkWindowSize = () => {
-    if (window.innerWidth < 1280) {
-        if (isCollapse.value === false && innerWidth.value >= 1280) isCollapse.value = true;
+    if (window.innerWidth < 800) {
+        if (isCollapse.value === false && innerWidth.value >= 800) isCollapse.value = true;
     }else{
         if (isCollapse.value === true) isCollapse.value = false;
     }
@@ -86,7 +86,7 @@ body {
         <el-container>
             <el-header>
                 <el-menu :default-active="activeIndex" mode="horizontal" :ellipsis="false" @select="handleSelect">
-                    <el-button type="primary" plain size="large" style="margin-left: 4px; margin-top: 10px" @click="handleCollapse">
+                    <el-button type="primary" plain style="margin-top: 10px" @click="handleCollapse">
                         <el-icon v-if="isCollapse"><Expand /></el-icon>
                         <el-icon v-else><Fold /></el-icon>
                     </el-button>
