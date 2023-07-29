@@ -43,8 +43,8 @@
         "fullscreen": false,
         "resizable": true,
         "title": "NetProbe",
-        "width": 1100,
-        "height": 800
+        "width": 1120,
+        "height": 700
       }
     ]
   }

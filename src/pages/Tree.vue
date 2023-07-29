@@ -414,6 +414,7 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  max-height: 20px;
 }
 </style>
 
@@ -434,7 +435,7 @@ onUnmounted(() => {
     <el-table-column type="expand">
       <template #default="props">
         <div m="4">
-          <el-table :data="props.row.services" size="small">
+          <el-table :data="props.row.services" size="small" style="width: 100%">
             <el-table-column width="50" />
             <el-table-column label="Port" width="80" prop="port" />
             <el-table-column label="Protocol" width="120" prop="protocol" />
@@ -444,9 +445,9 @@ onUnmounted(() => {
         </div>
       </template>
     </el-table-column>
-    <el-table-column label="IP Address" prop="host.ip_addr" />
+    <el-table-column label="IP Address" prop="host.ip_addr" width="140" />
     <el-table-column label="Host Name" prop="host.host_name" />
-    <el-table-column label="OS Name" prop="host.os_name" />
+    <el-table-column label="OS Name" prop="host.os_name" width="180"/>
     <el-table-column label="Actions">
       <template #default="props">
         <el-button size="small" type="primary" plain @click="openHostDialog('edit', props.row)">Edit</el-button>
