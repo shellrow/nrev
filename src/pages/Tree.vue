@@ -414,39 +414,28 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  max-height: 20px;
 }
 </style>
 
 <template>
-    <el-card class="box-card">
+  <el-card class="box-card" style="margin-bottom: 20px;">
     <!-- Header -->
-    <template #header>
-        <div class="card-header">
-            <span>Map</span>
-            <div>
-              <el-button type="primary" plain @click="reloadHosts"><el-icon><Refresh /></el-icon></el-button>
-            </div>
+    <div class="card-header">
+        <span>Map</span>
+        <div>
+          <el-button type="primary" plain @click="openHostDialog('add', null)">Add</el-button>
+          <el-button type="primary" plain @click="openSelectDialog">Select</el-button>
+          <el-button type="primary" plain @click="reloadHosts"><el-icon><Refresh /></el-icon></el-button>
         </div>
-    </template>
+    </div>
     <!-- Header -->
-    <el-row :gutter="10">
-      <el-col :span="16">
-        <el-row :gutter="10">
-          <el-col :span="3">
-            <el-button type="primary" plain @click="openHostDialog('add', null)">Add</el-button>
-          </el-col>
-          <el-col :span="3">
-            <el-button type="primary" plain @click="openSelectDialog">Select</el-button>
-          </el-col>
-        </el-row>
-      </el-col>
-    </el-row>
   </el-card>
-  <el-table ref="tableRef" :data="tdSelectedHosts" style="width: 100%" class="mt-2" :max-height="innerHeight - 300">
+  <el-table ref="tableRef" :data="tdSelectedHosts" size="small" style="width: 100%" class="mt-2" :max-height="innerHeight - 200">
     <el-table-column type="expand">
       <template #default="props">
         <div m="4">
-          <el-table :data="props.row.services">
+          <el-table :data="props.row.services" size="small" style="width: 100%">
             <el-table-column width="50" />
             <el-table-column label="Port" width="80" prop="port" />
             <el-table-column label="Protocol" width="120" prop="protocol" />
@@ -456,9 +445,9 @@ onUnmounted(() => {
         </div>
       </template>
     </el-table-column>
-    <el-table-column label="IP Address" prop="host.ip_addr" />
+    <el-table-column label="IP Address" prop="host.ip_addr" width="140" />
     <el-table-column label="Host Name" prop="host.host_name" />
-    <el-table-column label="OS Name" prop="host.os_name" />
+    <el-table-column label="OS Name" prop="host.os_name" width="180"/>
     <el-table-column label="Actions">
       <template #default="props">
         <el-button size="small" type="primary" plain @click="openHostDialog('edit', props.row)">Edit</el-button>

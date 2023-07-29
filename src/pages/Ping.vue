@@ -180,6 +180,7 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  max-height: 20px;
 }
 
 .item {
@@ -199,29 +200,27 @@ onUnmounted(() => {
       </template>
       <!-- Header -->
       <!-- Options -->
-      <el-row :gutter="20">
-        <el-col :span="6">
-          <p style="font-size: var(--el-font-size-small)">TargetHost</p>
-          <el-input v-model="option.target_host" placeholder="IP Address or HostName" />
-        </el-col>
-        <el-col :span="4">
-            <p style="font-size: var(--el-font-size-small)">Protocol</p>
-            <el-select v-model="option.protocol" placeholder="Select">
+      <el-row>
+        <el-form :inline="true" label-position="top">
+          <el-form-item label="TargetHost">
+            <el-input v-model="option.target_host" placeholder="IP Address or HostName" style="max-width: 300px;" />
+          </el-form-item>
+          <el-form-item label="Protocol">
+            <el-select v-model="option.protocol" placeholder="Select" style="max-width: 100px;">
                 <el-option v-for="item in protocol_options"
                     :key="item.value"
                     :label="item.label"
                     :value="item.value"
                 />
             </el-select>
-        </el-col>
-        <el-col :span="3">
-            <p style="font-size: var(--el-font-size-small)">Port No</p>
-            <el-input type="number" min="0" max="65535" v-model="option.port" placeholder="80" />
-        </el-col>
-        <el-col :span="3">
-            <p style="font-size: var(--el-font-size-small)">Count</p>
-            <el-input type="number" min="0" max="64" v-model="option.count" placeholder="80" />
-        </el-col>
+          </el-form-item>
+          <el-form-item label="Port No">
+            <el-input type="number" min="0" max="65535" v-model="option.port" placeholder="80" style="max-width: fit-content;" />
+          </el-form-item>
+          <el-form-item label="Count">
+            <el-input type="number" min="0" max="64" v-model="option.count" placeholder="80" style="max-width: fit-content;"/>
+          </el-form-item>
+        </el-form>
       </el-row>
       <!-- Options -->
     </el-card>

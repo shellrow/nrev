@@ -97,6 +97,7 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  max-height: 20px;
 }
 
 .item {
@@ -111,7 +112,7 @@ onUnmounted(() => {
             <div class="card-header">
                 <span>Network Interface</span>
                 <div>
-                    <el-button type="primary" plain @click="reloadSysInfo"><el-icon><Refresh /></el-icon></el-button>
+                    <el-button type="primary" plain @click="reloadSysInfo" size="small"><el-icon><Refresh /></el-icon></el-button>
                 </div>
             </div>
         </template>
@@ -124,7 +125,7 @@ onUnmounted(() => {
         size="small"
         border
         >
-            <el-descriptions-item>
+            <el-descriptions-item width="150px">
                 <template #label>
                     <div class="cell-item">
                     Index

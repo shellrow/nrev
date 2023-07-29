@@ -1,7 +1,14 @@
 <script setup lang="ts">
 import { ref, reactive, onMounted, onUnmounted } from 'vue';
 import { invoke } from '@tauri-apps/api/tauri';
-import {Refresh} from '@element-plus/icons-vue';
+import { Refresh, View, RefreshRight, Position, Share } from '@element-plus/icons-vue';
+
+const innerWidth = ref(window.innerWidth);
+const innerHeight = ref(window.innerHeight);
+const checkWindowSize = () => {
+    innerWidth.value = window.innerWidth;
+    innerHeight.value = window.innerHeight;
+};
 
 type ProbeLog = {
     id: number,
@@ -44,10 +51,11 @@ function reloadDashboard() {
 
 onMounted(() => {
     reloadDashboard();
+    window.addEventListener('resize', checkWindowSize);
 });
 
 onUnmounted(() => {
-
+    window.removeEventListener('resize', checkWindowSize);
 });
 
 </script>
@@ -61,11 +69,17 @@ onUnmounted(() => {
   display: flex;
   justify-content: space-between;
   align-items: center;
+  max-height: 20px;
 }
 
 .item {
   margin-bottom: 18px;
 }
+
+.shortcut-container {
+    max-height: 150px;
+}
+
 </style>
 
 <template>
@@ -92,9 +106,9 @@ onUnmounted(() => {
                 <el-row :gutter="10">
                     <el-col :span="6">
                         <el-card class="box-card">
-                            <el-result title="PortScan" sub-title="">
+                            <el-result title="PortScan" sub-title="" class="shortcut-container">
                                 <template #icon>
-                                    <span></span>
+                                    <el-icon size="30"><View /></el-icon>
                                 </template>
                                 <template #extra>
                                 <el-button type="primary" plain><router-link to="/port">Start</router-link></el-button>
@@ -104,9 +118,9 @@ onUnmounted(() => {
                     </el-col>
                     <el-col :span="6">
                         <el-card class="box-card">
-                            <el-result title="HostScan" sub-title="">
+                            <el-result title="HostScan" sub-title="" class="shortcut-container">
                                 <template #icon>
-                                    <span></span>
+                                    <el-icon size="30"><RefreshRight /></el-icon>
                                 </template>
                                 <template #extra>
                                 <el-button type="primary" plain><router-link to="/host">Start</router-link></el-button>
@@ -116,9 +130,9 @@ onUnmounted(() => {
                     </el-col>
                     <el-col :span="6">
                         <el-card class="box-card">
-                            <el-result title="Ping" sub-title="">
+                            <el-result title="Ping" sub-title="" class="shortcut-container">
                                 <template #icon>
-                                    <span></span>
+                                    <el-icon size="30"><Position /></el-icon>
                                 </template>
                                 <template #extra>
                                 <el-button type="primary" plain><router-link to="/ping">Start</router-link></el-button>
@@ -128,9 +142,9 @@ onUnmounted(() => {
                     </el-col>
                     <el-col :span="6">
                         <el-card class="box-card">
-                            <el-result title="Traceroute" sub-title="">
+                            <el-result title="Traceroute" sub-title="" class="shortcut-container">
                                 <template #icon>
-                                    <span></span>
+                                    <el-icon size="30"><Share /></el-icon>
                                 </template>
                                 <template #extra>
                                 <el-button type="primary" plain><router-link to="/trace">Start</router-link></el-button>
@@ -151,15 +165,17 @@ onUnmounted(() => {
                     <el-button class="button" text><router-link to="/log">View full log</router-link></el-button>
                 </div>
                 </template>
-                <el-timeline>
-                    <el-timeline-item
-                    v-for="(activity, index) in activities"
-                    :key="index"
-                    :timestamp="activity.timestamp"
-                    >
-                    {{ activity.content }}
-                    </el-timeline-item>
-                </el-timeline>
+                <el-scrollbar :height="innerHeight-500+'px'" >
+                    <el-timeline>
+                        <el-timeline-item
+                        v-for="(activity, index) in activities"
+                        :key="index"
+                        :timestamp="activity.timestamp"
+                        >
+                        {{ activity.content }}
+                        </el-timeline-item>
+                    </el-timeline>
+                </el-scrollbar>
             </el-card>
         </el-col>
     </el-row>
