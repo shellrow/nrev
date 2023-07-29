@@ -2,7 +2,7 @@
 The Simple and High-Performance Network Mapper for discovery and management.
 
 ## Installation
-Download installer from [releases](https://github.com/shellrow/netprobe/releases).
+To get started with NetProbe, download the latest installer from the [releases](https://github.com/shellrow/netprobe/releases) page.
 
 ## Features
 - Port Scan
@@ -18,12 +18,10 @@ Download installer from [releases](https://github.com/shellrow/netprobe/releases
 - Windows
 
 ## Privileges
-`netprobe` uses a raw socket which require elevated privileges.  Execute with administrator privileges.
+Please note that `netprobe` utilizes a raw socket, which requires elevated privileges. By default, the application attempts to start with administrator privileges to ensure the seamless execution of network scanning features. If the application encounters any issues with permissions during startup, make sure to run it with appropriate administrative rights.
 
 ## Note for Windows users
-For Traceroute, you may need to set up firewall rules that allow `ICMP Time-to-live Exceeded` and `ICMP Destination (Port) Unreachable` packets to be received.
-
-`netsh` example 
+For Traceroute functionality on Windows, you may need to set up firewall rules that allow `ICMP Time-to-live Exceeded` and `ICMP Destination (Port) Unreachable` packets to be received. Here's an example of using netsh to add the necessary rules:
 ```
 netsh advfirewall firewall add rule name="All ICMP v4" dir=in action=allow protocol=icmpv4:any,any
 netsh advfirewall firewall add rule name="All ICMP v6" dir=in action=allow protocol=icmpv6:any,any
