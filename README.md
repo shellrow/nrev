@@ -1,5 +1,8 @@
 # NetProbe
-The Simple and High-Performance Network Mapper. Optimized for efficient network discovery and management.
+The Simple and High-Performance Network Mapper for discovery and management.
+
+## Installation
+Download installer from [releases](https://github.com/shellrow/netprobe/releases).
 
 ## Features
 - Port Scan
