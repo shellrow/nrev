@@ -267,42 +267,41 @@ onUnmounted(() => {
         </template>
         <!-- Header -->
         <!-- Option -->
-        <el-row :gutter="20">
-            <el-col :span="6">
-                <p style="font-size: var(--el-font-size-small)">Probe Type</p>
-                <el-select
+        <el-row>
+          <el-form :inline="true" label-position="top">
+            <el-form-item label="Probe Type">
+              <el-select
                 v-model="searchOption.probe_types"
                 multiple 
                 collapse-tags 
-                placeholder="Select"
-                
+                placeholder="Select" 
+                style="max-width: 180px;"
                 >
-                <el-option
-                    v-for="item in probeTypes"
-                    :key="item.value"
-                    :label="item.label"
-                    :value="item.value"
-                />
-                </el-select>
-            </el-col>
-            <el-col :span="6">
-                <p style="font-size: var(--el-font-size-small)">Target</p>
-                <el-input v-model="searchOption.target_host" placeholder="IP Address or HostName" />
-            </el-col>
-            <el-col :span="6">
-                <p style="font-size: var(--el-font-size-small)">Probe date range</p>
-                <el-date-picker
-                    v-model="optionDateRange"
-                    type="daterange"
-                    unlink-panels
-                    range-separator="To"
-                    start-placeholder="Start date"
-                    end-placeholder="End date" 
-                    :default-time="defaultDateRange"
-                    :shortcuts="shortcuts"
-                    size="default"
-                />
-            </el-col>
+                  <el-option
+                      v-for="item in probeTypes"
+                      :key="item.value"
+                      :label="item.label"
+                      :value="item.value"
+                  />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="Target">
+              <el-input v-model="searchOption.target_host" placeholder="IP Address or HostName" style="max-width: 300px;" />
+            </el-form-item>
+            <el-form-item label="Probe date range">
+              <el-date-picker
+                v-model="optionDateRange"
+                type="daterange"
+                unlink-panels
+                range-separator="To"
+                start-placeholder="Start date"
+                end-placeholder="End date" 
+                :default-time="defaultDateRange"
+                :shortcuts="shortcuts"
+                size="default"
+              />
+            </el-form-item>
+          </el-form>
         </el-row>
         <!-- Option -->
     </el-card>

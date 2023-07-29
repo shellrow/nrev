@@ -149,19 +149,18 @@ onUnmounted(() => {
       </template>
       <!-- Header -->
       <!-- Options -->
-      <el-row :gutter="20">
-        <el-col :span="6">
-          <p style="font-size: var(--el-font-size-small)">TargetHost</p>
-          <el-input v-model="option.target_host" placeholder="IP Address or HostName" />
-        </el-col>
-        <el-col :span="3">
-            <p style="font-size: var(--el-font-size-small)">Max Hop</p>
-            <el-input type="number" min="0" max="64" v-model="option.max_hop" placeholder="80" />
-        </el-col>
-        <el-col :span="3">
-            <p style="font-size: var(--el-font-size-small)">Timeout</p>
-            <el-input type="number" min="0" max="60000" v-model="option.timeout" placeholder="30000" />
-        </el-col>
+      <el-row>
+        <el-form :inline="true" label-position="top">
+          <el-form-item label="TargetHost">
+            <el-input v-model="option.target_host" placeholder="IP Address or HostName" style="max-width: 300px;" />
+          </el-form-item>
+          <el-form-item label="Max Hop">
+            <el-input type="number" min="0" max="64" v-model="option.max_hop" placeholder="80" style="max-width: fit-content;" />
+          </el-form-item>
+          <el-form-item label="Timeout">
+            <el-input type="number" min="0" max="60000" v-model="option.timeout" placeholder="30000" style="max-width: fit-content;" />
+          </el-form-item>
+        </el-form>
       </el-row>
       <!-- Options -->
     </el-card>

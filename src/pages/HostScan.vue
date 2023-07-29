@@ -228,43 +228,39 @@ onUnmounted(() => {
         </template>
         <!-- Header -->
         <!-- Options -->
-        <el-row :gutter="20">
-            <el-col :span="6">
-                <p style="font-size: var(--el-font-size-small)">Network Address</p>
-                <el-input v-model="option.network_address" placeholder="IP Address" />
-            </el-col>
-            <el-col :span="3">
-                <p style="font-size: var(--el-font-size-small)">Prefix</p>
-                <el-input type="number" min="8" max="30" v-model="option.prefix_len" placeholder="24" />
-            </el-col>
-            <el-col :span="4">
-                <p style="font-size: var(--el-font-size-small)">Protocol</p>
-                <el-select v-model="option.protocol" placeholder="Select">
-                    <el-option v-for="item in protocol_options"
-                        :key="item.value"
-                        :label="item.label"
-                        :value="item.value"
-                    />
-                </el-select>
-            </el-col>
-            <el-col :span="3">
-                <p style="font-size: var(--el-font-size-small)">Port No</p>
-                <el-input type="number" min="0" max="65535" v-model="option.port" placeholder="80" />
-            </el-col>
-            <el-col :span="4">
-                <p style="font-size: var(--el-font-size-small)">Scan Type</p>
-                <el-select v-model="option.scan_type" placeholder="Select">
-                    <el-option v-for="item in scan_type_options"
-                        :key="item.value"
-                        :label="item.label"
-                        :value="item.value"
-                    />
-                </el-select>
-            </el-col>
-            <el-col :span="4">
-                <p style="font-size: var(--el-font-size-small)">Host List</p>
-                <el-button type="info" plain @click="dialog_list_visible = true">List</el-button>
-            </el-col>
+        <el-row>
+            <el-form :inline="true" label-position="top">
+                <el-form-item label="Network Address">
+                    <el-input v-model="option.network_address" placeholder="IP Address" style="max-width: 200px;" />
+                </el-form-item>
+                <el-form-item label="Prefix">
+                    <el-input type="number" min="8" max="30" v-model="option.prefix_len" placeholder="24" style="max-width: fit-content;"/>
+                </el-form-item>
+                <el-form-item label="Protocol">
+                    <el-select v-model="option.protocol" placeholder="Select" style="max-width: 100px;">
+                        <el-option v-for="item in protocol_options"
+                            :key="item.value"
+                            :label="item.label"
+                            :value="item.value"
+                        />
+                    </el-select>
+                </el-form-item>
+                <el-form-item label="Port No">
+                    <el-input type="number" min="0" max="65535" v-model="option.port" placeholder="80" style="max-width: fit-content;" />
+                </el-form-item>
+                <el-form-item label="Scan Type">
+                    <el-select v-model="option.scan_type" placeholder="Select" style="max-width: 120px;">
+                        <el-option v-for="item in scan_type_options"
+                            :key="item.value"
+                            :label="item.label"
+                            :value="item.value"
+                        />
+                    </el-select>
+                </el-form-item>
+                <el-form-item label="Host List">
+                    <el-button type="info" plain @click="dialog_list_visible = true">List</el-button>
+                </el-form-item>
+            </el-form>
         </el-row>
         <el-row :gutter="20">
             <el-col :span="12">

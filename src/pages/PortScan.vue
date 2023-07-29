@@ -266,35 +266,33 @@ onUnmounted(() => {
         </template>
         <!-- Header -->
         <!-- Options -->
-        <el-row :gutter="20">
-            <el-col :span="6">
-                <p style="font-size: var(--el-font-size-small)">TargetHost</p>
-                <el-input v-model="option.target_host" placeholder="IP Address or HostName" />
-            </el-col>
-            <el-col :span="6">
-                <p style="font-size: var(--el-font-size-small)">Port</p>
-                <el-select v-model="option.port_option" placeholder="Select">
-                    <el-option v-for="item in port_options"
-                        :key="item.value"
-                        :label="item.label"
-                        :value="item.value"
-                    />
-                </el-select>
-            </el-col>
-            <el-col :span="3">
-                <p style="font-size: var(--el-font-size-small)">Port List</p>
-                <el-button type="info" plain @click="dialog_list_visible = true">List</el-button>
-            </el-col>
-            <el-col :span="6">
-                <p style="font-size: var(--el-font-size-small)">Scan Type</p>
-                <el-select v-model="option.scan_type" placeholder="Select">
-                    <el-option v-for="item in scanTypeOptions"
-                        :key="item.value"
-                        :label="item.label"
-                        :value="item.value"
-                    />
-                </el-select>
-            </el-col>
+        <el-row>
+          <el-form :inline="true" label-position="top">
+            <el-form-item label="TargetHost">
+              <el-input v-model="option.target_host" placeholder="IP Address or HostName" style="max-width: 300px;" />
+            </el-form-item>
+            <el-form-item label="Port">
+              <el-select v-model="option.port_option" placeholder="Select" style="max-width: 200px;">
+                  <el-option v-for="item in port_options"
+                      :key="item.value"
+                      :label="item.label"
+                      :value="item.value"
+                  />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="Port List">
+              <el-button type="info" plain @click="dialog_list_visible = true">List</el-button>
+            </el-form-item>
+            <el-form-item label="Scan Type">
+              <el-select v-model="option.scan_type" placeholder="Select" style="max-width: 180px;">
+                  <el-option v-for="item in scanTypeOptions"
+                      :key="item.value"
+                      :label="item.label"
+                      :value="item.value"
+                  />
+              </el-select>
+            </el-form-item>
+          </el-form>
         </el-row>
         <el-row :gutter="20">
             <el-col :span="12">
