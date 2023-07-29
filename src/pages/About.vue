@@ -11,8 +11,30 @@ const about_app = reactive({
     repository: 'https://github.com/shellrow/netprobe',
 });
 
-onMounted(() => {
+type AppInfo = {
+    name: string;
+    description: string;
+    version: string;
+    release_date: string;
+    repository: string;
+}
 
+const getAppInfo = () => {
+    invoke<AppInfo>('get_app_info').then((res) => {
+        //about_app.name = res.name;
+        about_app.description = res.description;
+        about_app.version = `v${res.version}`;
+        about_app.release_date = res.release_date;
+        about_app.repository = res.repository;
+    }).catch((err) => {
+        console.log(err);
+    }).finally(() => {
+        
+    });
+}
+
+onMounted(() => {
+    getAppInfo();
 });
 
 onUnmounted(() => {

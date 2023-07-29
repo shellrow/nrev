@@ -233,3 +233,24 @@ impl NetworkInterface {
         }
     }
 }
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct AppInfo {
+    pub name: String,
+    pub description: String,
+    pub version: String,
+    pub release_date: String,
+    pub repository: String,
+}
+
+impl AppInfo {
+    pub fn new() -> AppInfo {
+        AppInfo {
+            name: crate::define::APP_NAME.to_string(),
+            description: crate::define::APP_DESCRIPTION.to_string(),
+            version: crate::define::APP_VERSION.to_string(),
+            release_date: crate::define::APP_RELEASE_DATE.to_string(),
+            repository: crate::define::APP_REPOSITORY.to_string(),
+        }
+    }
+}

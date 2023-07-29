@@ -603,3 +603,8 @@ pub fn delete_user_host(ids: Vec<String>) -> u32 {
 pub fn get_new_host_id(hostname: String) -> String {
     crate::db::get_host_id(hostname)
 }
+
+#[tauri::command]
+pub fn get_app_info() -> crate::models::AppInfo {
+    crate::models::AppInfo::new()
+}
