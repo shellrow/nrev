@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted, onUnmounted } from 'vue';
+import { reactive, onMounted, onUnmounted } from 'vue';
 import { invoke } from '@tauri-apps/api/tauri';
 
 const about_app = reactive({
@@ -7,7 +7,7 @@ const about_app = reactive({
     version: 'v0.1.0',
     release_date: '2023-07-24',
     author: 'shellrow <shellrow@protonmail.com>',
-    description: 'The Simple and High-Performance Network Mapper. Optimized for efficient network discovery and management.',
+    description: 'The Simple and High-Performance Network Mapper for discovery and management.',
     repository: 'https://github.com/shellrow/netprobe',
 });
 

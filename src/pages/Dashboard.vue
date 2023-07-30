@@ -1,14 +1,7 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import { invoke } from '@tauri-apps/api/tauri';
 import { Refresh, View, RefreshRight, Position, Share } from '@element-plus/icons-vue';
-
-const innerWidth = ref(window.innerWidth);
-const innerHeight = ref(window.innerHeight);
-const checkWindowSize = () => {
-    innerWidth.value = window.innerWidth;
-    innerHeight.value = window.innerHeight;
-};
 
 type ProbeLog = {
     id: number,
@@ -28,6 +21,13 @@ type Activity = {
 };
 
 const activities = ref<Activity[]>([]);
+const innerWidth = ref(window.innerWidth);
+const innerHeight = ref(window.innerHeight);
+
+const checkWindowSize = () => {
+    innerWidth.value = window.innerWidth;
+    innerHeight.value = window.innerHeight;
+};
 
 function setRecentActivities() {
     activities.value = [];

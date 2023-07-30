@@ -4,43 +4,6 @@ import { invoke } from '@tauri-apps/api/tauri';
 import { ElMessage, ElTable } from 'element-plus';
 import { Refresh } from '@element-plus/icons-vue';
 
-const innerWidth = ref(window.innerWidth);
-const innerHeight = ref(window.innerHeight);
-const checkWindowSize = () => {
-    innerWidth.value = window.innerWidth;
-    innerHeight.value = window.innerHeight;
-};
-
-const hostDialogVisible = ref(false);
-const selectDialogVisible = ref(false);
-const serviceDialogVisible = ref(false);
-const removeDialogVisible = ref(false);
-const deleteDialogVisible = ref(false);
-const deleteServiceDialogVisible = ref(false);
-const checkDelete = ref(false);
-const currentRemoveHostId = ref("");
-const currentDeleteHostId = ref("");
-const currentDeleteServiceIndex = ref(0);
-const currentHostDialogAction = ref("Add");
-const prevHostId = ref("");
-
-const tableRef = ref<InstanceType<typeof ElTable>>();
-const multipleTableRef = ref<InstanceType<typeof ElTable>>();
-const serviceTableRef = ref<InstanceType<typeof ElTable>>();
-const multipleSelection = ref<Host[]>([]);
-const toggleSelection = (rows?: Host[]) => {
-  if (rows) {
-    rows.forEach((row) => {
-      multipleTableRef.value!.toggleRowSelection(row, true);
-    })
-  } else {
-    multipleTableRef.value!.clearSelection()
-  }
-}
-const handleSelectionChange = (val: Host[]) => {
-  multipleSelection.value = val;
-}
-
 type Service = {
   host_id: string
   port: number
@@ -89,8 +52,45 @@ type UserProbeData = {
   tags: string[]
 }
 
+const innerWidth = ref(window.innerWidth);
+const innerHeight = ref(window.innerHeight);
+const checkWindowSize = () => {
+    innerWidth.value = window.innerWidth;
+    innerHeight.value = window.innerHeight;
+};
+
+const hostDialogVisible = ref(false);
+const selectDialogVisible = ref(false);
+const serviceDialogVisible = ref(false);
+const removeDialogVisible = ref(false);
+const deleteDialogVisible = ref(false);
+const deleteServiceDialogVisible = ref(false);
+const checkDelete = ref(false);
+const currentRemoveHostId = ref("");
+const currentDeleteHostId = ref("");
+const currentDeleteServiceIndex = ref(0);
+const currentHostDialogAction = ref("Add");
+const prevHostId = ref("");
+const tableRef = ref<InstanceType<typeof ElTable>>();
+const multipleTableRef = ref<InstanceType<typeof ElTable>>();
+const serviceTableRef = ref<InstanceType<typeof ElTable>>();
+const multipleSelection = ref<Host[]>([]);
 const tdHosts = ref<Host[]>([]);
 const tdSelectedHosts = ref<UserProbeData[]>([]);
+
+const toggleSelection = (rows?: Host[]) => {
+  if (rows) {
+    rows.forEach((row) => {
+      multipleTableRef.value!.toggleRowSelection(row, true);
+    })
+  } else {
+    multipleTableRef.value!.clearSelection()
+  }
+}
+
+const handleSelectionChange = (val: Host[]) => {
+  multipleSelection.value = val;
+}
 
 const newService = reactive({
   host_id: "",

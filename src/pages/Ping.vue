@@ -3,12 +3,9 @@ import { ref, reactive, onMounted, onUnmounted } from 'vue';
 import { invoke } from '@tauri-apps/api/tauri';
 import { listen } from '@tauri-apps/api/event';
 import { ElMessage } from 'element-plus';
-import {PROTOCOL_ICMPv4, PROTOCOL_TCP, PROTOCOL_UDP}  from '../config/define';
-import {isIpv4NetworkAddress, isIpv6NetworkAddress, isValidHostname, isValidIPaddress} from '../logic/shared';
+import { PROTOCOL_ICMPv4, PROTOCOL_TCP, PROTOCOL_UDP }  from '../config/define';
+import { isIpv4NetworkAddress, isIpv6NetworkAddress, isValidHostname, isValidIPaddress } from '../logic/shared';
 import { useRoute } from 'vue-router';
-
-const pinging = ref(false);
-const route = useRoute();
 
 interface PingOption {
   target_host: string;
@@ -18,6 +15,16 @@ interface PingOption {
   os_detection_flag: boolean;
   save_flag: boolean;
 }
+
+type PingProgress = {
+  content: string;
+  timestamp: string;
+}
+
+const route = useRoute();
+
+const pinging = ref(false);
+const ping_progress = ref<PingProgress[]>([]);
 
 const option = reactive({
   target_host: "",
@@ -52,13 +59,6 @@ const protocol_options = [
     label: 'UDP',
   },
 ];
-
-type PingProgress = {
-  content: string;
-  timestamp: string;
-}
-
-const ping_progress = ref<PingProgress[]>([]);
 
 const initResult = () => {
   result.ping_results = [];

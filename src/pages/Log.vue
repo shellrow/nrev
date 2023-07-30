@@ -20,6 +20,10 @@ type ProbeLog = {
 const log_detail_visible = ref(false);
 const searching = ref(false);
 
+const json_text_area = ref('');
+const optionDateRange = ref('');
+const searchResult = ref<ProbeLog[]>([]);
+
 const probeTypes = [
   {
     value: 'port_scan',
@@ -52,8 +56,6 @@ const log_detail = reactive({
   save_file_path: "",
 });
 
-const json_text_area = ref('');
-
 const getLocalTime = (date: string | number | Date) => {
     const d = new Date(date);
     const offset = d.getTimezoneOffset() * 60000;
@@ -70,8 +72,6 @@ const defaultDateRange = [
   getLocalTime(getLastWeekDateTime()),  
   getLocalTime(new Date())
 ];
-
-const optionDateRange = ref('');
 
 const shortcuts = [
   {
@@ -109,8 +109,6 @@ const searchOption = reactive({
     start_date: "",
     end_date: ""
 });
-
-const searchResult = ref<ProbeLog[]>([]);
 
 const searchLog = async () => {
     searching.value = true;
@@ -186,8 +184,12 @@ async function writeJsonFile() {
         message: "JSON Data exported!",
         type: 'success',
       });
-    }).catch((error) => {
-      console.error(error);
+    }).catch(e => {
+      console.error(e);
+      ElMessage({
+        message: "JSON Data export failed!",
+        type: 'error',
+      });
     });
   }
 }
@@ -205,6 +207,10 @@ const clickCopy = (event: any) => {
   })
   .catch(e => {
       console.error(e);
+      ElMessage({
+        message: "JSON Data copy failed!",
+        type: 'error',
+      });
   });
 }
 
