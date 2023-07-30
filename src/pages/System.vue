@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import { ref, reactive, onMounted, onUnmounted } from 'vue';
+import { reactive, onMounted, onUnmounted } from 'vue';
 import { invoke } from '@tauri-apps/api/tauri';
-import {Refresh} from '@element-plus/icons-vue';
+import { Refresh } from '@element-plus/icons-vue';
 
 interface NetworkInterface {
     index: number;
@@ -14,6 +14,19 @@ interface NetworkInterface {
     ipv4_csv: string;
     ipv6: string[];
     ipv6_csv: string;
+    gateway_mac_addr: string;
+    gateway_ip_addr: string;
+}
+
+type NetworkInterfaceModel = {
+    index: number;
+    name: string;
+    friendly_name: string;
+    description: string;
+    if_type: string;
+    mac_addr: string;
+    ipv4: string[];
+    ipv6: string[];
     gateway_mac_addr: string;
     gateway_ip_addr: string;
 }
@@ -45,19 +58,6 @@ function reloadSysInfo() {
     getNetworkInfo();
 }
 
-type NetworkInterfaceModel = {
-    index: number;
-    name: string;
-    friendly_name: string;
-    description: string;
-    if_type: string;
-    mac_addr: string;
-    ipv4: string[];
-    ipv6: string[];
-    gateway_mac_addr: string;
-    gateway_ip_addr: string;
-}
-
 function getNetworkInfo() {
     invoke<NetworkInterfaceModel>('get_default_interface').then((res) => {
         network_interface.index = res.index;
@@ -70,9 +70,8 @@ function getNetworkInfo() {
         network_interface.ipv6 = res.ipv6;
         network_interface.gateway_mac_addr = res.gateway_mac_addr;
         network_interface.gateway_ip_addr = res.gateway_ip_addr;
-        console.log(network_interface);
-    }).catch((err) => {
-        console.log(err);
+    }).catch((e) => {
+        console.log(e);
     }).finally(() => {
         
     });

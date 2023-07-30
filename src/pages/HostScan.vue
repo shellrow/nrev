@@ -2,8 +2,8 @@
 import { ref, reactive, onMounted, onUnmounted, nextTick } from 'vue';
 import { invoke } from '@tauri-apps/api/tauri';
 import { ElMessage } from 'element-plus';
-import {sleep, isValidIPaddress, isValidHostname, isIpv4NetworkAddress, isValidIPv6Address} from '../logic/shared';
-import {PROTOCOL_ICMPv4, PROTOCOL_TCP, HOSTSCAN_TYPE_NETWORK, HOSTSCAN_TYPE_CUSTOM_HOSTS} from '../config/define';
+import { isValidIPaddress, isValidHostname, isIpv4NetworkAddress, isValidIPv6Address } from '../logic/shared';
+import { PROTOCOL_ICMPv4, PROTOCOL_TCP, HOSTSCAN_TYPE_NETWORK, HOSTSCAN_TYPE_CUSTOM_HOSTS } from '../config/define';
 
 type Host = {
     ip_addr: string,
@@ -47,11 +47,6 @@ type ScanResult = {
     total_scan_time: string,
 };
 
-const scanning = ref(false);
-const dialog_list_visible = ref(false);
-const target_host = ref("");
-const target_hosts = ref<Host[]>([]);
-
 interface HostOption {
     network_address: string,
     prefix_len: number,
@@ -64,6 +59,11 @@ interface HostOption {
     os_detection_flag: boolean,
     save_flag: boolean,
 };
+
+const scanning = ref(false);
+const dialog_list_visible = ref(false);
+const target_host = ref("");
+const target_hosts = ref<Host[]>([]);
 
 const option: HostOption = reactive({
   network_address: "",

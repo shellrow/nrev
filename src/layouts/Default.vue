@@ -9,8 +9,8 @@ import AboutPage from '../pages/About.vue';
 const innerWidth = ref(window.innerWidth);
 const innerHeight = ref(window.innerHeight);
 const theme = ref('dark');
+const mode = ref(false);
 const activeIndex = ref('0');
-const mode = ref(true);
 const isCollapse = ref(innerWidth.value < 800 ? true : false);
 
 const dialogSystemVisible = ref(false);

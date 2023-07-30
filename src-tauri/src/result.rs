@@ -1,7 +1,6 @@
 use std::{time::Duration, vec};
 use std::net::IpAddr;
 use serde::{Serialize, Deserialize};
-
 use crate::option::Protocol;
 
 /// Exit status of probe

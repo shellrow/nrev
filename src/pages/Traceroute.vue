@@ -3,37 +3,12 @@ import { ref, reactive, onMounted, onUnmounted } from 'vue';
 import { invoke } from '@tauri-apps/api/tauri';
 import { listen } from '@tauri-apps/api/event';
 import { ElMessage } from 'element-plus';
-import {isIpv4NetworkAddress, isIpv6NetworkAddress, isValidHostname, isValidIPaddress} from '../logic/shared';
+import { isIpv4NetworkAddress, isIpv6NetworkAddress, isValidHostname, isValidIPaddress } from '../logic/shared';
 import { useRoute } from 'vue-router';
-
-const tracing = ref(false);
-const route = useRoute();
-
-const option = reactive({
-    target_host: "",
-    max_hop: 64,
-    timeout: 30000,
-    os_detection_flag: true,
-    save_flag: false,
-});
-
-const result: TraceResult = reactive({
-    nodes: [],
-    status: "",
-    probe_time: 0,
-});
 
 interface TraceProgress {
   content: string;
   timestamp: string;
-}
-
-const trace_progress = ref<TraceProgress[]>([]);
-
-const initResult = () => {
-  result.nodes = [];
-  result.status = "";
-  result.probe_time = 0;
 }
 
 type Node = {
@@ -50,6 +25,31 @@ type TraceResult = {
   nodes: Node[];
   status: string;
   probe_time: number;
+}
+
+const route = useRoute();
+const tracing = ref(false);
+
+const option = reactive({
+    target_host: "",
+    max_hop: 64,
+    timeout: 30000,
+    os_detection_flag: true,
+    save_flag: false,
+});
+
+const result: TraceResult = reactive({
+    nodes: [],
+    status: "",
+    probe_time: 0,
+});
+
+const trace_progress = ref<TraceProgress[]>([]);
+
+const initResult = () => {
+  result.nodes = [];
+  result.status = "";
+  result.probe_time = 0;
 }
 
 const runTraceroute = async() => {

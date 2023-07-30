@@ -3,43 +3,7 @@ import { ref, reactive, onMounted, onUnmounted } from 'vue';
 import { invoke } from '@tauri-apps/api/tauri';
 import { ElMessage, ElTable } from 'element-plus';
 import { Refresh } from '@element-plus/icons-vue';
-
-const innerWidth = ref(window.innerWidth);
-const innerHeight = ref(window.innerHeight);
-const checkWindowSize = () => {
-    innerWidth.value = window.innerWidth;
-    innerHeight.value = window.innerHeight;
-};
-
-const hostDialogVisible = ref(false);
-const selectDialogVisible = ref(false);
-const serviceDialogVisible = ref(false);
-const removeDialogVisible = ref(false);
-const deleteDialogVisible = ref(false);
-const deleteServiceDialogVisible = ref(false);
-const checkDelete = ref(false);
-const currentRemoveHostId = ref("");
-const currentDeleteHostId = ref("");
-const currentDeleteServiceIndex = ref(0);
-const currentHostDialogAction = ref("Add");
-const prevHostId = ref("");
-
-const tableRef = ref<InstanceType<typeof ElTable>>();
-const multipleTableRef = ref<InstanceType<typeof ElTable>>();
-const serviceTableRef = ref<InstanceType<typeof ElTable>>();
-const multipleSelection = ref<Host[]>([]);
-const toggleSelection = (rows?: Host[]) => {
-  if (rows) {
-    rows.forEach((row) => {
-      multipleTableRef.value!.toggleRowSelection(row, true);
-    })
-  } else {
-    multipleTableRef.value!.clearSelection()
-  }
-}
-const handleSelectionChange = (val: Host[]) => {
-  multipleSelection.value = val;
-}
+import { useRouter } from 'vue-router';
 
 type Service = {
   host_id: string
@@ -89,8 +53,47 @@ type UserProbeData = {
   tags: string[]
 }
 
+const router = useRouter();
+const innerWidth = ref(window.innerWidth);
+const innerHeight = ref(window.innerHeight);
+const checkWindowSize = () => {
+    innerWidth.value = window.innerWidth;
+    innerHeight.value = window.innerHeight;
+};
+
+const hostDialogVisible = ref(false);
+const selectDialogVisible = ref(false);
+const serviceDialogVisible = ref(false);
+const removeDialogVisible = ref(false);
+const deleteDialogVisible = ref(false);
+const probeDialogVisible = ref(false);
+const deleteServiceDialogVisible = ref(false);
+const checkDelete = ref(false);
+const currentRemoveHostId = ref("");
+const currentDeleteHostId = ref("");
+const currentDeleteServiceIndex = ref(0);
+const currentHostDialogAction = ref("Add");
+const prevHostId = ref("");
+const tableRef = ref<InstanceType<typeof ElTable>>();
+const multipleTableRef = ref<InstanceType<typeof ElTable>>();
+const serviceTableRef = ref<InstanceType<typeof ElTable>>();
+const multipleSelection = ref<Host[]>([]);
 const tdHosts = ref<Host[]>([]);
 const tdSelectedHosts = ref<UserProbeData[]>([]);
+
+const toggleSelection = (rows?: Host[]) => {
+  if (rows) {
+    rows.forEach((row) => {
+      multipleTableRef.value!.toggleRowSelection(row, true);
+    })
+  } else {
+    multipleTableRef.value!.clearSelection()
+  }
+}
+
+const handleSelectionChange = (val: Host[]) => {
+  multipleSelection.value = val;
+}
 
 const newService = reactive({
   host_id: "",
@@ -397,6 +400,36 @@ const reloadHosts = () => {
   loadSelectedHosts();
 }
 
+const clickPortScan = (hostName: string, ipAddr: string) => {
+  if (hostName === "") {
+    router.push({ path: `/port/${ipAddr}` });
+  }else{
+    router.push({ path: `/port/${hostName}` });
+  }
+}
+
+const clickPing = (hostName: string, ipAddr: string) => {
+  if (hostName === "") {
+    router.push({ path: `/ping/${ipAddr}` });
+  }else{
+    router.push({ path: `/ping/${hostName}` });
+  }
+}
+
+const clickTraceroute = (hostName: string, ipAddr: string) => {
+  if (hostName === "") {
+    router.push({ path: `/trace/${ipAddr}` });
+  }else{
+    router.push({ path: `/trace/${hostName}` });
+  }
+}
+
+const openProbeDialog = (hostName: string, ipAddr: string) => {
+  currentHost.host.host_name = hostName;
+  currentHost.host.ip_addr = ipAddr;
+  probeDialogVisible.value = true;
+}
+
 onMounted(() => {
   loadHosts();
   loadSelectedHosts();
@@ -450,6 +483,7 @@ onUnmounted(() => {
     <el-table-column label="OS Name" prop="host.os_name" width="180"/>
     <el-table-column label="Actions">
       <template #default="props">
+        <el-button size="small" type="primary" plain @click="openProbeDialog(props.row.host.host_name, props.row.host.ip_addr)">Probe</el-button>
         <el-button size="small" type="primary" plain @click="openHostDialog('edit', props.row)">Edit</el-button>
         <el-button size="small" type="danger" plain @click="openRemoveDialog(props.row)">Remove</el-button>
       </template>
@@ -568,10 +602,12 @@ onUnmounted(() => {
 
   <!-- Remove Dialog -->
   <el-dialog v-model="removeDialogVisible" title="Warning" width="30%" center>
-    <span>
+    <el-row class="mb-1">
       Are you sure you want to remove the selected host?
-    </span>
-    <el-checkbox v-model="checkDelete" label="Delete completely" size="large" />
+    </el-row>
+    <el-row class="mb-1">
+      <el-checkbox v-model="checkDelete" label="Delete completely" size="large" />
+    </el-row>
     <template #footer>
       <span class="dialog-footer">
         <el-button @click="closeRemoveDialog">Cancel</el-button>
@@ -614,5 +650,27 @@ onUnmounted(() => {
     </template>
   </el-dialog>
   <!-- Delete Service Dialog -->
+
+  <!-- Probe Dialog -->
+  <el-dialog v-model="probeDialogVisible" title="Probe" width="300" center>
+    <el-row class="mb-1">
+      {{ currentHost.host.host_name }} ({{ currentHost.host.ip_addr }})
+    </el-row>
+    <el-row class="mb-1">
+      <el-button type="primary" plain @click="clickPortScan(currentHost.host.host_name, currentHost.host.ip_addr)" style="width: 100%;">PortScan</el-button>
+    </el-row>
+    <el-row class="mb-1">
+      <el-button type="primary" plain @click="clickPing(currentHost.host.host_name, currentHost.host.ip_addr)" style="width: 100%;">Ping</el-button>
+    </el-row>
+    <el-row class="mb-1">
+      <el-button type="primary" plain @click="clickTraceroute(currentHost.host.host_name, currentHost.host.ip_addr)" style="width: 100%;">Traceroute</el-button>
+    </el-row>
+    <template #footer>
+      <span class="dialog-footer">
+        <el-button @click="probeDialogVisible = false">Cancel</el-button>
+      </span>
+    </template>
+  </el-dialog>
+  <!-- Probe Dialog -->
 
 </template>
