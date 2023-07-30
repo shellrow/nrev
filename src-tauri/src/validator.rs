@@ -199,7 +199,6 @@ pub fn validate_ttl(v: &str) -> Result<(), String> {
     }
 }
 
-#[allow(unused)]
 pub fn is_ipaddr(host: String) -> bool {
     let ipaddr = IpAddr::from_str(&host);
     match ipaddr {
@@ -225,7 +224,6 @@ pub fn is_socketaddr(host: String) -> bool {
     }
 }
 
-#[allow(unused)]
 pub fn is_valid_hostname(host: String) -> bool {
     match network::lookup_host_name(host) {
         Some(_) => {
