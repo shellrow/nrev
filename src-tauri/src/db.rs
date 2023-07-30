@@ -266,7 +266,7 @@ pub fn insert_trace_result(conn:&Connection, probe_id: String, trace_result: Tra
 }
 
 pub fn get_probe_result(target_host: String, probe_types: Vec<String>, start_date: String, end_date: String) -> Vec<ProbeLog> {
-    let target_host = if crate::validator::is_valid_hostname(target_host.clone()) {target_host} else {String::from("%")};
+    let target_host: String = if target_host.is_empty(){String::from("%")}else{if crate::validator::is_valid_hostname(target_host.clone()) {target_host} else {String::from("%")}} ;
     let mut results: Vec<ProbeLog> = vec![];
     let conn = connect_db().unwrap();
     let mut in_params: String = String::new();
