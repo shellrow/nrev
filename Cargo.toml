@@ -1,0 +1,6 @@
+[workspace]
+members = [
+    "core",
+    "rushmap",
+    "rushmap-desktop/src-tauri",
+]

@@ -1,0 +1,29 @@
+[package]
+name = "rushmap-desktop"
+version = "0.1.0"
+description = "High-Performance Network Mapper for discovery and management. with GUI."
+authors = ["shellrow <shellrow@protonmail.com>"]
+license = "MIT"
+repository = "https://github.com/shellrow/rushmap"
+edition = "2021"
+keywords = ["network", "security", "scan", "gui", "cross-platform"]
+categories = ["network-programming"]
+
+[build-dependencies]
+tauri-build = { version = "1.4", features = [] }
+
+[dependencies]
+tauri = { version = "1.4", features = [ "api-all"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+regex = "1.6.0"
+async-io = "1.13.0"
+futures = {version = "0.3.21", features = ["executor", "thread-pool"] }
+rusqlite = { version = "0.28.0", features = ["bundled"] }
+ipnet = "2.5.0"
+rushmap-core = { path = "../../core", version = "0.1.0"}
+
+[features]
+# this feature is used for production builds or when `devPath` points to the filesystem
+# DO NOT REMOVE!!
+custom-protocol = ["tauri/custom-protocol"]
