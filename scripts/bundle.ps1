@@ -3,7 +3,7 @@
 # Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process (Only needed if not already set)
 # .\scripts\bundle.ps1
 
-$binName = "rmap"
+$binName = "rmap.exe"
 $version = "0.1.0"
 $osArch = "x86_64-pc-windows-msvc"
 $distDir = ".\dist"
