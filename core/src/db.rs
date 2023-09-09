@@ -113,9 +113,20 @@ pub fn get_os_family_fingerprints() -> Vec<model::OsFamilyFingerprint> {
     ds_os_fingerprints
 }
 
+pub fn get_os_family_list() -> Vec<String> {
+    let ds_os_families: Vec<&str> = define::OS_FAMILY_TXT.trim().split("\n").collect();
+    let mut os_families: Vec<String> = vec![];
+    for r in ds_os_families {
+        os_families.push(r.to_string());
+    }
+    os_families
+}
+
 pub fn verify_os_fingerprint(fingerprint: np_listener::packet::TcpIpFingerprint) -> model::OsFingerprint {
+    let os_family_list: Vec<String> = get_os_family_list();
     let os_fingerprints: Vec<model::OsFingerprint> = get_os_fingerprints();
     // 1. Select OS Fingerprint that match tcp_window_size and tcp_option_pattern
+    let mut matched_fingerprints: Vec<model::OsFingerprint> = vec![];
     for f in &os_fingerprints {
         let mut window_size_match: bool = false;
         let mut option_pattern_match: bool = false;
@@ -134,11 +145,23 @@ pub fn verify_os_fingerprint(fingerprint: np_listener::packet::TcpIpFingerprint)
                 }
             }
             if window_size_match && option_pattern_match {
-                return f.clone();
+                matched_fingerprints.push(f.clone());
+            }
+        }
+    }
+    if matched_fingerprints.len() == 1 {
+        return matched_fingerprints[0].clone();
+    }else if matched_fingerprints.len() > 1 {
+        // Search fingerprint that match general OS Family
+        matched_fingerprints.reverse();
+        for f in matched_fingerprints {
+            if os_family_list.contains(&f.os_family) {
+                return f;
             }
         }
     }
     // 2. Select OS Fingerprint that match tcp_option_pattern and have most closely tcp_window_size
+    let mut matched_fingerprints: Vec<model::OsFingerprint> = vec![];
     for f in os_fingerprints {
         let mut window_size_match: bool = false;
         let mut option_pattern_match: bool = false;
@@ -157,6 +180,17 @@ pub fn verify_os_fingerprint(fingerprint: np_listener::packet::TcpIpFingerprint)
                 }
             }
             if window_size_match && option_pattern_match {
+                matched_fingerprints.push(f.clone());
+            }
+        }
+    }
+    if matched_fingerprints.len() == 1 {
+        return matched_fingerprints[0].clone();
+    }else if matched_fingerprints.len() > 1 {
+        // Search fingerprint that match general OS Family
+        matched_fingerprints.reverse();
+        for f in matched_fingerprints {
+            if os_family_list.contains(&f.os_family) {
                 return f;
             }
         }
