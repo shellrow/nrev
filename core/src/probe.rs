@@ -324,6 +324,29 @@ pub async fn run_node_scan(opt: option::HostScanOption, msg_tx: &mpsc::Sender<St
         Err(_) => {}
     }
 
+    // lookup
+    match msg_tx.send(String::from(define::MESSAGE_START_LOOKUP)) {
+        Ok(_) => {}
+        Err(_) => {}
+    }
+    // DNS lookup
+    let mut lookup_target_ips: Vec<IpAddr> = vec![];
+    let mut dns_map: HashMap<IpAddr, String> = HashMap::new();
+    for host in &ns_scan_result.hosts {
+        if host.host_name.is_empty() || host.host_name == host.ip_addr.to_string() {
+            lookup_target_ips.push(host.ip_addr);
+        }else{
+            dns_map.insert(host.ip_addr, host.host_name.clone());
+        }
+    }
+    let resolved_map: HashMap<IpAddr, String> = crate::dns::lookup_ips(lookup_target_ips);
+    for (ip, host_name) in resolved_map {
+        if host_name.is_empty() {
+            dns_map.insert(ip, ip.to_string());
+        }else{
+            dns_map.insert(ip, host_name);
+        }
+    }
     // Arp (only for local network)
     let mut arp_targets: Vec<IpAddr> = vec![];
     let mut mac_map: HashMap<IpAddr, String> = HashMap::new(); 
@@ -334,16 +357,12 @@ pub async fn run_node_scan(opt: option::HostScanOption, msg_tx: &mpsc::Sender<St
         }
     }
     if arp_targets.len() > 0 {
-        match msg_tx.send(String::from(define::MESSAGE_START_LOOKUP)) {
-            Ok(_) => {}
-            Err(_) => {}
-        }
         mac_map = crate::ip::get_mac_addresses(arp_targets, opt.src_ip);
         oui_db = db::get_oui_detail_map();
-        match msg_tx.send(String::from(define::MESSAGE_END_LOOKUP)) {
-            Ok(_) => {}
-            Err(_) => {}
-        }
+    }
+    match msg_tx.send(String::from(define::MESSAGE_END_LOOKUP)) {
+        Ok(_) => {}
+        Err(_) => {}
     }
 
     scan_result.end_time = sys::get_sysdate();
@@ -357,7 +376,7 @@ pub async fn run_node_scan(opt: option::HostScanOption, msg_tx: &mpsc::Sender<St
     for scanned_host in ns_scan_result.hosts {
         let mut node_info: model::NodeInfo = model::NodeInfo::new();
         node_info.ip_addr = scanned_host.ip_addr;
-        node_info.host_name = scanned_host.host_name.clone();
+        node_info.host_name = dns_map.get(&scanned_host.ip_addr).unwrap_or(&scanned_host.ip_addr.to_string()).clone();
         node_info.node_type = model::NodeType::Destination;
         
         for port in scanned_host.ports {
@@ -417,8 +436,12 @@ pub fn run_ping(opt: option::PingOption, msg_tx: &mpsc::Sender<String>) -> resul
     ping_result.command_type = option::CommandType::Ping;
     ping_result.protocol = opt.protocol;
     ping_result.start_time = sys::get_sysdate();
+    let port: Option<u16> = if opt.target.ports.len() > 0 {
+        Some(opt.target.ports[0])
+    } else {
+        None
+    };
     let start_time: Instant = Instant::now();
-
     let mut pinger: tracert::ping::Pinger = tracert::ping::Pinger::new(opt.target.ip_addr).unwrap();
     match opt.protocol {
         option::IpNextLevelProtocol::ICMPv4 => {
@@ -429,11 +452,11 @@ pub fn run_ping(opt: option::PingOption, msg_tx: &mpsc::Sender<String>) -> resul
         }
         option::IpNextLevelProtocol::TCP => {
             pinger.set_protocol(tracert::protocol::Protocol::Tcp);
-            pinger.dst_port = opt.target.ports[0];
+            pinger.dst_port = port.unwrap_or(80);
         }
         option::IpNextLevelProtocol::UDP => {
             pinger.set_protocol(tracert::protocol::Protocol::Udp);
-            pinger.dst_port = opt.target.ports[0];
+            pinger.dst_port = port.unwrap_or(33435);
         }
     }
     pinger.count = opt.count;
@@ -468,6 +491,7 @@ pub fn run_ping(opt: option::PingOption, msg_tx: &mpsc::Sender<String>) -> resul
         ping_response.protocol = opt.protocol.name();
         ping_response.ip_addr = node.ip_addr;
         ping_response.host_name = node.host_name.clone();
+        ping_response.port_number = port;
         ping_response.ttl = node.ttl.unwrap_or(0);
         ping_response.hop = node.hop.unwrap_or(0);
         ping_response.rtt = node.rtt.as_micros() as u64;
