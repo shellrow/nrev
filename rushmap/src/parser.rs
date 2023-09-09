@@ -260,6 +260,11 @@ pub fn parse_host_args(matches: ArgMatches) -> Result<HostScanOption, String>  {
             }
         }
     }
+    if opt.targets.len() > 0 {
+        if rushmap_core::ip::is_global_addr(opt.targets[0].ip_addr) && opt.scan_type == HostScanType::IcmpPingScan {
+            opt.wait_time = Duration::from_millis(1000);
+        }
+    }
     // Flags
     if matches.contains_id("interface") {
         let v_interface: String = matches.get_one::<String>("interface").unwrap().to_string();

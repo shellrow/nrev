@@ -93,6 +93,16 @@ impl HostArg {
             opt.scan_type = HostScanType::IcmpPingScan;
         }
         opt.async_scan = self.async_flag;
+        if self.target_hosts.len() > 0 {
+            match self.target_hosts[0].parse::<IpAddr>(){
+                Ok(ip_addr) => {
+                    if rushmap_core::ip::is_global_addr(ip_addr) && opt.scan_type == HostScanType::IcmpPingScan {
+                        opt.wait_time = Duration::from_millis(1000);
+                    }
+                },
+                Err(_) => {},
+            }
+        }
         if self.scan_type == String::from("custom_list") {
             for host in &self.target_hosts {
                 match host.parse::<IpAddr>(){
