@@ -18,10 +18,21 @@ High-performance Network Mapper for discovery and management
 - macOS
 - Windows
 
-## Install
+## Installation
+The binary name for rushmap is `rmap` .
+
+### Precompiled binaries
+Archives of precompiled binaries for `rushmap` are available for Linux, macOS and Windows.  
+You can download from the [releases](https://github.com/shellrow/rushmap/releases) .
+
+### Cargo
+If you have Rust and the Cargo package manager installed on your system, you can install `rushmap` with the following command:
 ```
 cargo install rushmap
 ```
+
+### Using Installer (Coming Soon...)
+Currently working on a dedicated installer for `rushmap` that will simplify the installation process even further.
 
 ## Usage
 ```
