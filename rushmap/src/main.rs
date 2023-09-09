@@ -7,7 +7,7 @@ mod output;
 mod parser;
 mod validator;
 
-use clap::{App, AppSettings, Arg, ArgGroup, Command};
+use clap::{App, AppSettings, Arg, ArgGroup, Command, ArgMatches};
 use std::env;
 use rushmap_core::option;
 use rushmap_core::process;
@@ -16,7 +16,7 @@ use rushmap_core::define;
 
 // APP information
 pub const CRATE_BIN_NAME: &str = "rmap";
-pub const CRATE_UPDATE_DATE: &str = "2023-09-06";
+pub const CRATE_UPDATE_DATE: &str = "2023-09-09";
 pub const CRATE_REPOSITORY: &str = "https://github.com/shellrow/rushmap";
 
 fn main() {
@@ -25,8 +25,9 @@ fn main() {
         show_app_desc();
         std::process::exit(0);
     }
-    let app = get_app_settings();
-    let matches = app.get_matches();
+    //let app = get_app_settings();
+    let matches = get_app_settings();
+
     show_banner_with_starttime();
 
     let pb = output::get_spinner();
@@ -119,11 +120,12 @@ fn main() {
     }
 }
 
-fn get_app_settings<'a>() -> Command<'a> {
+fn get_app_settings() -> ArgMatches {
+    let app_description: &str = crate_description!();
+    let app_about: String = format!("{} \n{}", app_description, CRATE_REPOSITORY);
     let app: App = Command::new(crate_name!())
         .version(crate_version!())
-        .author(crate_authors!())
-        .about(crate_description!())
+        .about(app_about.as_str())
         .arg(Arg::new("port")
             .help("Scan ports of the specified host. \nUse default port list if port range omitted. \nExamples: \n--port 192.168.1.8 -S -O \n--port 192.168.1.8:1-1000 \n--port 192.168.1.8:22,80,8080 \n--port 192.168.1.8 -l custom-list.txt")
             .short('p')
@@ -288,7 +290,7 @@ fn get_app_settings<'a>() -> Command<'a> {
         .group(ArgGroup::new("mode").args(&["port", "host", "ping", "trace", "domain"]))
         .setting(AppSettings::DeriveDisplayOrder)
         ;
-    app
+    app.get_matches()
 }
 
 fn show_app_desc() {
@@ -301,7 +303,6 @@ fn show_app_desc() {
         sys::get_os_type()
     );
     println!("{}", crate_description!());
-    println!("{}", crate_authors!());
     println!("{}", CRATE_REPOSITORY);
     println!();
     println!("'{} --help' for more information.", CRATE_BIN_NAME);
