@@ -2,4 +2,4 @@
 [crates-url]: https://crates.io/crates/rushmap
 
 # rushmap-core [![Crates.io][crates-badge]][crates-url]
-Core library for rushmap(rmap)
+Core library for rushmap(rmap) and rushmap-desktop
