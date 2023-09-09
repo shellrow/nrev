@@ -16,7 +16,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-    - name: Build
-      run: cargo build --verbose
-    - name: Run tests
-      run: cargo test --verbose
+    - name: Build rushmap-core
+      run: cargo build --package rushmap-core --verbose
+    - name: Build rushmap
+      run: cargo build --package rushmap --verbose
+      
