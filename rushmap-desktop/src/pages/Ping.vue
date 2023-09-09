@@ -25,6 +25,7 @@ type PingResponse = {
   seq: number;
   ip_addr: string;
   host_name: string;
+  port_number: number;
   ttl: number;
   hop: number;
   rtt: number;
@@ -139,6 +140,7 @@ const runPing = async() => {
         seq: ping_res.seq,
         ip_addr: ping_res.ip_addr,
         host_name: ping_res.host_name,
+        port_number: ping_res.port_number,
         ttl: ping_res.ttl,
         hop: ping_res.hop,
         rtt: ping_res.rtt / 1000,
@@ -265,13 +267,13 @@ onUnmounted(() => {
         <el-table :data="result.stat.responses" style="width: 100%" class="mt-2">
             <el-table-column prop="protocol" label="Protocol" width="100" />
             <el-table-column prop="seq" label="SEQ" width="80" />
-            <el-table-column prop="ip_addr" label="IP Address" width="200" />
+            <el-table-column prop="ip_addr" label="IP Address" width="120" />
             <el-table-column prop="host_name" label="Host Name" />
-            <el-table-column prop="port_number" label="Port" width="100" />
-            <el-table-column prop="ttl" label="TTL" width="100" />
-            <el-table-column prop="hop" label="HOP" width="100" />
+            <el-table-column prop="port_number" label="Port" width="80" />
+            <el-table-column prop="ttl" label="TTL" width="80" />
+            <el-table-column prop="hop" label="HOP" width="80" />
             <el-table-column prop="rtt" label="RTT(ms)" width="100" />
-            <el-table-column prop="status" label="Status" width="100" />
+            <el-table-column prop="status" label="Status" width="80" />
         </el-table>
       </div>
       <div v-else>
