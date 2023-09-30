@@ -386,50 +386,6 @@ pub struct UdpTag {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct OsFingerprint {
-    pub cpe: String,
-    pub os_name: String,
-    pub os_vendor: String,
-    pub os_family: String,
-    pub os_generation: String,
-    pub device_type: String,
-    pub tcp_window_size: u16,
-    pub tcp_option_pattern: String,
-}
-
-impl OsFingerprint {
-    pub fn new() -> OsFingerprint {
-        OsFingerprint { 
-            cpe: String::new(), 
-            os_name: String::new(), 
-            os_vendor: String::new(), 
-            os_family: String::new(), 
-            os_generation: String::new(), 
-            device_type: String::new(), 
-            tcp_window_size: 0, 
-            tcp_option_pattern: String::new() 
-        }
-    }
-    pub fn get(cpe: String) -> OsFingerprint {
-        let conn = db::connect_db().unwrap();
-        let mut stmt = conn.prepare("SELECT cpe, os_name, os_vendor, os_family, os_generation, device_type, tcp_window_size, tcp_option_pattern FROM os_fingerprint WHERE cpe = ?1").unwrap();
-        let mut rows = stmt.query(params![cpe]).unwrap();
-        let mut os_fingerprint = OsFingerprint::new();
-        while let Some(row) = rows.next().unwrap() {
-            os_fingerprint.cpe = row.get(0).unwrap();
-            os_fingerprint.os_name = row.get(1).unwrap();
-            os_fingerprint.os_vendor = row.get(2).unwrap();
-            os_fingerprint.os_family = row.get(3).unwrap();
-            os_fingerprint.os_generation = row.get(4).unwrap();
-            os_fingerprint.device_type = row.get(5).unwrap();
-            os_fingerprint.tcp_window_size = row.get(6).unwrap();
-            os_fingerprint.tcp_option_pattern = row.get(7).unwrap();
-        }
-        os_fingerprint
-    } 
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct OsTtl {
     pub os_family: String,
     pub os_description: String,

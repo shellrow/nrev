@@ -12,6 +12,7 @@ pub struct JsonOsInfo {
 }
 
 impl JsonOsInfo {
+    #[allow(dead_code)]
     pub fn new() -> JsonOsInfo {
         JsonOsInfo {
             cpe: String::new(),
@@ -51,7 +52,8 @@ pub struct JsonPortScanResult {
     pub hostname: String,
     pub protocol: String,
     pub ports: Vec<JsonPortResult>,
-    pub os: JsonOsInfo,
+    pub os_cpe: String,
+    pub os_name: String,
     pub issued_at: String,
 }
 
@@ -63,7 +65,8 @@ impl JsonPortScanResult {
             hostname: String::new(),
             protocol: String::new(),
             ports: Vec::new(),
-            os: JsonOsInfo::new(),
+            os_cpe: String::new(),
+            os_name: String::new(),
             issued_at: String::new(),
         }
     }
