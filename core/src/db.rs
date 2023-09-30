@@ -122,7 +122,7 @@ pub fn get_os_family_list() -> Vec<String> {
     os_families
 }
 
-pub fn verify_os_fingerprint(fingerprint: np_listener::packet::TcpIpFingerprint) -> model::OsFingerprint {
+pub fn verify_os_fingerprint(fingerprint: cross_socket::packet::PacketFrame) -> model::OsFingerprint {
     let os_family_list: Vec<String> = get_os_family_list();
     let os_fingerprints: Vec<model::OsFingerprint> = get_os_fingerprints();
     // 1. Select OS Fingerprint that match tcp_window_size and tcp_option_pattern
@@ -130,14 +130,14 @@ pub fn verify_os_fingerprint(fingerprint: np_listener::packet::TcpIpFingerprint)
     for f in &os_fingerprints {
         let mut window_size_match: bool = false;
         let mut option_pattern_match: bool = false;
-        if let Some(ref tcp_fingerprint) = fingerprint.tcp_fingerprint {
-            if f.tcp_window_size == tcp_fingerprint.window_size {
+        if let Some(ref tcp_fingerprint) = fingerprint.tcp_packet {
+            if f.tcp_window_size == tcp_fingerprint.window {
                 window_size_match = true;
             }
             let option_patterns: Vec<String> = f.tcp_option_pattern.split("|").map(|s| s.to_string()).collect();
             let mut options: Vec<String> = vec![];
             for option in &tcp_fingerprint.options {
-                options.push(option.name());
+                options.push(option.kind.name());
             }
             for option_pattern in option_patterns {
                 if option_pattern == options.join("-") {
@@ -165,14 +165,14 @@ pub fn verify_os_fingerprint(fingerprint: np_listener::packet::TcpIpFingerprint)
     for f in os_fingerprints {
         let mut window_size_match: bool = false;
         let mut option_pattern_match: bool = false;
-        if let Some(ref tcp_fingerprint) = fingerprint.tcp_fingerprint {
-            if tcp_fingerprint.window_size - 100 < f.tcp_window_size && f.tcp_window_size < tcp_fingerprint.window_size + 100 {
+        if let Some(ref tcp_fingerprint) = fingerprint.tcp_packet {
+            if tcp_fingerprint.window - 100 < f.tcp_window_size && f.tcp_window_size < tcp_fingerprint.window + 100 {
                 window_size_match = true;
             }
             let option_patterns: Vec<String> = f.tcp_option_pattern.split("|").map(|s| s.to_string()).collect();
             let mut options: Vec<String> = vec![];
             for option in &tcp_fingerprint.options {
-                options.push(option.name());
+                options.push(option.kind.name());
             }
             for option_pattern in option_patterns {
                 if option_pattern == options.join("-") {
@@ -197,7 +197,15 @@ pub fn verify_os_fingerprint(fingerprint: np_listener::packet::TcpIpFingerprint)
     }
     // 3. from TTL
     let os_ttl_list: Vec<model::OsTtl> = get_os_ttl_list();
-    let initial_ttl = ip::guess_initial_ttl(fingerprint.ip_fingerprint.ttl);
+    let initial_ttl = if let Some(ipv4_packet) = fingerprint.ipv4_packet {
+        ip::guess_initial_ttl(ipv4_packet.ttl)
+    } else {
+        if let Some(ipv6_packet) = fingerprint.ipv6_packet {
+            ip::guess_initial_ttl(ipv6_packet.hop_limit)
+        } else {
+            0
+        }
+    };
     for os_ttl in os_ttl_list {
         if os_ttl.initial_ttl == initial_ttl {
             return model::OsFingerprint {

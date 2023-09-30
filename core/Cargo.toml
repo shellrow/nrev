@@ -12,7 +12,7 @@ description = "Core library for rushmap(rmap) and rushmap-desktop"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 default-net = "0.17"
-netscan = { version = "0.17", features = ["full"] }
+netscan = { version = "0.19", features = ["full"] }
 tracert = "0.7"
 domainscan = "0.2"
 privilege = "0.3"
@@ -25,4 +25,4 @@ futures = {version = "0.3.21", features = ["executor", "thread-pool"]}
 ipnet = "2.5.0"
 tokio = "1.0"
 async-io = "1.13.0"
-np-listener = "0.6"
+cross-socket = "0.5"
