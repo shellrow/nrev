@@ -6,9 +6,8 @@
 # ./scripts/bundle.sh
 
 bin_name="rmap"
-version="0.1.0"
-os_arch="x86_64-apple-darwin"
-#$os_arch="x86_64-unknown-linux-gnu"
+version="0.3.0"
+os_arch="x86_64-unknown-linux-gnu"
 dist_dir="./dist"
 
 zip_filename="rushmap-$version-$os_arch.zip"
