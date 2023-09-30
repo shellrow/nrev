@@ -281,14 +281,8 @@ pub fn get_port_scan_result(probe_id: String) -> json_models::JsonPortScanResult
         result.ports.push(port_result);
     }
     if host_scan_results.len() > 0 {
-        let os_fingerprint: db_models::OsFingerprint = db_models::OsFingerprint::get(host_scan_results[0].cpe.clone());
-        let mut json_os_fingerprint: json_models::JsonOsInfo = json_models::JsonOsInfo::new();
-        json_os_fingerprint.cpe = os_fingerprint.cpe;
-        json_os_fingerprint.os_name = os_fingerprint.os_name;
-        json_os_fingerprint.os_family = os_fingerprint.os_family;
-        json_os_fingerprint.os_generation = os_fingerprint.os_generation;
-        json_os_fingerprint.device_type = os_fingerprint.device_type;
-        result.os = json_os_fingerprint;
+        result.os_cpe = host_scan_results[0].cpe.clone();
+        result.os_name = host_scan_results[0].os_name.clone();
     }
     result.issued_at = probe_result.issued_at;
     result
