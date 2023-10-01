@@ -7,7 +7,7 @@
     "withGlobalTauri": false
   },
   "package": {
-    "productName": "RushMap Desktop",
+    "productName": "RushMapDesktop",
     "version": "0.4.0"
   },
   "tauri": {
