@@ -1,3 +1,5 @@
+use cross_socket::packet::ethernet::EthernetPacket;
+
 use crate::define;
 use crate::model;
 use crate::ip;
@@ -6,6 +8,15 @@ use std::collections::HashMap;
 pub fn get_oui_detail_map() -> HashMap<String, String> {
     let mut oui_map: HashMap<String, String> = HashMap::new();
     let ds_oui: Vec<model::Oui> = serde_json::from_str(define::OUI_JSON).unwrap_or(vec![]);
+    for oui in ds_oui {
+        oui_map.insert(oui.mac_prefix, oui.vendor_name_detail);
+    }
+    oui_map
+}
+
+pub fn get_vm_oui_map() -> HashMap<String, String> {
+    let mut oui_map: HashMap<String, String> = HashMap::new();
+    let ds_oui: Vec<model::Oui> = serde_json::from_str(define::OUI_VM_JSON).unwrap_or(vec![]);
     for oui in ds_oui {
         oui_map.insert(oui.mac_prefix, oui.vendor_name_detail);
     }
@@ -114,7 +125,11 @@ pub fn get_os_family_fingerprints() -> Vec<model::OsFamilyFingerprint> {
 }
 
 pub fn get_os_family_list() -> Vec<String> {
+    #[cfg(not(target_os = "windows"))]
     let ds_os_families: Vec<&str> = define::OS_FAMILY_TXT.trim().split("\n").collect();
+    #[cfg(target_os = "windows")]
+    let ds_os_families: Vec<&str> = define::OS_FAMILY_TXT.trim().split("\r\n").collect();
+
     let mut os_families: Vec<String> = vec![];
     for r in ds_os_families {
         os_families.push(r.to_string());
@@ -122,9 +137,32 @@ pub fn get_os_family_list() -> Vec<String> {
     os_families
 }
 
+pub fn is_vm_fingerprint(fingerprint: &model::OsFingerprint) -> bool {
+    if fingerprint.os_family == "Player".to_string() && fingerprint.device_type == "specialized".to_string() {
+        return true;
+    }
+    false
+}
+
+pub fn in_vm_network(ether_packet: EthernetPacket) -> bool {
+    let vm_oui_map: HashMap<String, String> = get_vm_oui_map();
+    let mac = ether_packet.source.address();
+    if mac.len() > 16 {
+        let prefix8 = mac[0..8].to_uppercase();
+        vm_oui_map.contains_key(&prefix8)
+    } else {
+        vm_oui_map.contains_key(&mac)
+    }
+}
+
 pub fn verify_os_fingerprint(fingerprint: cross_socket::packet::PacketFrame) -> model::OsFingerprint {
     let os_family_list: Vec<String> = get_os_family_list();
     let os_fingerprints: Vec<model::OsFingerprint> = get_os_fingerprints();
+    let in_vm: bool = if let Some(ether_packet) = fingerprint.ethernet_packet {
+        in_vm_network(ether_packet.clone())
+    } else {
+        false
+    };
     // 1. Select OS Fingerprint that match tcp_window_size and tcp_option_pattern
     let mut matched_fingerprints: Vec<model::OsFingerprint> = vec![];
     for f in &os_fingerprints {
@@ -152,6 +190,17 @@ pub fn verify_os_fingerprint(fingerprint: cross_socket::packet::PacketFrame) -> 
     if matched_fingerprints.len() == 1 {
         return matched_fingerprints[0].clone();
     }else if matched_fingerprints.len() > 1 {
+        // Check VM Fingerprint
+        if in_vm {
+            for f in &matched_fingerprints {
+                if is_vm_fingerprint(f) {
+                    let mut vmf = f.clone();
+                    vmf.cpe = String::from("(Failed to OS Fingerprinting)");
+                    vmf.os_name = format!("{} (Probably in VM Network)", vmf.os_name);
+                    return vmf;
+                }
+            }
+        }
         // Search fingerprint that match general OS Family
         matched_fingerprints.reverse();
         for f in matched_fingerprints {
@@ -187,6 +236,17 @@ pub fn verify_os_fingerprint(fingerprint: cross_socket::packet::PacketFrame) -> 
     if matched_fingerprints.len() == 1 {
         return matched_fingerprints[0].clone();
     }else if matched_fingerprints.len() > 1 {
+        // Check VM Fingerprint
+        if in_vm {
+            for f in &matched_fingerprints {
+                if is_vm_fingerprint(f) {
+                    let mut vmf = f.clone();
+                    vmf.cpe = String::from("(Failed to OS Fingerprinting)");
+                    vmf.os_name = format!("{} (Probably using VM network interface)", vmf.os_name);
+                    return vmf;
+                }
+            }
+        }
         // Search fingerprint that match general OS Family
         matched_fingerprints.reverse();
         for f in matched_fingerprints {
