@@ -1,6 +1,6 @@
 [package]
 name = "rushmap-desktop"
-version = "0.4.0"
+version = "0.5.0"
 description = "RushMapDesktop"
 authors = ["shellrow <shellrow@protonmail.com>"]
 license = "MIT"
@@ -21,7 +21,7 @@ async-io = "1.13.0"
 futures = {version = "0.3.21", features = ["executor", "thread-pool"] }
 rusqlite = { version = "0.28.0", features = ["bundled"] }
 ipnet = "2.5.0"
-rushmap-core = { path = "../../core", version = "0.4.0"}
+rushmap-core = { path = "../../core", version = "0.5.0"}
 
 [features]
 # this feature is used for production builds or when `devPath` points to the filesystem
