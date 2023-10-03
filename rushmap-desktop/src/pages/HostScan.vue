@@ -60,6 +60,7 @@ interface HostOption {
     async_flag: boolean,
     dsn_lookup_flag: boolean,
     os_detection_flag: boolean,
+    randomize_flag: boolean;
     save_flag: boolean,
 };
 
@@ -78,6 +79,7 @@ const option: HostOption = reactive({
   async_flag: true,
   dsn_lookup_flag: true,
   os_detection_flag: true,
+  randomize_flag: true,
   save_flag: false,
 });
 
@@ -152,6 +154,7 @@ const runHostScan = async() => {
         async_flag: option.async_flag,
         dsn_lookup_flag: option.dsn_lookup_flag,
         os_detection_flag: option.os_detection_flag,
+        randomize_flag: option.randomize_flag,
         save_flag: option.save_flag,
     };
     invoke<HostScanResult>('exec_hostscan', { "opt": opt }).then((scan_result) => {
@@ -271,6 +274,7 @@ onUnmounted(() => {
             <el-col :span="12">
                 <el-checkbox v-model="option.async_flag" label="Async" />
                 <el-checkbox v-model="option.dsn_lookup_flag" label="DNS Lookup" />
+                <el-checkbox v-model="option.randomize_flag" label="Randomize Order" />
             </el-col>
         </el-row>
         <!-- Options -->
