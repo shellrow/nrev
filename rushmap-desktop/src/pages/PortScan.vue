@@ -244,6 +244,11 @@ onMounted(() => {
   if (route.params.host) {
     option.target_host = route.params.host.toString();
   }
+  getOsType().then((os_type) => {
+    if (os_type === OS_TYPE_WINDOWS) {
+      option.async_flag = false;
+    }
+  });
 });
 
 onUnmounted(() => {

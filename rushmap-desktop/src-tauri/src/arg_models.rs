@@ -46,7 +46,7 @@ impl PortArg {
         }
         opt.targets.push(target);
 
-        if self.scan_type == PortScanType::TcpConnectScan.arg_name() {
+        if self.scan_type == PortScanType::TcpConnectScan.id() {
             opt.scan_type = PortScanType::TcpConnectScan;
         }else{
             opt.scan_type = PortScanType::TcpSynScan;
