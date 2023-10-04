@@ -47,6 +47,7 @@ interface Option {
   async_flag: boolean;
   service_detection_flag: boolean;
   os_detection_flag: boolean;
+  randomize_flag: boolean;
   save_flag: boolean;
 }
 
@@ -101,6 +102,7 @@ const option: Option = reactive({
     async_flag: true,
     service_detection_flag: true,
     os_detection_flag: true,
+    randomize_flag: true,
     save_flag: false,
 });
 
@@ -164,6 +166,7 @@ const runPortScan = async() => {
     async_flag: option.async_flag,
     service_detection_flag: option.service_detection_flag,
     os_detection_flag: option.os_detection_flag,
+    randomize_flag: option.randomize_flag,
     save_flag: option.save_flag,
   };
   invoke<PortScanResult>('exec_portscan', { "opt": opt }).then((scan_result) => {
@@ -241,6 +244,11 @@ onMounted(() => {
   if (route.params.host) {
     option.target_host = route.params.host.toString();
   }
+  getOsType().then((os_type) => {
+    if (os_type === OS_TYPE_WINDOWS) {
+      option.async_flag = false;
+    }
+  });
 });
 
 onUnmounted(() => {
@@ -303,10 +311,11 @@ onUnmounted(() => {
           </el-form>
         </el-row>
         <el-row :gutter="20">
-            <el-col :span="12">
+            <el-col :span="16">
               <el-checkbox v-model="option.async_flag" label="Async" />
               <el-checkbox v-model="option.service_detection_flag" label="Service Detection" />
               <el-checkbox v-model="option.os_detection_flag" label="OS Detection" />
+              <el-checkbox v-model="option.randomize_flag" label="Randomize Order" />
             </el-col>
         </el-row>
         <!-- Options -->

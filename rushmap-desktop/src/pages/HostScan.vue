@@ -3,7 +3,7 @@ import { ref, reactive, onMounted, onUnmounted, nextTick } from 'vue';
 import { invoke } from '@tauri-apps/api/tauri';
 import { ElMessage } from 'element-plus';
 import { isValidIPaddress, isValidHostname, isIpv4NetworkAddress, isValidIPv6Address } from '../logic/shared';
-import { PROTOCOL_ICMPv4, PROTOCOL_TCP, HOSTSCAN_TYPE_NETWORK, HOSTSCAN_TYPE_CUSTOM_HOSTS } from '../config/define';
+import { PROTOCOL_ICMPv4, PROTOCOL_ICMPv6, PROTOCOL_TCP, PROTOCOL_UDP, HOSTSCAN_TYPE_NETWORK, HOSTSCAN_TYPE_CUSTOM_HOSTS, OS_TYPE_WINDOWS } from '../config/define';
 
 type Host = {
     ip_addr: string,
@@ -60,6 +60,7 @@ interface HostOption {
     async_flag: boolean,
     dsn_lookup_flag: boolean,
     os_detection_flag: boolean,
+    randomize_flag: boolean;
     save_flag: boolean,
 };
 
@@ -78,6 +79,7 @@ const option: HostOption = reactive({
   async_flag: true,
   dsn_lookup_flag: true,
   os_detection_flag: true,
+  randomize_flag: true,
   save_flag: false,
 });
 
@@ -97,6 +99,14 @@ const protocol_options = [
     value: PROTOCOL_TCP,
     label: 'TCP',
   },
+  {
+    value: PROTOCOL_UDP,
+    label: 'UDP',
+  },
+  {
+    value: PROTOCOL_ICMPv6,
+    label: 'ICMPv6',
+  }  
 ];
 
 const scan_type_options = [
@@ -152,6 +162,7 @@ const runHostScan = async() => {
         async_flag: option.async_flag,
         dsn_lookup_flag: option.dsn_lookup_flag,
         os_detection_flag: option.os_detection_flag,
+        randomize_flag: option.randomize_flag,
         save_flag: option.save_flag,
     };
     invoke<HostScanResult>('exec_hostscan', { "opt": opt }).then((scan_result) => {
@@ -168,7 +179,12 @@ const runHostScan = async() => {
     });
 };
 
-const validateInput = () => {
+const getOsType = async() => {
+  const os_type = await invoke('get_os_type');
+  return os_type;
+};
+
+const validateInput = async() => {
     if (option.scan_type == HOSTSCAN_TYPE_NETWORK){
         if (!option.network_address) {
             return "Network Address is required";
@@ -182,20 +198,30 @@ const validateInput = () => {
         if (!isIpv4NetworkAddress(option.network_address) && !isValidIPv6Address(option.network_address)) {
             return "Invalid Network Address";
         }
+        if (option.protocol === PROTOCOL_ICMPv6 || isValidIPv6Address(option.network_address)) {
+            return "Please use Custom Host List Scan instead.";
+        }
+    }
+    const os_type = await getOsType();
+    if (os_type === OS_TYPE_WINDOWS) {
+        if (option.async_flag && option.protocol === PROTOCOL_TCP) {
+            return "Async TCP(SYN) Ping Scan is not supported on Windows";
+        }
     }
     return "OK";
 }
 
 const clickScan = (event: any) => {
-    const inputStatus = validateInput();
-    if (inputStatus != "OK") {
-        ElMessage({
-            message: inputStatus,
-            type: 'warning',
-        })
-        return;
-    }
-    runHostScan();
+    validateInput().then((inputStatus) => {
+        if (inputStatus != "OK") {
+            ElMessage({
+                message: inputStatus,
+                type: 'warning',
+            })
+            return;
+        }
+        runHostScan();
+    });
 };
 
 onMounted(() => {
@@ -271,6 +297,7 @@ onUnmounted(() => {
             <el-col :span="12">
                 <el-checkbox v-model="option.async_flag" label="Async" />
                 <el-checkbox v-model="option.dsn_lookup_flag" label="DNS Lookup" />
+                <el-checkbox v-model="option.randomize_flag" label="Randomize Order" />
             </el-col>
         </el-row>
         <!-- Options -->

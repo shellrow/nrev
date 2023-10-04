@@ -16,7 +16,7 @@ use rushmap_core::define;
 
 // APP information
 pub const CRATE_BIN_NAME: &str = "rmap";
-pub const CRATE_UPDATE_DATE: &str = "2023-10-01";
+pub const CRATE_UPDATE_DATE: &str = "2023-10-03";
 pub const CRATE_REPOSITORY: &str = "https://github.com/shellrow/rushmap";
 
 fn main() {
@@ -61,7 +61,7 @@ fn main() {
                     if opt.async_scan && sys::get_os_type() == "windows" {
                         exit_with_error_message("Async TCP SYN Scan is not supported on Windows");
                     }
-                    if process::privileged() {
+                    if process::privileged() || sys::get_os_type() == "windows" {
                         async_io::block_on(async {
                             handler::handle_port_scan(opt).await;
                         })
@@ -80,19 +80,25 @@ fn main() {
             let opt = parser::parse_host_args(matches).unwrap();
             output::show_host_options(opt.clone());
             match opt.scan_type {
-                option::HostScanType::IcmpPingScan => {
-                    if process::privileged() {
-                        async_io::block_on(async {
-                            handler::handle_host_scan(opt).await;
-                        })
-                    } else {
-                        exit_with_error_message("Requires administrator privilege");
+                option::HostScanType::TcpPingScan => {
+                    if opt.async_scan && sys::get_os_type() == "windows" {
+                        exit_with_error_message("Async TCP(SYN) Ping Scan is not supported on Windows");
                     }
                 },
-                _ => async_io::block_on(async {
-                    handler::handle_host_scan(opt).await;
-                }),
+                _ => {},
             }
+            if sys::get_os_type() == "windows" {
+                if opt.async_scan && !process::privileged() {
+                    exit_with_error_message("Requires administrator privilege");
+                }
+            }else{
+                if !process::privileged() {
+                    exit_with_error_message("Requires administrator privilege");
+                }
+            }
+            async_io::block_on(async {
+                handler::handle_host_scan(opt).await;
+            })
         },
         option::CommandType::Ping => {
             let opt: option::PingOption = parser::parse_ping_args(matches).unwrap();
@@ -229,6 +235,11 @@ fn get_app_settings() -> ArgMatches {
             .takes_value(true)
             .value_name("duration")
             .validator(validator::validate_waittime)
+        )
+        .arg(Arg::new("random")
+            .help("Don't randomize targets. By default, rmap randomizes the order of targets.")
+            .short('R')
+            .long("random")
         )
         .arg(Arg::new("count")
             .help("Set number of requests or pings to be sent")

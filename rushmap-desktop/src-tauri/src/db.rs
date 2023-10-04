@@ -156,7 +156,7 @@ pub fn insert_host_scan_result(conn:&Connection, probe_id: String, scan_result: 
             probe_id,
             host.ip_addr.to_string(),
             host.host_name,
-            if scan_result.protocol == option::IpNextLevelProtocol::ICMPv4 || scan_result.protocol == option::IpNextLevelProtocol::ICMPv6 {0} else { host.services[0].port_number },
+            if scan_result.protocol == option::IpNextLevelProtocol::TCP {host.services[0].port_number} else {0},
             scan_result.protocol.id(),
             host.mac_addr,
             host.vendor_info,

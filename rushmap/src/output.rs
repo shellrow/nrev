@@ -381,6 +381,10 @@ pub fn show_domain_options(opt: DomainScanOption) {
 }
 
 pub fn show_portscan_result(result: PortScanResult) {
+    if result.nodes.len() == 0 {
+        println!("No results found");
+        return;
+    }
     let node = result.nodes[0].clone();
     let mut table = Table::new();
     table.max_column_width = 60;

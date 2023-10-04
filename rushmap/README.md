@@ -4,6 +4,9 @@
 # rushmap(rmap) [![Crates.io][crates-badge]][crates-url]
 High-performance Network Mapper for discovery and management
 
+>Please check the latest version on [GitHub](https://github.com/shellrow/rushmap) .  
+>Publishing to crates.io may be discontinued in the future (if deemed unnecessary due to distribution methods).
+
 ## Features
 - Port Scan
     - Service detection

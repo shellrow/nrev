@@ -1,6 +1,7 @@
 use std::net::IpAddr;
 use std::time::Duration;
 use serde::{Serialize, Deserialize};
+use rand::seq::SliceRandom;
 use crate::validator;
 use rushmap_core::option::{PortScanOption, PortScanType, HostScanOption, HostScanType, PingOption, TracerouteOption, IpNextLevelProtocol, TargetInfo};
 use rushmap_core::db;
@@ -15,6 +16,7 @@ pub struct PortArg {
     async_flag: bool,
     service_detection_flag: bool,
     os_detection_flag: bool,
+    randomize_flag: bool,
     save_flag: bool,
 }
 
@@ -44,7 +46,7 @@ impl PortArg {
         }
         opt.targets.push(target);
 
-        if self.scan_type == PortScanType::TcpConnectScan.arg_name() {
+        if self.scan_type == PortScanType::TcpConnectScan.id() {
             opt.scan_type = PortScanType::TcpConnectScan;
         }else{
             opt.scan_type = PortScanType::TcpSynScan;
@@ -54,7 +56,14 @@ impl PortArg {
             opt.service_detection = true;
         }
         opt.os_detection = self.os_detection_flag;
-        
+        if self.randomize_flag {
+            // Randomize targets by default
+            let mut rng = rand::thread_rng();
+            for target in opt.targets.iter_mut() {
+                target.ports.shuffle(&mut rng);
+            }
+            opt.targets.shuffle(&mut rng);
+        }
         opt
     }
 }
@@ -70,6 +79,7 @@ pub struct HostArg {
     async_flag: bool,
     dsn_lookup_flag: bool,
     os_detection_flag: bool,
+    randomize_flag: bool,
     save_flag: bool,
 }
 
@@ -122,6 +132,11 @@ impl HostArg {
             }else{
                 opt.set_hosts_from_na(self.network_address.clone(), self.prefix_len, Some(self.port));
             }
+        }
+        if self.randomize_flag {
+            // Randomize targets by default
+            let mut rng = rand::thread_rng();
+            opt.targets.shuffle(&mut rng);
         }
         opt
     }
