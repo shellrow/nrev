@@ -6,7 +6,7 @@
 # ./scripts/bundle.sh
 
 bin_name="rmap"
-version="0.6.0"
+version="0.7.0"
 os_arch="x86_64-unknown-linux-gnu"
 dist_dir="./dist"
 

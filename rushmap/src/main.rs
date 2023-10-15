@@ -16,7 +16,7 @@ use rushmap_core::define;
 
 // APP information
 pub const CRATE_BIN_NAME: &str = "rmap";
-pub const CRATE_UPDATE_DATE: &str = "2023-10-03";
+pub const CRATE_UPDATE_DATE: &str = "2023-10-15";
 pub const CRATE_REPOSITORY: &str = "https://github.com/shellrow/rushmap";
 
 fn main() {
@@ -186,7 +186,7 @@ fn get_app_settings() -> ArgMatches {
             .long("source")
             .takes_value(true)
             .value_name("ip_addr")
-            .validator(validator::validate_interface)
+            .validator(validator::validate_ip_address)
         )
         .arg(Arg::new("protocol")
             .help("Specify the protocol")
