@@ -186,7 +186,7 @@ fn get_app_settings() -> ArgMatches {
             .long("source")
             .takes_value(true)
             .value_name("ip_addr")
-            .validator(validator::validate_interface)
+            .validator(validator::validate_ip_address)
         )
         .arg(Arg::new("protocol")
             .help("Specify the protocol")
