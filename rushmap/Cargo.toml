@@ -1,6 +1,6 @@
 [package]
 name = "rushmap"
-version = "0.6.0"
+version = "0.7.0"
 edition = "2021"
 authors = ["shellrow <shellrow@protonmail.com>"]
 description = "High-performance Network Mapper for discovery and management"
@@ -17,7 +17,7 @@ path = "src/main.rs"
 [package.metadata.bundle]
 name = "rushmap"
 identifier = "com.intsigma.rushmap"
-version = "0.5.0"
+version = "0.7.0"
 copyright = "Copyright (c) shellrow 2023. All rights reserved."
 category = "Developer Tool"
 short_description = "High-performance Network Mapper for discovery and management"
@@ -35,4 +35,4 @@ futures = {version = "0.3.21", features = ["executor", "thread-pool"]}
 regex = "1.6.0"
 ipnet = "2.5.0"
 rand = "0.8"
-rushmap-core = { path = "../core", version = "0.6.0"}
+rushmap-core = { path = "../core", version = "0.7.0"}
