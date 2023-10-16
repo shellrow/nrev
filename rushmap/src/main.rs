@@ -70,6 +70,11 @@ fn main() {
                     }
                 },
                 option::PortScanType::TcpConnectScan => {
+                    // rmap's connect scan captures response packets in parallel with connection attempts for speed. 
+                    // This requires administrator privileges on Linux.
+                    if sys::get_os_type() == "linux" && !process::privileged() {
+                        exit_with_error_message("Requires administrator privilege");
+                    }
                     async_io::block_on(async {
                         handler::handle_port_scan(opt).await;
                     })
