@@ -14,15 +14,17 @@ license = "MIT"
 name = "rmap"
 path = "src/main.rs"
 
-[package.metadata.bundle]
-name = "rushmap"
+[package.metadata.packager]
+before-packaging-command = "cargo build --release"
+name = "rmap"
+authors = ["shellrow <shellrow@protonmail.com>"]
 identifier = "com.intsigma.rushmap"
 version = "0.7.0"
-copyright = "Copyright (c) shellrow 2023. All rights reserved."
+license_file = "LICENSE"
 category = "Developer Tool"
-short_description = "High-performance Network Mapper for discovery and management"
+copyright = "Copyright (c) shellrow 2023. All rights reserved."
+description = "High-performance Network Mapper for discovery and management"
 long_description = "The Simple and High-Performance Network Mapper. Optimized for efficient network discovery and management."
-osx_url_schemes = ["com.intsigma.rushmap"]
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
