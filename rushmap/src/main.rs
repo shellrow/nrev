@@ -25,7 +25,6 @@ fn main() {
         show_app_desc();
         std::process::exit(0);
     }
-    //let app = get_app_settings();
     let matches = get_app_settings();
 
     show_banner_with_starttime();
@@ -51,7 +50,6 @@ fn main() {
 
     pb.finish_and_clear();
 
-    //output::show_options(opt.clone());
     match command_type {
         option::CommandType::PortScan => {
             let opt = parser::parse_port_args(matches).unwrap();
