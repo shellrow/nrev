@@ -1,5 +1,5 @@
 // Database
-pub const DB_NAME: &str = "npdb.db";
+pub const DB_NAME: &str = "rmdb.db";
 
 // env
 pub const APP_NAME: &str = env!("CARGO_PKG_NAME");

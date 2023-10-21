@@ -330,7 +330,7 @@ pub fn get_probe_result(target_host: String, probe_types: Vec<String>, start_dat
             probe_type_name: row.get(3).unwrap(), 
             probe_target_addr: row.get(4).unwrap(), 
             probe_target_name: row.get(5).unwrap(), 
-            protocol_id: row.get(6).unwrap(), 
+            protocol_id: row.get::<usize, String>(6).unwrap().to_uppercase(), 
             probe_option: row.get(7).unwrap(), 
             issued_at: row.get(8).unwrap() 
         })
