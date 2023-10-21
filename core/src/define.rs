@@ -20,14 +20,19 @@ pub const DEFAULT_PING_COUNT: u8 = 4;
 pub const DEFAULT_PORTS_TXT: &str = include_str!("../resources/np-default-ports.txt");
 pub const HTTP_PORTS_TXT: &str = include_str!("../resources/np-http-ports.txt");
 pub const HTTPS_PORTS_TXT: &str = include_str!("../resources/np-https-ports.txt");
-pub const OS_FINGERPRINT_JSON: &str = include_str!("../resources/np-os-fingerprint.json");
-pub const OS_FAMILY_FINGERPRINT_JSON: &str = include_str!("../resources/np-os-family-fingerprint.json");
-pub const OS_TTL_JSON: &str = include_str!("../resources/np-os-ttl.json");
+//pub const OS_FINGERPRINT_JSON: &str = include_str!("../resources/np-os-fingerprint.json");
+pub const OS_FINGERPRINT_BIN: &[u8] = include_bytes!("../resources/np-os-fingerprint.bin");
+//pub const OS_FAMILY_FINGERPRINT_JSON: &str = include_str!("../resources/np-os-family-fingerprint.json");
+pub const OS_FAMILY_FINGERPRINT_BIN: &[u8] = include_bytes!("../resources/np-os-family-fingerprint.bin");
+//pub const OS_TTL_JSON: &str = include_str!("../resources/np-os-ttl.json");
+pub const OS_TTL_BIN: &[u8] = include_bytes!("../resources/np-os-ttl.bin");
 pub const OS_FAMILY_TXT: &str = include_str!("../resources/np-os-family.txt");
-pub const OUI_JSON: &str = include_str!("../resources/np-oui.json");
+//pub const OUI_JSON: &str = include_str!("../resources/np-oui.json");
+pub const OUI_BIN: &[u8] = include_bytes!("../resources/np-oui.bin");
 pub const OUI_VM_JSON: &str = include_str!("../resources/np-oui-vm.json");
 pub const SUBDOMAIN_TXT: &str = include_str!("../resources/np-subdomain.txt");
-pub const TCP_SERVICE_JSON: &str = include_str!("../resources/np-tcp-service.json");
+//pub const TCP_SERVICE_JSON: &str = include_str!("../resources/np-tcp-service.json");
+pub const TCP_SERVICE_BIN: &[u8] = include_bytes!("../resources/np-tcp-service.bin");
 pub const WELLKNOWN_PORTS_TXT: &str = include_str!("../resources/np-wellknown-ports.txt");
 
 // MPSC(Multi Producer, Single Consumer) FIFO queue communication messages
