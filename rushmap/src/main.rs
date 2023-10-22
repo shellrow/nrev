@@ -27,7 +27,7 @@ fn main() {
     }
     let matches = get_app_settings();
 
-    if matches.is_present("ifs") {
+    if matches.contains_id("ifs") {
         show_app_desc();
         handler::list_interfaces(matches.contains_id("json"));
         std::process::exit(0);
@@ -40,7 +40,7 @@ fn main() {
 
     // Default is port scan
     let command_type: option::CommandType = 
-    if matches.is_present("port") {
+    if matches.contains_id("port") {
         option::CommandType::PortScan
     } else if matches.contains_id("host") {
         option::CommandType::HostScan
