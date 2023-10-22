@@ -59,12 +59,13 @@ impl NetworkInterface {
         }
     }
     pub fn from_default_net_type(interface: default_net::Interface) -> NetworkInterface {
+        let if_type = if interface.if_type.name() == String::from("Unknown") && interface.is_tun() {String::from("Tunnel")} else {interface.if_type.name()};
         NetworkInterface {
             index: interface.index,
             name: interface.name,
             friendly_name: interface.friendly_name.unwrap_or(String::new()),
             description: interface.description.unwrap_or(String::new()),
-            if_type: interface.if_type.name(),
+            if_type: if_type,
             mac_addr: if let Some(mac_addr) = interface.mac_addr {mac_addr.address()} else {default_net::interface::MacAddr::zero().address()},
             ipv4: interface.ipv4.iter().map(|ip| ip.addr).collect(),
             ipv6: interface.ipv6.iter().map(|ip| ip.addr).collect(),

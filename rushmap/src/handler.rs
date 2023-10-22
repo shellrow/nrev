@@ -212,3 +212,12 @@ pub fn handle_domain_scan(opt: option::DomainScanOption) {
         println!("Probe result saved to: {}", opt.save_file_path);
     }
 }
+
+pub fn list_interfaces(json_output: bool) {
+    let interfaces = rushmap_core::interface::get_interfaces();
+    if json_output {
+        output::show_interfaces_json(interfaces);
+    }else {
+        output::show_interfaces(interfaces);
+    }
+}

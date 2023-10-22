@@ -681,3 +681,36 @@ pub fn save_json(json: String, file_path: String) -> bool {
         Err(_) => false,
     }
 }
+
+pub fn show_interfaces(interfaces: Vec<rushmap_core::interface::NetworkInterface>) {
+    const INDENT: &str = "    ";
+    let mut table = Table::new();
+    table.max_column_width = 60;
+    table.separate_rows = false;
+    table.style = TableStyle::blank();
+    println!();
+    println!("[Network Interfaces]");
+    println!("────────────────────────────────────────");
+    for interface in interfaces {
+        println!("{}:", interface.index);
+        println!("{}Name: {}", INDENT, interface.name);
+        println!("{}Interface Type: {}", INDENT, interface.if_type);
+        println!("{}MAC Address: {}", INDENT, interface.mac_addr);
+        println!("{}IPv4 Address: {:?}", INDENT, interface.ipv4);
+        println!("{}IPv6 Address: {:?}", INDENT, interface.ipv6);
+        println!("{}IPv4 Gateway: {:?}", INDENT, interface.gateway_ipv4);
+        println!("{}IPv6 Gateway: {:?}", INDENT, interface.gateway_ipv6);
+    }
+    println!("{}", table.render());
+}
+
+pub fn show_interfaces_json(interfaces: Vec<rushmap_core::interface::NetworkInterface>) {
+    match serde_json::to_string_pretty(&interfaces) {
+        Ok(json) => {
+            println!("{}", json);
+        }
+        Err(_) => {
+            println!("Serialize Error");
+        }
+    }
+}

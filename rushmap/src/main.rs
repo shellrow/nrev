@@ -27,6 +27,12 @@ fn main() {
     }
     let matches = get_app_settings();
 
+    if matches.is_present("ifs") {
+        show_app_desc();
+        handler::list_interfaces(matches.contains_id("json"));
+        std::process::exit(0);
+    }
+
     show_banner_with_starttime();
 
     let pb = output::get_spinner();
@@ -175,6 +181,11 @@ fn get_app_settings() -> ArgMatches {
             .value_name("target")
             .validator(validator::validate_domain_opt)
         )
+        .arg(Arg::new("ifs")
+            .help("List network interfaces")
+            .long("ifs")
+            .takes_value(false)
+        )
         .arg(Arg::new("interface")
             .help("Specify the network interface")
             .short('i')
@@ -301,7 +312,7 @@ fn get_app_settings() -> ArgMatches {
             .long("acceptinvalidcerts")
             .takes_value(false)
         )
-        .group(ArgGroup::new("mode").args(&["port", "host", "ping", "trace", "domain"]))
+        .group(ArgGroup::new("mode").args(&["port", "host", "ping", "trace", "domain", "ifs"]))
         .setting(AppSettings::DeriveDisplayOrder)
         ;
     app.get_matches()
