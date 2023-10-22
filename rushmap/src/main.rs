@@ -16,7 +16,7 @@ use rushmap_core::define;
 
 // APP information
 pub const CRATE_BIN_NAME: &str = "rmap";
-pub const CRATE_UPDATE_DATE: &str = "2023-10-15";
+pub const CRATE_UPDATE_DATE: &str = "2023-10-22";
 pub const CRATE_REPOSITORY: &str = "https://github.com/shellrow/rushmap";
 
 fn main() {
@@ -25,8 +25,13 @@ fn main() {
         show_app_desc();
         std::process::exit(0);
     }
-    //let app = get_app_settings();
     let matches = get_app_settings();
+
+    if matches.contains_id("ifs") {
+        show_app_desc();
+        handler::list_interfaces(matches.contains_id("json"));
+        std::process::exit(0);
+    }
 
     show_banner_with_starttime();
 
@@ -35,7 +40,7 @@ fn main() {
 
     // Default is port scan
     let command_type: option::CommandType = 
-    if matches.is_present("port") {
+    if matches.contains_id("port") {
         option::CommandType::PortScan
     } else if matches.contains_id("host") {
         option::CommandType::HostScan
@@ -51,7 +56,6 @@ fn main() {
 
     pb.finish_and_clear();
 
-    //output::show_options(opt.clone());
     match command_type {
         option::CommandType::PortScan => {
             let opt = parser::parse_port_args(matches).unwrap();
@@ -70,6 +74,11 @@ fn main() {
                     }
                 },
                 option::PortScanType::TcpConnectScan => {
+                    // rmap's connect scan captures response packets in parallel with connection attempts for speed. 
+                    // This requires administrator privileges on Linux.
+                    if sys::get_os_type() == "linux" && !process::privileged() {
+                        exit_with_error_message("Requires administrator privilege");
+                    }
                     async_io::block_on(async {
                         handler::handle_port_scan(opt).await;
                     })
@@ -171,6 +180,11 @@ fn get_app_settings() -> ArgMatches {
             .takes_value(true)
             .value_name("target")
             .validator(validator::validate_domain_opt)
+        )
+        .arg(Arg::new("ifs")
+            .help("List network interfaces")
+            .long("ifs")
+            .takes_value(false)
         )
         .arg(Arg::new("interface")
             .help("Specify the network interface")
@@ -298,7 +312,7 @@ fn get_app_settings() -> ArgMatches {
             .long("acceptinvalidcerts")
             .takes_value(false)
         )
-        .group(ArgGroup::new("mode").args(&["port", "host", "ping", "trace", "domain"]))
+        .group(ArgGroup::new("mode").args(&["port", "host", "ping", "trace", "domain", "ifs"]))
         .setting(AppSettings::DeriveDisplayOrder)
         ;
     app.get_matches()

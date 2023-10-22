@@ -38,7 +38,12 @@ use commands::{
   disable_user_host,
   delete_user_host,
   get_new_host_id,
-  get_app_info
+  get_app_info,
+  get_interfaces,
+  get_interface_by_index,
+  get_interface_by_name,
+  get_user_setting,
+  set_user_setting
 };
 
 fn main() {
@@ -78,7 +83,12 @@ fn main() {
       disable_user_host,
       delete_user_host,
       get_new_host_id,
-      get_app_info
+      get_app_info,
+      get_interfaces,
+      get_interface_by_index,
+      get_interface_by_name,
+      get_user_setting,
+      set_user_setting
       ])
       .setup(|app| {
         let app_handle = app.handle();

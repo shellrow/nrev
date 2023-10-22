@@ -1,6 +1,7 @@
 use indicatif::{ProgressBar, ProgressStyle};
 use rushmap_core::dns;
 use std::fs;
+use std::net::{Ipv4Addr, Ipv6Addr};
 use term_table::row::Row;
 use term_table::table_cell::{Alignment, TableCell};
 use term_table::{Table, TableStyle};
@@ -679,5 +680,38 @@ pub fn save_json(json: String, file_path: String) -> bool {
     match fs::write(file_path, json) {
         Ok(_) => true,
         Err(_) => false,
+    }
+}
+
+pub fn show_interfaces(interfaces: Vec<rushmap_core::interface::NetworkInterface>) {
+    const INDENT: &str = "    ";
+    let mut table = Table::new();
+    table.max_column_width = 60;
+    table.separate_rows = false;
+    table.style = TableStyle::blank();
+    println!();
+    println!("[Network Interfaces]");
+    println!("────────────────────────────────────────");
+    for interface in interfaces {
+        println!("{}:", interface.index);
+        println!("{}Name: {}", INDENT, interface.name);
+        println!("{}Interface Type: {}", INDENT, interface.if_type);
+        println!("{}MAC Address: {}", INDENT, interface.mac_addr);
+        println!("{}IPv4 Address: {:?}", INDENT, interface.ipv4);
+        println!("{}IPv6 Address: {:?}", INDENT, interface.ipv6);
+        println!("{}IPv4 Gateway: {}", INDENT, if interface.gateway_ipv4 == Ipv4Addr::UNSPECIFIED {String::new()} else {interface.gateway_ipv4.to_string()});
+        println!("{}IPv6 Gateway: {}", INDENT, if interface.gateway_ipv6 == Ipv6Addr::UNSPECIFIED {String::new()} else {interface.gateway_ipv6.to_string()});
+    }
+    println!("{}", table.render());
+}
+
+pub fn show_interfaces_json(interfaces: Vec<rushmap_core::interface::NetworkInterface>) {
+    match serde_json::to_string_pretty(&interfaces) {
+        Ok(json) => {
+            println!("{}", json);
+        }
+        Err(_) => {
+            println!("Serialize Error");
+        }
     }
 }

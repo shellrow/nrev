@@ -258,8 +258,37 @@ pub fn get_probe_stat() -> ProbeStat {
 }
 
 #[tauri::command]
+pub fn get_interfaces() -> Vec<rushmap_core::interface::NetworkInterface> {
+    rushmap_core::interface::get_interfaces()
+}
+
+#[tauri::command]
 pub fn get_default_interface() -> rushmap_core::interface::NetworkInterface {
     rushmap_core::interface::NetworkInterface::default()
+}
+
+#[tauri::command]
+pub fn get_interface_by_index(if_index: u32) -> rushmap_core::interface::NetworkInterface {
+    match rushmap_core::interface::get_interface_by_index(if_index) {
+        Some(iface) => {
+            rushmap_core::interface::NetworkInterface::from_default_net_type(iface) 
+        },
+        None => {
+            rushmap_core::interface::NetworkInterface::new()
+        }
+    }
+}
+
+#[tauri::command]
+pub fn get_interface_by_name(if_name: String) -> rushmap_core::interface::NetworkInterface {
+    match rushmap_core::interface::get_interface_by_name(if_name) {
+        Some(iface) => {
+            rushmap_core::interface::NetworkInterface::from_default_net_type(iface) 
+        },
+        None => {
+            rushmap_core::interface::NetworkInterface::new()
+        }
+    }
 }
 
 #[tauri::command]
@@ -602,4 +631,22 @@ pub fn get_new_host_id(hostname: String) -> String {
 #[tauri::command]
 pub fn get_app_info() -> crate::arg_models::AppInfo {
     crate::arg_models::AppInfo::new()
+}
+
+#[tauri::command]
+pub fn get_user_setting(setting_id: String) -> crate::db_models::UserSetting {
+    crate::db_models::UserSetting::get(setting_id)
+}
+
+#[tauri::command]
+pub fn set_user_setting(setting: crate::db_models::UserSetting) -> u32 {
+    match crate::db::save_user_setting(setting) {
+        Ok(_affected_rows) => {
+            return 0;
+        },
+        Err(e) => {
+            println!("{}", e);
+            return 1;
+        }
+    }
 }

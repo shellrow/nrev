@@ -818,3 +818,37 @@ impl UserProbeData {
         user_probe_data_list
     }
 }
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct SettingItem {
+    pub setting_id: String,
+    pub setting_name: String,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct UserSetting {
+    pub setting_id: String,
+    pub setting_value: String,
+}
+
+impl UserSetting {
+    pub fn new() -> UserSetting {
+        UserSetting { setting_id: String::new(), setting_value: String::new() }
+    }
+    pub fn get(setting_id: String) -> UserSetting {
+        let conn = db::connect_db().unwrap();
+        let mut stmt = conn.prepare("SELECT setting_id, setting_value FROM user_setting WHERE setting_id = ?1").unwrap();
+        let mut rows = stmt.query(params![setting_id]).unwrap();
+        let mut user_setting = UserSetting::new();
+        while let Some(row) = rows.next().unwrap() {
+            user_setting.setting_id = row.get(0).unwrap();
+            user_setting.setting_value = row.get(1).unwrap();
+        }
+        user_setting
+    }
+    pub fn update(&self, tran:&Transaction) -> Result<usize,rusqlite::Error>{
+        let sql: &str = "UPDATE user_setting SET setting_value = ?1 WHERE setting_id = ?2;";
+        let params_vec: &[&dyn rusqlite::ToSql] = params![self.setting_value, self.setting_id];
+        tran.execute(sql, params_vec)
+    }
+}

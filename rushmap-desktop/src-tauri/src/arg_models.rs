@@ -23,6 +23,21 @@ pub struct PortArg {
 impl PortArg {
     pub async fn to_scan_option(&self) -> PortScanOption {
         let mut opt: PortScanOption = PortScanOption::default();
+        // Network Interface
+        let selected_interface_index = crate::db::get_selected_interface_index();
+        if selected_interface_index != 0 && selected_interface_index != opt.interface_index {
+            if let Some(selected_interface) = rushmap_core::interface::get_interface_by_index(selected_interface_index) {
+                opt.interface_index = selected_interface.index;
+                opt.interface_name = selected_interface.name.clone();
+                if selected_interface.ipv4.len() > 0 {
+                    opt.src_ip = IpAddr::V4(selected_interface.ipv4[0].addr);
+                } else {
+                    if selected_interface.ipv6.len() > 0 {
+                        opt.src_ip = IpAddr::V6(selected_interface.ipv6[0].addr);
+                    }
+                }
+            }
+        }
         let ip_addr: IpAddr;
         if validator::is_ipaddr(self.target_host.clone()) {
             ip_addr = self.target_host.parse::<IpAddr>().unwrap();
@@ -86,6 +101,21 @@ pub struct HostArg {
 impl HostArg {
     pub fn to_scan_option(&self) -> HostScanOption {
         let mut opt: HostScanOption = HostScanOption::default();
+        // Network Interface
+        let selected_interface_index = crate::db::get_selected_interface_index();
+        if selected_interface_index != 0 && selected_interface_index != opt.interface_index {
+            if let Some(selected_interface) = rushmap_core::interface::get_interface_by_index(selected_interface_index) {
+                opt.interface_index = selected_interface.index;
+                opt.interface_name = selected_interface.name.clone();
+                if selected_interface.ipv4.len() > 0 {
+                    opt.src_ip = IpAddr::V4(selected_interface.ipv4[0].addr);
+                } else {
+                    if selected_interface.ipv6.len() > 0 {
+                        opt.src_ip = IpAddr::V6(selected_interface.ipv6[0].addr);
+                    }
+                }
+            }
+        }
         if self.protocol.to_lowercase() == IpNextLevelProtocol::ICMPv4.id() {
             opt.protocol = IpNextLevelProtocol::ICMPv4;
             opt.scan_type = HostScanType::IcmpPingScan;

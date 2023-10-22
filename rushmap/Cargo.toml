@@ -1,6 +1,6 @@
 [package]
 name = "rushmap"
-version = "0.7.0"
+version = "0.8.0"
 edition = "2021"
 authors = ["shellrow <shellrow@protonmail.com>"]
 description = "High-performance Network Mapper for discovery and management"
@@ -14,15 +14,17 @@ license = "MIT"
 name = "rmap"
 path = "src/main.rs"
 
-[package.metadata.bundle]
-name = "rushmap"
+[package.metadata.packager]
+before-packaging-command = "cargo build --release"
+name = "rmap"
+authors = ["shellrow <shellrow@protonmail.com>"]
 identifier = "com.intsigma.rushmap"
-version = "0.7.0"
-copyright = "Copyright (c) shellrow 2023. All rights reserved."
+version = "0.8.0"
+license_file = "LICENSE"
 category = "Developer Tool"
-short_description = "High-performance Network Mapper for discovery and management"
+copyright = "Copyright (c) shellrow 2023. All rights reserved."
+description = "High-performance Network Mapper for discovery and management"
 long_description = "The Simple and High-Performance Network Mapper. Optimized for efficient network discovery and management."
-osx_url_schemes = ["com.intsigma.rushmap"]
 
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
@@ -35,4 +37,4 @@ futures = {version = "0.3.21", features = ["executor", "thread-pool"]}
 regex = "1.6.0"
 ipnet = "2.5.0"
 rand = "0.8"
-rushmap-core = { path = "../core", version = "0.7.0"}
+rushmap-core = { path = "../core", version = "0.8.0"}
