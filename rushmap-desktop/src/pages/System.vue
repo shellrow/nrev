@@ -81,7 +81,7 @@ function getNetworkInterfaces() {
 function saveNetworkInterfaceSetting() {
     const setting = {
         setting_id: 'network_interface_index',
-        setting_value: selectedInterfaceIndex.toString(),
+        setting_value: selectedInterfaceIndex.value.toString(),
     };
     invoke<NetworkInterfaceModel>('set_user_setting', { setting }).then((res) => {
         //console.log(res);
