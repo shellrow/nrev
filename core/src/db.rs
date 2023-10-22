@@ -81,20 +81,8 @@ pub fn get_os_family_fingerprints() -> Vec<model::OsFamilyFingerprint> {
     ds_os_fingerprints
 }
 
-#[cfg(not(target_os = "windows"))]
 pub fn get_os_family_list() -> Vec<String> {
     let os_families: Vec<String> = bincode::deserialize(define::OS_FAMILY_BIN).unwrap_or(vec![]);
-    os_families
-}
-
-#[cfg(target_os = "windows")]
-pub fn get_os_family_list() -> Vec<String> {
-    let os_family_txt: String = define::OS_FAMILY_TXT.trim().replace("\r\n", "\n");
-    let ds_os_families: Vec<&str> = os_family_txt.split("\n").collect();
-    let mut os_families: Vec<String> = vec![];
-    for r in ds_os_families {
-        os_families.push(r.to_string());
-    }
     os_families
 }
 
