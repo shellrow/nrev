@@ -7,7 +7,6 @@ use std::collections::HashMap;
 
 pub fn get_oui_detail_map() -> HashMap<String, String> {
     let mut oui_map: HashMap<String, String> = HashMap::new();
-    //let ds_oui: Vec<model::Oui> = serde_json::from_str(define::OUI_JSON).unwrap_or(vec![]);
     let ds_oui: Vec<model::Oui> = bincode::deserialize(define::OUI_BIN).unwrap_or(vec![]);
     for oui in ds_oui {
         oui_map.insert(oui.mac_prefix, oui.vendor_name_detail);
@@ -17,7 +16,7 @@ pub fn get_oui_detail_map() -> HashMap<String, String> {
 
 pub fn get_vm_oui_map() -> HashMap<String, String> {
     let mut oui_map: HashMap<String, String> = HashMap::new();
-    let ds_oui: Vec<model::Oui> = serde_json::from_str(define::OUI_VM_JSON).unwrap_or(vec![]);
+    let ds_oui: Vec<model::Oui> = bincode::deserialize(define::OUI_VM_BIN).unwrap_or(vec![]);
     for oui in ds_oui {
         oui_map.insert(oui.mac_prefix, oui.vendor_name_detail);
     }
@@ -26,7 +25,6 @@ pub fn get_vm_oui_map() -> HashMap<String, String> {
 
 pub fn get_tcp_map() -> HashMap<u16, String> {
     let mut tcp_map: HashMap<u16, String> = HashMap::new();
-    //let ds_tcp_service: Vec<model::TcpService> = serde_json::from_str(define::TCP_SERVICE_JSON).unwrap_or(vec![]);
     let ds_tcp_service: Vec<model::TcpService> = bincode::deserialize(define::TCP_SERVICE_BIN).unwrap_or(vec![]);
     for port in ds_tcp_service {
         tcp_map.insert(port.port, port.service_name);
@@ -35,64 +33,27 @@ pub fn get_tcp_map() -> HashMap<u16, String> {
 }
 
 pub fn get_default_ports() -> Vec<u16> {
-    let ds_default_ports: Vec<&str> = define::DEFAULT_PORTS_TXT.trim().split("\n").collect();
-    let mut default_ports: Vec<u16> = vec![];
-    for r in ds_default_ports {
-        match r.trim_end().parse::<u16>() {
-            Ok(port) => {
-                default_ports.push(port);
-            }
-            Err(_) => {}
-        }
-    }
+    let default_ports: Vec<u16> = bincode::deserialize(define::DEFAULT_PORTS_BIN).unwrap_or(vec![]);
     default_ports
 }
 
 pub fn get_wellknown_ports() -> Vec<u16> {
-    let ds_wellknown_ports: Vec<&str> = define::WELLKNOWN_PORTS_TXT.trim().split("\n").collect();
-    let mut wellknown_ports: Vec<u16> = vec![];
-    for r in ds_wellknown_ports {
-        match r.trim_end().parse::<u16>() {
-            Ok(port) => {
-                wellknown_ports.push(port);
-            }
-            Err(_) => {}
-        }
-    }
+    let wellknown_ports: Vec<u16> = bincode::deserialize(define::WELLKNOWN_PORTS_BIN).unwrap_or(vec![]);
     wellknown_ports
 }
 
 pub fn get_http_ports() -> Vec<u16> {
-    let ds_http_ports: Vec<&str> = define::HTTP_PORTS_TXT.trim().split("\n").collect();
-    let mut http_ports: Vec<u16> = vec![];
-    for r in ds_http_ports {
-        match r.trim_end().parse::<u16>() {
-            Ok(port) => {
-                http_ports.push(port);
-            }
-            Err(_) => {}
-        }
-    }
+    let http_ports: Vec<u16> = bincode::deserialize(define::HTTP_PORTS_BIN).unwrap_or(vec![]);
     http_ports
 }
 
 pub fn get_https_ports() -> Vec<u16> {
-    let ds_https_ports: Vec<&str> = define::HTTPS_PORTS_TXT.trim().split("\n").collect();
-    let mut https_ports: Vec<u16> = vec![];
-    for r in ds_https_ports {
-        match r.trim_end().parse::<u16>() {
-            Ok(port) => {
-                https_ports.push(port);
-            }
-            Err(_) => {}
-        }
-    }
+    let https_ports: Vec<u16> = bincode::deserialize(define::HTTPS_PORTS_BIN).unwrap_or(vec![]);
     https_ports
 }
 
 pub fn get_os_ttl_map() -> HashMap<u8, String> {
     let mut os_ttl_map: HashMap<u8, String> = HashMap::new();
-    //let ds_os_ttl: Vec<model::OsTtl> = serde_json::from_str(define::OS_TTL_JSON).unwrap_or(vec![]);
     let ds_os_ttl: Vec<model::OsTtl> = bincode::deserialize(define::OS_TTL_BIN).unwrap_or(vec![]);
     for os_ttl in ds_os_ttl {
         os_ttl_map.insert(os_ttl.initial_ttl, os_ttl.os_description);
@@ -101,39 +62,28 @@ pub fn get_os_ttl_map() -> HashMap<u8, String> {
 }
 
 pub fn get_os_ttl_list() -> Vec<model::OsTtl> {
-    //let ds_os_ttl: Vec<model::OsTtl> = serde_json::from_str(define::OS_TTL_JSON).unwrap_or(vec![]);
     let ds_os_ttl: Vec<model::OsTtl> = bincode::deserialize(define::OS_TTL_BIN).unwrap_or(vec![]);
     ds_os_ttl
 }
 
 pub fn get_subdomain() -> Vec<String> {
-    let ds_subdomain: Vec<&str> = define::SUBDOMAIN_TXT.trim().split("\n").collect();
-    let mut subdomain: Vec<String> = vec![];
-    for r in ds_subdomain {
-        subdomain.push(r.to_string());
-    }
+    let subdomain: Vec<String> = bincode::deserialize(define::SUBDOMAIN_BIN).unwrap_or(vec![]);
     subdomain
 }
 
 pub fn get_os_fingerprints() -> Vec<model::OsFingerprint> {
-    //let ds_os_fingerprints: Vec<model::OsFingerprint> = serde_json::from_str(define::OS_FINGERPRINT_JSON).unwrap_or(vec![]);
     let ds_os_fingerprints: Vec<model::OsFingerprint> = bincode::deserialize(define::OS_FINGERPRINT_BIN).unwrap_or(vec![]);
     ds_os_fingerprints
 }
 
 pub fn get_os_family_fingerprints() -> Vec<model::OsFamilyFingerprint> {
-    //let ds_os_fingerprints: Vec<model::OsFamilyFingerprint> = serde_json::from_str(define::OS_FAMILY_FINGERPRINT_JSON).unwrap_or(vec![]);
     let ds_os_fingerprints: Vec<model::OsFamilyFingerprint> = bincode::deserialize(define::OS_FAMILY_FINGERPRINT_BIN).unwrap_or(vec![]);
     ds_os_fingerprints
 }
 
 #[cfg(not(target_os = "windows"))]
 pub fn get_os_family_list() -> Vec<String> {
-    let ds_os_families: Vec<&str> = define::OS_FAMILY_TXT.trim().split("\n").collect();
-    let mut os_families: Vec<String> = vec![];
-    for r in ds_os_families {
-        os_families.push(r.to_string());
-    }
+    let os_families: Vec<String> = bincode::deserialize(define::OS_FAMILY_BIN).unwrap_or(vec![]);
     os_families
 }
 
