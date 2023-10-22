@@ -1,6 +1,7 @@
 use indicatif::{ProgressBar, ProgressStyle};
 use rushmap_core::dns;
 use std::fs;
+use std::net::{Ipv4Addr, Ipv6Addr};
 use term_table::row::Row;
 use term_table::table_cell::{Alignment, TableCell};
 use term_table::{Table, TableStyle};
@@ -698,8 +699,8 @@ pub fn show_interfaces(interfaces: Vec<rushmap_core::interface::NetworkInterface
         println!("{}MAC Address: {}", INDENT, interface.mac_addr);
         println!("{}IPv4 Address: {:?}", INDENT, interface.ipv4);
         println!("{}IPv6 Address: {:?}", INDENT, interface.ipv6);
-        println!("{}IPv4 Gateway: {:?}", INDENT, interface.gateway_ipv4);
-        println!("{}IPv6 Gateway: {:?}", INDENT, interface.gateway_ipv6);
+        println!("{}IPv4 Gateway: {}", INDENT, if interface.gateway_ipv4 == Ipv4Addr::UNSPECIFIED {String::new()} else {interface.gateway_ipv4.to_string()});
+        println!("{}IPv6 Gateway: {}", INDENT, if interface.gateway_ipv6 == Ipv6Addr::UNSPECIFIED {String::new()} else {interface.gateway_ipv6.to_string()});
     }
     println!("{}", table.render());
 }
