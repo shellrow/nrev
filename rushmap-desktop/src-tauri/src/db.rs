@@ -1019,3 +1019,15 @@ pub fn save_user_setting(user_setting: UserSetting) -> Result<usize, rusqlite::E
         }
     }
 }
+
+pub fn get_selected_interface_index() -> u32 {
+    let interface_setting = UserSetting::get("network_interface_index".to_string());
+    match interface_setting.setting_value.parse::<u32>() {
+        Ok(index) => {
+            return index;
+        },
+        Err(_) => {
+            return 0;
+        }
+    }
+}

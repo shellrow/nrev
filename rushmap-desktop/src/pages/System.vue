@@ -33,6 +33,12 @@ type NetworkInterfaceModel = {
     gateway_ipv6: string;
 }
 
+type UserSetting = {
+    setting_id: string;
+    setting_value: string;
+}
+
+const defaultInterfaceIndex = ref<number>(0);
 const selectedInterfaceIndex = ref<number>(0);
 const interfaceOptions = ref<NetworkInterfaceModel[]>([]);
 
@@ -62,12 +68,18 @@ const getIpv6Csv = () => {
 
 function reloadSysInfo() {
     getNetworkInfo();
-    getNetworkInterfaces();
+    setNetworkInterfaces();
 }
 
-function getNetworkInterfaces() {
+function setNetworkInterfaces() {
     invoke<NetworkInterfaceModel[]>('get_interfaces').then((res) => {
         interfaceOptions.value = res;
+        // if default interface, set interface name to <if_name>(Default) 
+        interfaceOptions.value.forEach((item) => {
+            if (item.index === defaultInterfaceIndex.value) {
+                item.name = item.name + ' (Default)';
+            }
+        });
         if (selectedInterfaceIndex.value === 0) {
             selectedInterfaceIndex.value = network_interface.index;
         }
@@ -79,7 +91,7 @@ function getNetworkInterfaces() {
 }
 
 function saveNetworkInterfaceSetting() {
-    const setting = {
+    const setting: UserSetting = {
         setting_id: 'network_interface_index',
         setting_value: selectedInterfaceIndex.value.toString(),
     };
@@ -92,7 +104,7 @@ function saveNetworkInterfaceSetting() {
     });
 }
 
-function getNetworkInterface(interface_index: number) {
+function selectNetworkInterface(interface_index: number) {
     invoke<NetworkInterfaceModel>('get_interface_by_index', { ifIndex: interface_index }).then((res) => {
         network_interface.index = res.index;
         network_interface.name = res.name;
@@ -115,7 +127,16 @@ function getNetworkInterface(interface_index: number) {
     });
 }
 
-function getNetworkInfo() {
+function setDefaultInterfaceIndex() {
+    invoke<NetworkInterfaceModel>('get_default_interface').then((res) => {
+        defaultInterfaceIndex.value = res.index;
+    }).catch((e) => {
+        console.log(e);
+    }).finally(() => {
+    });
+}
+
+function selectDefaultNetworkInterface() {
     invoke<NetworkInterfaceModel>('get_default_interface').then((res) => {
         network_interface.index = res.index;
         network_interface.name = res.name;
@@ -138,8 +159,25 @@ function getNetworkInfo() {
     });
 }
 
+function getNetworkInfo() {
+    setDefaultInterfaceIndex();
+    const setting_id = 'network_interface_index';
+    invoke<UserSetting>('get_user_setting', { settingId: setting_id }).then((res) => {
+        if (res.setting_value === '' || res.setting_value === '0') {
+            selectDefaultNetworkInterface();
+        } else {
+            selectedInterfaceIndex.value = parseInt(res.setting_value);
+            selectNetworkInterface(selectedInterfaceIndex.value);
+        }
+    }).catch((e) => {
+        console.log(e);
+    }).finally(() => {
+        
+    });
+}
+
 const setNetworkInterface = () => {
-    getNetworkInterface(selectedInterfaceIndex.value);
+    selectNetworkInterface(selectedInterfaceIndex.value);
 }
 
 onMounted(() => {
