@@ -16,7 +16,7 @@ use rushmap_core::define;
 
 // APP information
 pub const CRATE_BIN_NAME: &str = "rmap";
-pub const CRATE_UPDATE_DATE: &str = "2023-10-15";
+pub const CRATE_UPDATE_DATE: &str = "2023-10-22";
 pub const CRATE_REPOSITORY: &str = "https://github.com/shellrow/rushmap";
 
 fn main() {
