@@ -174,28 +174,53 @@ pub fn verify_os_fingerprint(fingerprint: cross_socket::packet::PacketFrame) -> 
     } else {
         false
     };
+    // 0. Check TTL
+    let os_ttl_list: Vec<model::OsTtl> = get_os_ttl_list();
+    let initial_ttl = if let Some(ipv4_packet) = fingerprint.ipv4_packet {
+        ip::guess_initial_ttl(ipv4_packet.ttl)
+    } else {
+        if let Some(ipv6_packet) = fingerprint.ipv6_packet {
+            ip::guess_initial_ttl(ipv6_packet.hop_limit)
+        } else {
+            0
+        }
+    };
+    let mut tcp_window_size = 0;
+    let mut tcp_options: Vec<String> = vec![];
+    if let Some(ref tcp_fingerprint) = fingerprint.tcp_packet {
+        tcp_window_size = tcp_fingerprint.window;
+        for option in &tcp_fingerprint.options {
+            tcp_options.push(option.kind.name());
+        }
+    }
+    let tco_option_pattern = tcp_options.join("-");
+    let mut os_ttl_info: model::OsTtl = model::OsTtl {
+        initial_ttl: initial_ttl,
+        os_description: String::new(),
+        os_family: String::new(),
+    };
+    for os_ttl in os_ttl_list {
+        if os_ttl.initial_ttl == initial_ttl {
+            os_ttl_info.initial_ttl = os_ttl.initial_ttl;
+            os_ttl_info.os_description = os_ttl.os_description;
+            os_ttl_info.os_family = os_ttl.os_family;
+        }
+    }
     // 1. Select OS Fingerprint that match tcp_window_size and tcp_option_pattern
     let mut matched_fingerprints: Vec<model::OsFingerprint> = vec![];
     for f in &os_fingerprints {
         let mut window_size_match: bool = false;
         let mut option_pattern_match: bool = false;
-        if let Some(ref tcp_fingerprint) = fingerprint.tcp_packet {
-            if f.tcp_window_sizes.contains(&tcp_fingerprint.window) {
-                window_size_match = true;
+        if f.tcp_window_sizes.contains(&tcp_window_size) {
+            window_size_match = true;
+        }
+        for option_pattern in &f.tcp_option_patterns {
+            if option_pattern == &tco_option_pattern {
+                option_pattern_match = true;
             }
-            //let option_patterns: Vec<String> = f.tcp_option_pattern.split("|").map(|s| s.to_string()).collect();
-            let mut options: Vec<String> = vec![];
-            for option in &tcp_fingerprint.options {
-                options.push(option.kind.name());
-            }
-            for option_pattern in &f.tcp_option_patterns {
-                if option_pattern == &options.join("-") {
-                    option_pattern_match = true;
-                }
-            }
-            if window_size_match && option_pattern_match {
-                matched_fingerprints.push(f.clone());
-            }
+        }
+        if window_size_match && option_pattern_match {
+            matched_fingerprints.push(f.clone());
         }
     }
     if matched_fingerprints.len() == 1 {
@@ -214,6 +239,11 @@ pub fn verify_os_fingerprint(fingerprint: cross_socket::packet::PacketFrame) -> 
         }
         // Search fingerprint that match general OS Family
         matched_fingerprints.reverse();
+        for f in &matched_fingerprints {
+            if os_ttl_info.os_family == f.os_family.to_lowercase() {
+                return f.clone();
+            }
+        }
         for f in matched_fingerprints {
             if os_family_list.contains(&f.os_family) {
                 return f;
@@ -225,25 +255,18 @@ pub fn verify_os_fingerprint(fingerprint: cross_socket::packet::PacketFrame) -> 
     for f in os_fingerprints {
         let mut window_size_match: bool = false;
         let mut option_pattern_match: bool = false;
-        if let Some(ref tcp_fingerprint) = fingerprint.tcp_packet {
-            for window_size in &f.tcp_window_sizes {
-                if tcp_fingerprint.window - 100 < *window_size && *window_size < tcp_fingerprint.window + 100 {
-                    window_size_match = true;
-                }
+        for window_size in &f.tcp_window_sizes {
+            if tcp_window_size - 100 < *window_size && *window_size < tcp_window_size + 100 {
+                window_size_match = true;
             }
-            //let option_patterns: Vec<String> = f.tcp_option_pattern.split("|").map(|s| s.to_string()).collect();
-            let mut options: Vec<String> = vec![];
-            for option in &tcp_fingerprint.options {
-                options.push(option.kind.name());
+        }
+        for option_pattern in &f.tcp_option_patterns {
+            if option_pattern == &tco_option_pattern {
+                option_pattern_match = true;
             }
-            for option_pattern in &f.tcp_option_patterns {
-                if option_pattern == &options.join("-") {
-                    option_pattern_match = true;
-                }
-            }
-            if window_size_match && option_pattern_match {
-                matched_fingerprints.push(f.clone());
-            }
+        }
+        if window_size_match && option_pattern_match {
+            matched_fingerprints.push(f.clone());
         }
     }
     if matched_fingerprints.len() == 1 {
@@ -262,6 +285,11 @@ pub fn verify_os_fingerprint(fingerprint: cross_socket::packet::PacketFrame) -> 
         }
         // Search fingerprint that match general OS Family
         matched_fingerprints.reverse();
+        for f in &matched_fingerprints {
+            if os_ttl_info.os_family == f.os_family.to_lowercase() {
+                return f.clone();
+            }
+        }
         for f in matched_fingerprints {
             if os_family_list.contains(&f.os_family) {
                 return f;
@@ -269,37 +297,14 @@ pub fn verify_os_fingerprint(fingerprint: cross_socket::packet::PacketFrame) -> 
         }
     }
     // 3. from TTL
-    let os_ttl_list: Vec<model::OsTtl> = get_os_ttl_list();
-    let initial_ttl = if let Some(ipv4_packet) = fingerprint.ipv4_packet {
-        ip::guess_initial_ttl(ipv4_packet.ttl)
-    } else {
-        if let Some(ipv6_packet) = fingerprint.ipv6_packet {
-            ip::guess_initial_ttl(ipv6_packet.hop_limit)
-        } else {
-            0
-        }
+    return model::OsFingerprint {
+        cpe: String::from("(Failed to OS Fingerprinting)"),
+        os_name: os_ttl_info.os_description,
+        os_vendor: String::new(),
+        os_family: os_ttl_info.os_family,
+        os_generation: String::new(),
+        device_type: String::new(),
+        tcp_window_sizes: vec![tcp_window_size],
+        tcp_option_patterns: vec![tco_option_pattern],
     };
-    let mut window_size = 0;
-    let mut options: Vec<String> = vec![];
-    if let Some(ref tcp_fingerprint) = fingerprint.tcp_packet {
-        window_size = tcp_fingerprint.window;
-        for option in &tcp_fingerprint.options {
-            options.push(option.kind.name());
-        }
-    }
-    for os_ttl in os_ttl_list {
-        if os_ttl.initial_ttl == initial_ttl {
-            return model::OsFingerprint {
-                cpe: String::from("(Failed to OS Fingerprinting)"),
-                os_name: os_ttl.os_description,
-                os_vendor: String::new(),
-                os_family: os_ttl.os_family,
-                os_generation: String::new(),
-                device_type: String::new(),
-                tcp_window_sizes: vec![window_size],
-                tcp_option_patterns: vec![options.join("-")],
-            };
-        }
-    }
-    model::OsFingerprint::new()
 }
