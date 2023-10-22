@@ -2,7 +2,7 @@ use std::{env, vec, fs};
 use std::path::{PathBuf, Path};
 use rusqlite::{Connection, Result, params, Transaction, Statement, Rows};
 use crate::define;
-use crate::db_models::{ProbeLog, DataSetItem, MapInfo, MapNode, MapEdge, MapLayout, MapData, ProbeStat, UserProbeData, UserHostGroup, UserHostTag, UserHost, UserService};
+use crate::db_models::{ProbeLog, DataSetItem, MapInfo, MapNode, MapEdge, MapLayout, MapData, ProbeStat, UserProbeData, UserHostGroup, UserHostTag, UserHost, UserService, UserSetting};
 use rushmap_core::option;
 use rushmap_core::result::{PortScanResult, HostScanResult, PingResult, TracerouteResult, PingResponse};
 
@@ -976,4 +976,46 @@ pub fn get_valid_user_hosts() -> Vec<UserHost> {
         user_hosts.push(user_host.unwrap());
     }
     user_hosts
+}
+
+pub fn save_user_setting(user_setting: UserSetting) -> Result<usize, rusqlite::Error> {
+    let mut affected_row_count: usize = 0;
+    let mut conn = crate::db::connect_db().unwrap();
+    let tran = conn.transaction().unwrap();
+    /* match user_setting.delete(&tran) {
+        Ok(count) => {
+            affected_row_count += count;
+        },
+        Err(e) => {
+            println!("Error: {}", e);
+            return Err(e);
+        }
+    }
+    match user_setting.insert(&tran) {
+        Ok(count) => {
+            affected_row_count += count;
+        },
+        Err(e) => {
+            println!("Error: {}", e);
+            return Err(e);
+        }
+    } */
+    match user_setting.update(&tran) {
+        Ok(count) => {
+            affected_row_count += count;
+        },
+        Err(e) => {
+            println!("Error: {}", e);
+            return Err(e);
+        }
+    }
+    match tran.commit() {
+        Ok(_) => {
+            return Ok(affected_row_count);
+        },
+        Err(e) => {
+            println!("Error: {}", e);
+            return Err(e);
+        }
+    }
 }

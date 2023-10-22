@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, onMounted, onUnmounted } from 'vue';
+import { ref, reactive, onMounted, onUnmounted } from 'vue';
 import { invoke } from '@tauri-apps/api/tauri';
 import { Refresh } from '@element-plus/icons-vue';
 
@@ -33,6 +33,9 @@ type NetworkInterfaceModel = {
     gateway_ipv6: string;
 }
 
+const selectedInterfaceIndex = ref<number>(0);
+const interfaceOptions = ref<NetworkInterfaceModel[]>([]);
+
 const network_interface: NetworkInterface = reactive({
     index: 0,
     name: '',
@@ -59,6 +62,57 @@ const getIpv6Csv = () => {
 
 function reloadSysInfo() {
     getNetworkInfo();
+    getNetworkInterfaces();
+}
+
+function getNetworkInterfaces() {
+    invoke<NetworkInterfaceModel[]>('get_interfaces').then((res) => {
+        interfaceOptions.value = res;
+        if (selectedInterfaceIndex.value === 0) {
+            selectedInterfaceIndex.value = network_interface.index;
+        }
+    }).catch((e) => {
+        console.log(e);
+    }).finally(() => {
+        
+    });
+}
+
+function saveNetworkInterfaceSetting() {
+    const setting = {
+        setting_id: 'network_interface_index',
+        setting_value: selectedInterfaceIndex.toString(),
+    };
+    invoke<NetworkInterfaceModel>('set_user_setting', { setting }).then((res) => {
+        //console.log(res);
+    }).catch((e) => {
+        console.log(e);
+    }).finally(() => {
+        
+    });
+}
+
+function getNetworkInterface(interface_index: number) {
+    invoke<NetworkInterfaceModel>('get_interface_by_index', { ifIndex: interface_index }).then((res) => {
+        network_interface.index = res.index;
+        network_interface.name = res.name;
+        network_interface.friendly_name = res.friendly_name;
+        network_interface.description = res.description;
+        network_interface.if_type = res.if_type;
+        network_interface.mac_addr = res.mac_addr;
+        network_interface.ipv4 = res.ipv4;
+        network_interface.ipv6 = res.ipv6;
+        network_interface.gateway_mac_addr = res.gateway_mac_addr;
+        network_interface.gateway_ipv4 = res.gateway_ipv4;
+
+        //selectedInterfaceIndex.value = network_interface.index;
+        saveNetworkInterfaceSetting();
+
+    }).catch((e) => {
+        console.log(e);
+    }).finally(() => {
+        
+    });
 }
 
 function getNetworkInfo() {
@@ -73,11 +127,19 @@ function getNetworkInfo() {
         network_interface.ipv6 = res.ipv6;
         network_interface.gateway_mac_addr = res.gateway_mac_addr;
         network_interface.gateway_ipv4 = res.gateway_ipv4;
+
+        selectedInterfaceIndex.value = network_interface.index;
+        saveNetworkInterfaceSetting();
+
     }).catch((e) => {
         console.log(e);
     }).finally(() => {
-        
+
     });
+}
+
+const setNetworkInterface = () => {
+    getNetworkInterface(selectedInterfaceIndex.value);
 }
 
 onMounted(() => {
@@ -112,7 +174,7 @@ onUnmounted(() => {
         <!-- Header -->
         <template #header>
             <div class="card-header">
-                <span>Network Interface</span>
+                <span>Network</span>
                 <div>
                     <el-button type="primary" plain @click="reloadSysInfo" size="small"><el-icon><Refresh /></el-icon></el-button>
                 </div>
@@ -120,6 +182,16 @@ onUnmounted(() => {
         </template>
         <!-- Header -->
         <!-- Content -->
+        <div class="card-header mb-1">
+            <span>Interface</span>
+            <el-select v-model="selectedInterfaceIndex" placeholder="Select" size="small" @change="setNetworkInterface">
+                <el-option v-for="item in interfaceOptions"
+                    :key="item.index"
+                    :label="item.name"
+                    :value="item.index"
+                />
+            </el-select>
+        </div>
         <el-descriptions
         class="margin-top"
         title=""
