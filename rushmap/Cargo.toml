@@ -5,6 +5,7 @@ edition = "2021"
 authors = ["shellrow <shellrow@protonmail.com>"]
 description = "High-performance Network Mapper for discovery and management"
 repository = "https://github.com/shellrow/rushmap"
+documentation = "https://github.com/shellrow/rushmap"
 readme = "README.md"
 keywords = ["network","security","scan","cli","cross-platform"]
 categories = ["network-programming"]

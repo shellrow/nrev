@@ -5,6 +5,7 @@ description = "RushMapDesktop"
 authors = ["shellrow <shellrow@protonmail.com>"]
 license = "MIT"
 repository = "https://github.com/shellrow/rushmap"
+documentation = "https://github.com/shellrow/rushmap"
 edition = "2021"
 keywords = ["network", "security", "scan", "gui", "cross-platform"]
 categories = ["network-programming"]
