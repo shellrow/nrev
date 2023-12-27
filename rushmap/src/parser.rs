@@ -31,10 +31,8 @@ pub fn parse_port_args(matches: ArgMatches) -> Result<PortScanOption, String>  {
     } else {
         match dns::lookup_host_name(host.clone()) {
             Some(ip) => {
-                if ip.is_ipv4() {
-                    target_info.ip_addr = ip;
-                    target_info.host_name = host;
-                }
+                target_info.ip_addr = ip;
+                target_info.host_name = host;
             }
             None => {}
         }
@@ -75,7 +73,7 @@ pub fn parse_port_args(matches: ArgMatches) -> Result<PortScanOption, String>  {
         }
     }
     let mut opt: PortScanOption = PortScanOption::default(target_info.ip_addr);
-    opt.targets.push(target_info);
+    opt.targets.push(target_info.clone());
 
     // Flags
     if matches.contains_id("interface") {
@@ -83,11 +81,24 @@ pub fn parse_port_args(matches: ArgMatches) -> Result<PortScanOption, String>  {
         if let Some(interface) = interface::get_interface_by_name(v_interface) {
             opt.interface_index = interface.index;
             opt.interface_name = interface.name;
-            if interface.ipv4.len() > 0 {
-                opt.src_ip = IpAddr::V4(interface.ipv4[0].addr);
-            } else {
-                if interface.ipv6.len() > 0 {
-                    opt.src_ip = IpAddr::V6(interface.ipv6[0].addr);
+            match target_info.ip_addr {
+                IpAddr::V4(_) => {
+                    if interface.ipv4.len() > 0 {
+                        opt.src_ip = IpAddr::V4(interface.ipv4[0].addr);
+                    }
+                }
+                IpAddr::V6(_) => {
+                    for ip in interface.ipv6 {
+                        if rushmap_core::ip::is_global_addr(target_info.ip_addr) {
+                            if xenet::net::ipnet::is_global_ipv6(&ip.addr) {
+                                opt.src_ip = IpAddr::V6(ip.addr);
+                                break;
+                            }
+                        }else {
+                            opt.src_ip = IpAddr::V6(ip.addr);
+                            break;
+                        }
+                    }
                 }
             }
         }
@@ -470,6 +481,7 @@ pub fn parse_trace_args(matches: ArgMatches) -> Result<TracerouteOption, String>
     }
 
     let mut opt: TracerouteOption = TracerouteOption::default(target.ip_addr);
+    opt.target = target;
     opt.protocol = IpNextLevelProtocol::Udp;
     
     // Flags

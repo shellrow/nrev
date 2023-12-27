@@ -504,7 +504,7 @@ impl PingOption {
             count: define::DEFAULT_PING_COUNT,
             timeout: Duration::from_millis(define::DEFAULT_TIMEOUT),
             wait_time: Duration::from_millis(define::DEFAULT_WAIT_TIME),
-            send_rate: Duration::from_millis(define::DEFAULT_SEND_RATE),
+            send_rate: Duration::from_secs(1),
             save_file_path: String::new(),
             json_output: false,
         }
@@ -542,7 +542,7 @@ impl PingOption {
             count: count,
             timeout: Duration::from_millis(define::DEFAULT_TIMEOUT),
             wait_time: Duration::from_millis(define::DEFAULT_WAIT_TIME),
-            send_rate: Duration::from_millis(define::DEFAULT_SEND_RATE),
+            send_rate: Duration::from_secs(1),
             save_file_path: String::new(),
             json_output: false,
         }
@@ -577,7 +577,7 @@ impl TracerouteOption {
             max_hop: define::DEFAULT_MAX_HOP,
             timeout: Duration::from_millis(define::DEFAULT_TIMEOUT),
             wait_time: Duration::from_millis(define::DEFAULT_WAIT_TIME),
-            send_rate: Duration::from_millis(define::DEFAULT_SEND_RATE),
+            send_rate: Duration::from_secs(1),
             save_file_path: String::new(),
             json_output: false,
         }
@@ -611,11 +611,11 @@ impl TracerouteOption {
             src_ip: src_ip,
             src_port: define::DEFAULT_SRC_PORT,
             target: TargetInfo::new(),
-            protocol: if src_ip.is_ipv4() { IpNextLevelProtocol::Icmp } else { IpNextLevelProtocol::Icmpv6 },
+            protocol: IpNextLevelProtocol::Udp,
             max_hop: define::DEFAULT_MAX_HOP,
             timeout: Duration::from_millis(define::DEFAULT_TIMEOUT),
             wait_time: Duration::from_millis(define::DEFAULT_WAIT_TIME),
-            send_rate: Duration::from_millis(define::DEFAULT_SEND_RATE),
+            send_rate: Duration::from_secs(1),
             save_file_path: String::new(),
             json_output: false,
         }

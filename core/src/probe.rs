@@ -3,6 +3,8 @@ use std::net::IpAddr;
 use std::time::Instant;
 use std::sync::mpsc;
 use std::thread;
+use default_net::Interface;
+use default_net::mac::MacAddr;
 use xenet::packet::ip::IpNextLevelProtocol;
 use netprobe::fp::Fingerprint;
 use netprobe::fp::FingerprintType;
@@ -475,19 +477,69 @@ pub async fn run_node_scan(
     return scan_result;
 }
 
-pub fn run_ping(opt: option::PingOption, msg_tx: &mpsc::Sender<String>) -> result::PingResult {
+pub fn run_ping(opt: option::PingOption, msg_tx: &mpsc::Sender<String>) -> Result<result::PingResult, String> {
     let mut ping_result = result::PingResult::new();
     ping_result.probe_id = sys::get_probe_id();
     ping_result.command_type = option::CommandType::Ping;
     ping_result.protocol = opt.protocol;
     ping_result.start_time = sys::get_sysdate();
-    let port: Option<u16> = if opt.target.ports.len() > 0 {
+    // Probe setting
+    let interface: Interface = match crate::interface::get_interface_by_index(opt.interface_index) {
+        Some(interface) => interface,
+        None => {
+            return Err(String::from("Interface not found."));
+        },
+    };
+    let src_ip: IpAddr = match opt.target.ip_addr {
+        IpAddr::V4(_) => match crate::interface::get_interface_ipv4(&interface) {
+            Some(ip) => ip,
+            None => return Err(String::from("IPv4 address not found on default interface.")),
+        },
+        IpAddr::V6(ipv6_addr) => {
+            if xenet::net::ipnet::is_global_ipv6(&ipv6_addr) {
+                match crate::interface::get_interface_global_ipv6(&interface) {
+                    Some(ip) => ip,
+                    None => {
+                        return Err(String::from(
+                            "Global IPv6 address not found on default interface.",
+                        ))
+                    }
+                }
+            } else {
+                match crate::interface::get_interface_local_ipv6(&interface) {
+                    Some(ip) => ip,
+                    None => {
+                        return Err(String::from(
+                            "Local IPv6 address not found on default interface.",
+                        ))
+                    }
+                }
+            }
+        }
+    };
+    let dst_port: Option<u16> = if opt.target.ports.len() > 0 {
         Some(opt.target.ports[0])
     } else {
         None
     };
-    // Probe setting
+    let tunnel = interface.is_tun();
+    let loopback = interface.is_loopback();
     let mut probe_setting = ProbeSetting::new();
+    probe_setting.if_index = interface.index;
+    probe_setting.if_name = interface.name.clone();
+    probe_setting.src_mac = if tunnel { 
+        MacAddr::zero() 
+    } else {
+        crate::interface::get_interface_macaddr(&interface)
+    };
+    probe_setting.dst_mac = if tunnel {
+        MacAddr::zero()
+    } else {
+        crate::interface::get_gateway_macaddr(&interface)
+    };
+    probe_setting.src_ip = src_ip;
+    probe_setting.dst_ip = opt.target.ip_addr;
+    probe_setting.dst_hostname = opt.target.host_name.clone();
     match opt.protocol {
         IpNextLevelProtocol::Icmp => {
             probe_setting.protocol = netprobe::setting::Protocol::ICMP;
@@ -497,18 +549,26 @@ pub fn run_ping(opt: option::PingOption, msg_tx: &mpsc::Sender<String>) -> resul
         }
         IpNextLevelProtocol::Tcp => {
             probe_setting.protocol = netprobe::setting::Protocol::TCP;
-            probe_setting.dst_port = port;
+            probe_setting.src_port = Some(opt.src_port);
+            probe_setting.dst_port = dst_port;
         }
         IpNextLevelProtocol::Udp => {
             probe_setting.protocol = netprobe::setting::Protocol::UDP;
-            probe_setting.dst_port = port;
+            probe_setting.src_port = Some(opt.src_port);
+            probe_setting.dst_port = dst_port;
         }
         _ => {
             probe_setting.protocol = netprobe::setting::Protocol::ICMP;
         }
     }
+    probe_setting.hop_limit = 64;
     probe_setting.count = opt.count;
+    probe_setting.receive_timeout = opt.wait_time;
     probe_setting.probe_timeout = opt.timeout;
+    probe_setting.send_rate = opt.send_rate;
+    probe_setting.tunnel = tunnel;
+    probe_setting.loopback = loopback;
+
     let pinger: Pinger = Pinger::new(probe_setting).unwrap();
     let rx = pinger.get_progress_receiver();
     let handle = thread::spawn(move || pinger.ping());
@@ -550,26 +610,77 @@ pub fn run_ping(opt: option::PingOption, msg_tx: &mpsc::Sender<String>) -> resul
     ping_result.stat.max = np_ping_result.stat.max;
     ping_result.stat.avg = np_ping_result.stat.avg;
     ping_result.issued_at = sys::get_sysdate();
-    ping_result
+    Ok(ping_result)
 }
 
-pub fn run_traceroute(opt: option::TracerouteOption, msg_tx: &mpsc::Sender<String>) -> result::TracerouteResult {
+pub fn run_traceroute(opt: option::TracerouteOption, msg_tx: &mpsc::Sender<String>) -> Result<result::TracerouteResult, String> {
     let mut trace_result = result::TracerouteResult::new();
     trace_result.probe_id = sys::get_probe_id();
     trace_result.command_type = option::CommandType::Ping;
     trace_result.protocol = opt.protocol;
     trace_result.start_time = sys::get_sysdate();
     let start_time: Instant = Instant::now();
-
+    // Probe setting
+    let interface: Interface = match crate::interface::get_interface_by_index(opt.interface_index) {
+        Some(interface) => interface,
+        None => {
+            return Err(String::from("Interface not found."));
+        },
+    };
+    let src_ip: IpAddr = match opt.target.ip_addr {
+        IpAddr::V4(_) => match crate::interface::get_interface_ipv4(&interface) {
+            Some(ip) => ip,
+            None => return Err(String::from("IPv4 address not found on default interface.")),
+        },
+        IpAddr::V6(ipv6_addr) => {
+            if xenet::net::ipnet::is_global_ipv6(&ipv6_addr) {
+                match crate::interface::get_interface_global_ipv6(&interface) {
+                    Some(ip) => ip,
+                    None => {
+                        return Err(String::from(
+                            "Global IPv6 address not found on default interface.",
+                        ))
+                    }
+                }
+            } else {
+                match crate::interface::get_interface_local_ipv6(&interface) {
+                    Some(ip) => ip,
+                    None => {
+                        return Err(String::from(
+                            "Local IPv6 address not found on default interface.",
+                        ))
+                    }
+                }
+            }
+        }
+    };
+    let tunnel = interface.is_tun();
+    let loopback = interface.is_loopback();
     let mut probe_setting = ProbeSetting::new();
-    probe_setting.src_ip = opt.src_ip;
+    probe_setting.if_index = interface.index;
+    probe_setting.if_name = interface.name.clone();
+    probe_setting.src_mac = if tunnel { 
+        MacAddr::zero() 
+    } else {
+        crate::interface::get_interface_macaddr(&interface)
+    };
+    probe_setting.dst_mac = if tunnel {
+        MacAddr::zero()
+    } else {
+        crate::interface::get_gateway_macaddr(&interface)
+    };
+    probe_setting.src_ip = src_ip;
     probe_setting.src_port = Some(opt.src_port);
     probe_setting.dst_ip = opt.target.ip_addr;
+    probe_setting.dst_hostname = opt.target.host_name.clone();
     probe_setting.dst_port = Some(33435);
+    probe_setting.hop_limit = 64;
     probe_setting.protocol = netprobe::setting::Protocol::UDP;
     probe_setting.receive_timeout = opt.wait_time;
     probe_setting.probe_timeout = opt.timeout;
     probe_setting.send_rate = opt.send_rate;
+    probe_setting.tunnel = tunnel;
+    probe_setting.loopback = loopback;
 
     let tracer: Tracer = Tracer::new(probe_setting).unwrap();
     let rx = tracer.get_progress_receiver();
@@ -602,7 +713,7 @@ pub fn run_traceroute(opt: option::TracerouteOption, msg_tx: &mpsc::Sender<Strin
         trace_result.nodes.push(trace_response);
     }
     trace_result.issued_at = sys::get_sysdate();
-    trace_result
+    Ok(trace_result)
 }
 
 pub fn run_domain_scan(opt: option::DomainScanOption, msg_tx: &mpsc::Sender<String>) -> result::DomainScanResult {

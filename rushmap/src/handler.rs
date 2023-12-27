@@ -117,22 +117,29 @@ pub fn handle_ping(opt: option::PingOption) {
     while let Ok(msg) = msg_rx.recv() {
         println!("{}", msg);
     }
-    let result: PingResult = handle.join().unwrap();
-    if opt.json_output {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&result).unwrap_or(String::from("Serialize Error"))
-        );
-    } else {
-        output::show_ping_result(result.clone());
-    }
-
-    if !opt.save_file_path.is_empty() {
-        output::save_json(
-            serde_json::to_string_pretty(&result).unwrap_or(String::from("Serialize Error")),
-            opt.save_file_path.clone(),
-        );
-        println!("Probe result saved to: {}", opt.save_file_path);
+    let result: Result<PingResult, String> = handle.join().unwrap();
+    match result {
+        Ok(result) => {
+            if opt.json_output {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&result).unwrap_or(String::from("Serialize Error"))
+                );
+            } else {
+                output::show_ping_result(result.clone());
+            }
+        
+            if !opt.save_file_path.is_empty() {
+                output::save_json(
+                    serde_json::to_string_pretty(&result).unwrap_or(String::from("Serialize Error")),
+                    opt.save_file_path.clone(),
+                );
+                println!("Probe result saved to: {}", opt.save_file_path);
+            }
+        }
+        Err(err) => {
+            println!("{}", err);
+        }
     }
 }
 
@@ -143,22 +150,29 @@ pub fn handle_trace(opt: option::TracerouteOption) {
     while let Ok(msg) = msg_rx.recv() {
         println!("{}", msg);
     }
-    let result: TracerouteResult = handle.join().unwrap();
-    if opt.json_output {
-        println!(
-            "{}",
-            serde_json::to_string_pretty(&result).unwrap_or(String::from("Serialize Error"))
-        );
-    } else {
-        output::show_trace_result(result.clone());
-    }
-
-    if !opt.save_file_path.is_empty() {
-        output::save_json(
-            serde_json::to_string_pretty(&result).unwrap_or(String::from("Serialize Error")),
-            opt.save_file_path.clone(),
-        );
-        println!("Probe result saved to: {}", opt.save_file_path);
+    let result: Result<TracerouteResult, String> = handle.join().unwrap();
+    match result {
+        Ok(result) => {
+            if opt.json_output {
+                println!(
+                    "{}",
+                    serde_json::to_string_pretty(&result).unwrap_or(String::from("Serialize Error"))
+                );
+            } else {
+                output::show_trace_result(result.clone());
+            }
+        
+            if !opt.save_file_path.is_empty() {
+                output::save_json(
+                    serde_json::to_string_pretty(&result).unwrap_or(String::from("Serialize Error")),
+                    opt.save_file_path.clone(),
+                );
+                println!("Probe result saved to: {}", opt.save_file_path);
+            }
+        }
+        Err(err) => {
+            println!("{}", err);
+        }
     }
 }
 
