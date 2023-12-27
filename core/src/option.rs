@@ -1,8 +1,10 @@
-use std::{net::{IpAddr, Ipv4Addr}, time::Duration};
+use std::{net::{IpAddr, Ipv4Addr, Ipv6Addr}, time::Duration};
 use serde::{Deserialize, Serialize};
 use ipnet::Ipv4Net;
+use xenet::net::interface::Interface;
+use xenet::packet::ip::IpNextLevelProtocol;
 
-use crate::{define, db, util, dns, interface, process, sys};
+use crate::{define, db, util, dns, process, sys};
 
 #[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
 pub enum CommandType {
@@ -34,33 +36,6 @@ impl CommandType {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize)]
-pub enum IpNextLevelProtocol {
-    TCP,
-    UDP,
-    ICMPv4,
-    ICMPv6,
-}
-
-impl IpNextLevelProtocol {
-    pub fn id(&self) -> String {
-        match *self {
-            IpNextLevelProtocol::TCP => String::from("tcp"),
-            IpNextLevelProtocol::UDP => String::from("udp"),
-            IpNextLevelProtocol::ICMPv4 => String::from("icmpv4"),
-            IpNextLevelProtocol::ICMPv6 => String::from("icmpv6"),
-        }
-    }
-    pub fn name(&self) -> String {
-        match *self {
-            IpNextLevelProtocol::TCP => String::from("TCP"),
-            IpNextLevelProtocol::UDP => String::from("UDP"),
-            IpNextLevelProtocol::ICMPv4 => String::from("ICMPv4"),
-            IpNextLevelProtocol::ICMPv6 => String::from("ICMPv6"),
-        }
-    }
-}
-
 /// Target Host Information
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TargetInfo {
@@ -87,7 +62,7 @@ impl TargetInfo {
     pub fn new_with_ip_lookup(ip_addr: IpAddr) -> Self {
         TargetInfo {
             ip_addr: ip_addr,
-            host_name: dns::lookup_ip_addr(ip_addr.to_string()),
+            host_name: dns::lookup_ip_addr(ip_addr).unwrap_or(String::new()),
             ports: Vec::new(),
         }
     }
@@ -110,7 +85,7 @@ impl TargetInfo {
         self.clone()
     }
     pub fn with_ip_lookup(&mut self) -> TargetInfo {
-        self.host_name = dns::lookup_ip_addr(self.ip_addr.to_string());
+        self.host_name = dns::lookup_ip_addr(self.ip_addr).unwrap_or(String::new());
         self.clone()
     }
     pub async fn with_ip_lookup_async(&mut self) -> TargetInfo {
@@ -273,7 +248,7 @@ impl PortScanOption {
             src_port: define::DEFAULT_SRC_PORT,
             targets: Vec::new(),
             scan_type: PortScanType::TcpSynScan,
-            protocol: IpNextLevelProtocol::TCP,
+            protocol: IpNextLevelProtocol::Tcp,
             concurrency: define::DEFAULT_PORTS_CONCURRENCY,
             timeout: Duration::from_millis(define::DEFAULT_TIMEOUT),
             wait_time: Duration::from_millis(define::DEFAULT_WAIT_TIME),
@@ -287,24 +262,36 @@ impl PortScanOption {
             accept_invalid_certs: false,
         }
     }
-    pub fn default() -> Self {
-        let interface: interface::NetworkInterface = interface::NetworkInterface::default();
+    pub fn default(dst_ip_addr: IpAddr) -> Self {
+        let interface: Interface = Interface::default().unwrap();
         let mut opt = PortScanOption {
             interface_index: interface.index,
             interface_name: interface.name,
-            src_ip: if interface.ipv4.len() > 0 {
-                IpAddr::V4(interface.ipv4[0])
-            } else {
-                if interface.ipv6.len() > 0 {
-                    IpAddr::V6(interface.ipv6[0])
-                } else {
+            src_ip: if dst_ip_addr.is_ipv4() {
+                if interface.ipv4.len() > 0 {
+                    IpAddr::V4(interface.ipv4[0].addr)
+                }else {
                     IpAddr::V4(Ipv4Addr::UNSPECIFIED)
                 }
+            }else {
+                let mut ip_addr: IpAddr = IpAddr::V6(Ipv6Addr::UNSPECIFIED);
+                for ip in interface.ipv6 {
+                    if crate::ip::is_global_addr(dst_ip_addr) {
+                        if xenet::net::ipnet::is_global_ipv6(&ip.addr) {
+                            ip_addr = IpAddr::V6(ip.addr);
+                            break;
+                        }
+                    }else {
+                        ip_addr = IpAddr::V6(ip.addr);
+                        break;
+                    }
+                }
+                ip_addr
             },
             src_port: define::DEFAULT_SRC_PORT,
             targets: Vec::new(),
             scan_type: PortScanType::TcpSynScan,
-            protocol: IpNextLevelProtocol::TCP,
+            protocol: IpNextLevelProtocol::Tcp,
             concurrency: define::DEFAULT_PORTS_CONCURRENCY,
             timeout: Duration::from_millis(define::DEFAULT_TIMEOUT),
             wait_time: Duration::from_millis(define::DEFAULT_WAIT_TIME),
@@ -319,13 +306,10 @@ impl PortScanOption {
         };
         if process::privileged() {
             opt.scan_type = PortScanType::TcpSynScan;
-            if sys::get_os_type() != "windows" {
-                opt.async_scan = true;
-            }
         } else {
-            if sys::get_os_type() == "windows" {
+            if sys::get_os_type() == "windows" || sys::get_os_type() == "macos" {
                 opt.scan_type = PortScanType::TcpSynScan;
-            }else{
+            } else {
                 opt.scan_type = PortScanType::TcpConnectScan;
                 opt.async_scan = true;
             }
@@ -362,7 +346,7 @@ impl HostScanOption {
             src_port: define::DEFAULT_SRC_PORT,
             targets: Vec::new(),
             scan_type: HostScanType::IcmpPingScan,
-            protocol: IpNextLevelProtocol::ICMPv4,
+            protocol: IpNextLevelProtocol::Icmp,
             concurrency: define::DEFAULT_HOSTS_CONCURRENCY,
             timeout: Duration::from_millis(define::DEFAULT_TIMEOUT),
             wait_time: Duration::from_millis(define::DEFAULT_WAIT_TIME),
@@ -374,12 +358,12 @@ impl HostScanOption {
         }
     }
     pub fn default() -> Self {
-        let interface: interface::NetworkInterface = interface::NetworkInterface::default();
+        let interface: Interface = Interface::default().unwrap();
         let src_ip: IpAddr = if interface.ipv4.len() > 0 {
-            IpAddr::V4(interface.ipv4[0])
+            IpAddr::V4(interface.ipv4[0].addr)
         } else {
             if interface.ipv6.len() > 0 {
-                IpAddr::V6(interface.ipv6[0])
+                IpAddr::V6(interface.ipv6[0].addr)
             } else {
                 IpAddr::V4(Ipv4Addr::UNSPECIFIED)
             }
@@ -391,7 +375,11 @@ impl HostScanOption {
             src_port: define::DEFAULT_SRC_PORT,
             targets: Vec::new(),
             scan_type: HostScanType::IcmpPingScan,
-            protocol: if src_ip.is_ipv4() { IpNextLevelProtocol::ICMPv4 } else { IpNextLevelProtocol::ICMPv6 },
+            protocol: if src_ip.is_ipv4() {
+                IpNextLevelProtocol::Icmp
+            } else {
+                IpNextLevelProtocol::Icmpv6
+            },
             concurrency: define::DEFAULT_HOSTS_CONCURRENCY,
             timeout: Duration::from_millis(define::DEFAULT_TIMEOUT),
             wait_time: Duration::from_millis(define::DEFAULT_WAIT_TIME),
@@ -512,7 +500,7 @@ impl PingOption {
             src_ip: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
             src_port: define::DEFAULT_SRC_PORT,
             target: TargetInfo::new(),
-            protocol: IpNextLevelProtocol::ICMPv4,
+            protocol: IpNextLevelProtocol::Icmp,
             count: define::DEFAULT_PING_COUNT,
             timeout: Duration::from_millis(define::DEFAULT_TIMEOUT),
             wait_time: Duration::from_millis(define::DEFAULT_WAIT_TIME),
@@ -521,16 +509,28 @@ impl PingOption {
             json_output: false,
         }
     }
-    pub fn default() -> Self {
-        let interface: interface::NetworkInterface = interface::NetworkInterface::default();
-        let src_ip: IpAddr = if interface.ipv4.len() > 0 {
-            IpAddr::V4(interface.ipv4[0])
-        } else {
-            if interface.ipv6.len() > 0 {
-                IpAddr::V6(interface.ipv6[0])
-            } else {
+    pub fn default(dst_ip_addr: IpAddr, count: u8) -> Self {
+        let interface: Interface = Interface::default().unwrap();
+        let src_ip: IpAddr = if dst_ip_addr.is_ipv4() {
+            if interface.ipv4.len() > 0 {
+                IpAddr::V4(interface.ipv4[0].addr)
+            }else {
                 IpAddr::V4(Ipv4Addr::UNSPECIFIED)
             }
+        }else {
+            let mut ip_addr: IpAddr = IpAddr::V6(Ipv6Addr::UNSPECIFIED);
+            for ip in interface.ipv6 {
+                if crate::ip::is_global_addr(dst_ip_addr) {
+                    if xenet::net::ipnet::is_global_ipv6(&ip.addr) {
+                        ip_addr = IpAddr::V6(ip.addr);
+                        break;
+                    }
+                }else {
+                    ip_addr = IpAddr::V6(ip.addr);
+                    break;
+                }
+            }
+            ip_addr
         };
         PingOption {
             interface_index: interface.index,
@@ -538,8 +538,8 @@ impl PingOption {
             src_ip: src_ip,
             src_port: define::DEFAULT_SRC_PORT,
             target: TargetInfo::new(),
-            protocol: if src_ip.is_ipv4() { IpNextLevelProtocol::ICMPv4 } else { IpNextLevelProtocol::ICMPv6 },
-            count: define::DEFAULT_PING_COUNT,
+            protocol: if src_ip.is_ipv4() { IpNextLevelProtocol::Icmp } else { IpNextLevelProtocol::Icmpv6 },
+            count: count,
             timeout: Duration::from_millis(define::DEFAULT_TIMEOUT),
             wait_time: Duration::from_millis(define::DEFAULT_WAIT_TIME),
             send_rate: Duration::from_millis(define::DEFAULT_SEND_RATE),
@@ -573,7 +573,7 @@ impl TracerouteOption {
             src_ip: IpAddr::V4(Ipv4Addr::UNSPECIFIED),
             src_port: define::DEFAULT_SRC_PORT,
             target: TargetInfo::new(),
-            protocol: IpNextLevelProtocol::ICMPv4,
+            protocol: IpNextLevelProtocol::Icmp,
             max_hop: define::DEFAULT_MAX_HOP,
             timeout: Duration::from_millis(define::DEFAULT_TIMEOUT),
             wait_time: Duration::from_millis(define::DEFAULT_WAIT_TIME),
@@ -582,16 +582,28 @@ impl TracerouteOption {
             json_output: false,
         }
     }
-    pub fn default() -> Self {
-        let interface: interface::NetworkInterface = interface::NetworkInterface::default();
-        let src_ip: IpAddr = if interface.ipv4.len() > 0 {
-            IpAddr::V4(interface.ipv4[0])
-        } else {
-            if interface.ipv6.len() > 0 {
-                IpAddr::V6(interface.ipv6[0])
-            } else {
+    pub fn default(dst_ip_addr: IpAddr) -> Self {
+        let interface: Interface = Interface::default().unwrap();
+        let src_ip: IpAddr = if dst_ip_addr.is_ipv4() {
+            if interface.ipv4.len() > 0 {
+                IpAddr::V4(interface.ipv4[0].addr)
+            }else {
                 IpAddr::V4(Ipv4Addr::UNSPECIFIED)
             }
+        }else {
+            let mut ip_addr: IpAddr = IpAddr::V6(Ipv6Addr::UNSPECIFIED);
+            for ip in interface.ipv6 {
+                if crate::ip::is_global_addr(dst_ip_addr) {
+                    if xenet::net::ipnet::is_global_ipv6(&ip.addr) {
+                        ip_addr = IpAddr::V6(ip.addr);
+                        break;
+                    }
+                }else {
+                    ip_addr = IpAddr::V6(ip.addr);
+                    break;
+                }
+            }
+            ip_addr
         };
         TracerouteOption {
             interface_index: interface.index,
@@ -599,7 +611,7 @@ impl TracerouteOption {
             src_ip: src_ip,
             src_port: define::DEFAULT_SRC_PORT,
             target: TargetInfo::new(),
-            protocol: if src_ip.is_ipv4() { IpNextLevelProtocol::ICMPv4 } else { IpNextLevelProtocol::ICMPv6 },
+            protocol: if src_ip.is_ipv4() { IpNextLevelProtocol::Icmp } else { IpNextLevelProtocol::Icmpv6 },
             max_hop: define::DEFAULT_MAX_HOP,
             timeout: Duration::from_millis(define::DEFAULT_TIMEOUT),
             wait_time: Duration::from_millis(define::DEFAULT_WAIT_TIME),
@@ -629,7 +641,7 @@ impl DomainScanOption {
             base_domain: String::new(),
             words: Vec::new(),
             concurrency: define::DEFAULT_HOSTS_CONCURRENCY,
-            protocol: IpNextLevelProtocol::UDP,
+            protocol: IpNextLevelProtocol::Udp,
             timeout: Duration::from_millis(define::DEFAULT_TIMEOUT),
             async_scan: false,
             list_file_path: String::new(),
@@ -642,7 +654,7 @@ impl DomainScanOption {
             base_domain: String::new(),
             words: Vec::new(),
             concurrency: define::DEFAULT_HOSTS_CONCURRENCY,
-            protocol: IpNextLevelProtocol::UDP,
+            protocol: IpNextLevelProtocol::Udp,
             timeout: Duration::from_millis(define::DEFAULT_TIMEOUT),
             async_scan: false,
             list_file_path: String::new(),

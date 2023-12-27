@@ -1,8 +1,9 @@
-use cross_socket::packet::ethernet::EthernetPacket;
+use netscan::pcap::PacketFrame;
+use xenet::packet::ethernet::EthernetHeader;
 
 use crate::define;
-use crate::model;
 use crate::ip;
+use crate::model;
 use std::collections::HashMap;
 
 pub fn get_oui_detail_map() -> HashMap<String, String> {
@@ -93,9 +94,9 @@ pub fn is_vm_fingerprint(fingerprint: &model::OsFingerprint) -> bool {
     false
 }
 
-pub fn in_vm_network(ether_packet: EthernetPacket) -> bool {
+pub fn in_vm_network(ether_header: EthernetHeader) -> bool {
     let vm_oui_map: HashMap<String, String> = get_vm_oui_map();
-    let mac = ether_packet.source.address();
+    let mac = ether_header.source.address();
     if mac.len() > 16 {
         let prefix8 = mac[0..8].to_uppercase();
         vm_oui_map.contains_key(&prefix8)
@@ -104,30 +105,31 @@ pub fn in_vm_network(ether_packet: EthernetPacket) -> bool {
     }
 }
 
-pub fn verify_os_fingerprint(fingerprint: cross_socket::packet::PacketFrame) -> model::OsFingerprint {
+pub fn verify_os_fingerprint(fingerprint: &PacketFrame) -> model::OsFingerprint {
     let os_family_list: Vec<String> = get_os_family_list();
     let os_fingerprints: Vec<model::OsFingerprint> = get_os_fingerprints();
-    let in_vm: bool = if let Some(ether_packet) = fingerprint.ethernet_packet {
-        in_vm_network(ether_packet.clone())
+    let in_vm: bool = if let Some(ether_header) = &fingerprint.ethernet_header {
+        in_vm_network(ether_header.clone())
     } else {
         false
     };
+
     // 0. Check TTL
     let os_ttl_list: Vec<model::OsTtl> = get_os_ttl_list();
-    let initial_ttl = if let Some(ipv4_packet) = fingerprint.ipv4_packet {
-        ip::guess_initial_ttl(ipv4_packet.ttl)
+    let initial_ttl = if let Some(ipv4_header) = &fingerprint.ipv4_header {
+        ip::guess_initial_ttl(ipv4_header.ttl)
     } else {
-        if let Some(ipv6_packet) = fingerprint.ipv6_packet {
-            ip::guess_initial_ttl(ipv6_packet.hop_limit)
+        if let Some(ipv6_header) = &fingerprint.ipv6_header {
+            ip::guess_initial_ttl(ipv6_header.hop_limit)
         } else {
             0
         }
     };
     let mut tcp_window_size = 0;
     let mut tcp_options: Vec<String> = vec![];
-    if let Some(ref tcp_fingerprint) = fingerprint.tcp_packet {
-        tcp_window_size = tcp_fingerprint.window;
-        for option in &tcp_fingerprint.options {
+    if let Some(ref tcp_header) = fingerprint.tcp_header {
+        tcp_window_size = tcp_header.window;
+        for option in &tcp_header.options {
             tcp_options.push(option.kind.name());
         }
     }
@@ -163,7 +165,7 @@ pub fn verify_os_fingerprint(fingerprint: cross_socket::packet::PacketFrame) -> 
     }
     if matched_fingerprints.len() == 1 {
         return matched_fingerprints[0].clone();
-    }else if matched_fingerprints.len() > 1 {
+    } else if matched_fingerprints.len() > 1 {
         // Check VM Fingerprint
         if in_vm {
             for f in &matched_fingerprints {
@@ -209,7 +211,7 @@ pub fn verify_os_fingerprint(fingerprint: cross_socket::packet::PacketFrame) -> 
     }
     if matched_fingerprints.len() == 1 {
         return matched_fingerprints[0].clone();
-    }else if matched_fingerprints.len() > 1 {
+    } else if matched_fingerprints.len() > 1 {
         // Check VM Fingerprint
         if in_vm {
             for f in &matched_fingerprints {

@@ -1,7 +1,9 @@
+use std::net::IpAddr;
 use std::sync::mpsc::{channel ,Sender, Receiver};
 use std::thread;
 use tauri::Manager;
 use rusqlite::{Connection, Transaction};
+use xenet::net::interface::Interface;
 use crate::db_models::{self, ProbeLog, DataSetItem, ProbeStat, UserProbeData};
 use crate::arg_models;
 use crate::json_models;
@@ -214,8 +216,15 @@ pub fn lookup_hostname(hostname: String) -> String {
 }
 
 #[tauri::command]
-pub fn lookup_ipaddr(ipaddr: String) -> String {
-    return dns::lookup_ip_addr(ipaddr);
+pub fn lookup_ipaddr(ipaddr: String) -> Option<String> {
+    match ipaddr.parse::<IpAddr>() {
+        Ok(ip_addr) => {
+            dns::lookup_ip_addr(ip_addr)
+        },
+        Err(_) => {
+            None
+        }
+    }
 }
 
 #[tauri::command]
@@ -258,37 +267,23 @@ pub fn get_probe_stat() -> ProbeStat {
 }
 
 #[tauri::command]
-pub fn get_interfaces() -> Vec<rushmap_core::interface::NetworkInterface> {
-    rushmap_core::interface::get_interfaces()
+pub fn get_interfaces() -> Vec<Interface> {
+    xenet::net::interface::get_interfaces()
 }
 
 #[tauri::command]
-pub fn get_default_interface() -> rushmap_core::interface::NetworkInterface {
-    rushmap_core::interface::NetworkInterface::default()
+pub fn get_default_interface() -> Result<Interface, String> {
+    Interface::default()
 }
 
 #[tauri::command]
-pub fn get_interface_by_index(if_index: u32) -> rushmap_core::interface::NetworkInterface {
-    match rushmap_core::interface::get_interface_by_index(if_index) {
-        Some(iface) => {
-            rushmap_core::interface::NetworkInterface::from_default_net_type(iface) 
-        },
-        None => {
-            rushmap_core::interface::NetworkInterface::new()
-        }
-    }
+pub fn get_interface_by_index(if_index: u32) -> Option<Interface> {
+    rushmap_core::interface::get_interface_by_index(if_index)
 }
 
 #[tauri::command]
-pub fn get_interface_by_name(if_name: String) -> rushmap_core::interface::NetworkInterface {
-    match rushmap_core::interface::get_interface_by_name(if_name) {
-        Some(iface) => {
-            rushmap_core::interface::NetworkInterface::from_default_net_type(iface) 
-        },
-        None => {
-            rushmap_core::interface::NetworkInterface::new()
-        }
-    }
+pub fn get_interface_by_name(if_name: String) -> Option<Interface> {
+    rushmap_core::interface::get_interface_by_name(if_name)
 }
 
 #[tauri::command]

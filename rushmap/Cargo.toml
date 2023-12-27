@@ -38,4 +38,5 @@ futures = {version = "0.3.21", features = ["executor", "thread-pool"]}
 regex = "1.6.0"
 ipnet = "2.5.0"
 rand = "0.8"
+xenet = { version = "0.4", features = ["serde"] }
 rushmap-core = { path = "../core", version = "0.8.0"}

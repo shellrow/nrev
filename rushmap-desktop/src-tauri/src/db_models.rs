@@ -1,6 +1,7 @@
 use std::vec;
 use serde::{Deserialize, Serialize};
 use rusqlite::{params, Transaction};
+use xenet::packet::ip::IpNextLevelProtocol;
 use crate::db;
 use rushmap_core::sys;
 
@@ -746,11 +747,11 @@ impl UserProbeData {
                 os_cpe: host.cpe,
                 valid_flag: 0,
             };
-            if scan_result.protocol == rushmap_core::option::IpNextLevelProtocol::TCP {
+            if scan_result.protocol == IpNextLevelProtocol::Tcp {
                 user_probe_data.services.push(UserService {
                     host_id: host_id.clone(),
                     port: host.services[0].port_number,
-                    protocol: scan_result.protocol.name(),
+                    protocol: scan_result.protocol.as_str().to_uppercase(),
                     service_name: String::new(),
                     service_description: String::new(),
                     service_cpe: String::new(),
@@ -780,7 +781,7 @@ impl UserProbeData {
             os_cpe: String::new(),
             valid_flag: 0,
         };
-        if ping_result.protocol == rushmap_core::option::IpNextLevelProtocol::TCP {
+        if ping_result.protocol == IpNextLevelProtocol::Tcp {
             user_probe_data.services.push(UserService {
                 host_id: host_id.clone(),
                 port: host.port_number.unwrap_or(0),

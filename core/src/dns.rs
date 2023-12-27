@@ -1,12 +1,16 @@
-use futures::stream::{self, StreamExt};
-use std::collections::HashMap;
 use std::net::IpAddr;
+use std::time::Duration;
+
+#[cfg(not(any(unix, target_os = "windows")))]
+use hickory_resolver::config::{ResolverConfig, ResolverOpts};
+use hickory_resolver::Resolver;
+
+use futures::stream::{self, StreamExt};
+
+use hickory_resolver::AsyncResolver;
+use std::collections::HashMap;
 use std::str::FromStr;
 use std::thread;
-use std::time::Duration;
-#[cfg(not(any(unix, target_os = "windows")))]
-use trust_dns_resolver::config::{ResolverConfig, ResolverOpts};
-use trust_dns_resolver::{AsyncResolver, Resolver};
 
 pub fn lookup_host_name(host_name: String) -> Option<IpAddr> {
     let ip_vec: Vec<IpAddr> = resolve_domain(host_name);
@@ -48,12 +52,12 @@ pub async fn lookup_host_name_async(host_name: String) -> Option<IpAddr> {
     }
 }
 
-pub fn lookup_ip_addr(ip_addr: String) -> String {
-    let ips: Vec<String> = resolve_ip(ip_addr);
-    if ips.len() > 0 {
-        return ips[0].clone();
+pub fn lookup_ip_addr(ip_addr: IpAddr) -> Option<String> {
+    let names: Vec<String> = resolve_ip(ip_addr);
+    if names.len() > 0 {
+        return Some(names[0].clone());
     } else {
-        return String::new();
+        return None;
     }
 }
 
@@ -97,10 +101,9 @@ fn resolve_domain(host_name: String) -> Vec<IpAddr> {
 }
 
 #[cfg(any(unix, target_os = "windows"))]
-fn resolve_ip(ip_addr: String) -> Vec<String> {
-    let ip_addr: IpAddr = IpAddr::from_str(ip_addr.as_str()).unwrap();
+fn resolve_ip(ip_addr: IpAddr) -> Vec<String> {
     let mut names: Vec<String> = vec![];
-    let mut system_conf = trust_dns_resolver::system_conf::read_system_conf().unwrap();
+    let mut system_conf = hickory_resolver::system_conf::read_system_conf().unwrap();
     if crate::ip::is_global_addr(ip_addr) {
         system_conf.1.timeout = Duration::from_millis(1000);
     } else {
@@ -131,10 +134,10 @@ fn resolve_ip(ip_addr: String) -> Vec<String> {
 }
 
 #[cfg(not(any(unix, target_os = "windows")))]
-fn resolve_ip(ip_addr: String) -> Vec<String> {
+fn resolve_ip(ip_addr: IpAddr) -> Vec<String> {
     let mut names: Vec<String> = vec![];
     let resolver = Resolver::new(ResolverConfig::default(), ResolverOpts::default()).unwrap();
-    match resolver.reverse_lookup(IpAddr::from_str(ip_addr.as_str()).unwrap()) {
+    match resolver.reverse_lookup(ip_addr) {
         Ok(rlookup) => {
             for record in rlookup.as_lookup().record_iter() {
                 match record.data() {
@@ -158,7 +161,6 @@ fn resolve_ip(ip_addr: String) -> Vec<String> {
 }
 
 #[cfg(any(unix, target_os = "windows"))]
-#[allow(dead_code)]
 async fn resolve_domain_async(host_name: String) -> Vec<IpAddr> {
     let mut ips: Vec<IpAddr> = vec![];
     let resolver = AsyncResolver::tokio_from_system_conf().unwrap();
@@ -174,7 +176,6 @@ async fn resolve_domain_async(host_name: String) -> Vec<IpAddr> {
 }
 
 #[cfg(not(any(unix, target_os = "windows")))]
-#[allow(dead_code)]
 async fn resolve_domain_async(host_name: String) -> Vec<IpAddr> {
     let mut ips: Vec<IpAddr> = vec![];
     let resolver =
@@ -194,13 +195,13 @@ async fn resolve_domain_async(host_name: String) -> Vec<IpAddr> {
 async fn resolve_ip_async(ip_addr: String) -> Vec<String> {
     let ip_addr: IpAddr = IpAddr::from_str(ip_addr.as_str()).unwrap();
     let mut names: Vec<String> = vec![];
-    let mut system_conf = trust_dns_resolver::system_conf::read_system_conf().unwrap();
+    let mut system_conf = hickory_resolver::system_conf::read_system_conf().unwrap();
     if crate::ip::is_global_addr(ip_addr) {
         system_conf.1.timeout = Duration::from_millis(1000);
     } else {
         system_conf.1.timeout = Duration::from_millis(200);
     }
-    let resolver = AsyncResolver::tokio(system_conf.0, system_conf.1).unwrap();
+    let resolver = AsyncResolver::tokio(system_conf.0, system_conf.1);
     match resolver.reverse_lookup(ip_addr).await {
         Ok(rlookup) => {
             for record in rlookup.as_lookup().record_iter() {
@@ -276,4 +277,12 @@ pub fn lookup_ips(ips: Vec<IpAddr>) -> HashMap<IpAddr, String> {
     let rt: tokio::runtime::Runtime = tokio::runtime::Runtime::new().unwrap();
     let handle = thread::spawn(move || rt.block_on(async { lookup_ips_async(ips).await }));
     handle.join().unwrap()
+}
+
+pub fn lookup_host(host: String) -> Vec<IpAddr> {
+    resolve_domain(host)
+}
+
+pub fn lookup_addr(addr: IpAddr) -> Vec<String> {
+    resolve_ip(addr)
 }

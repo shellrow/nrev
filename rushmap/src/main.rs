@@ -2,7 +2,6 @@
 extern crate clap;
 
 mod handler;
-mod json_models;
 mod output;
 mod parser;
 mod validator;

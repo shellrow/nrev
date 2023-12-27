@@ -1,13 +1,14 @@
 use indicatif::{ProgressBar, ProgressStyle};
 use rushmap_core::dns;
+use xenet::net::interface::Interface;
+use xenet::packet::ip::IpNextLevelProtocol;
 use std::fs;
-use std::net::{Ipv4Addr, Ipv6Addr};
 use term_table::row::Row;
 use term_table::table_cell::{Alignment, TableCell};
 use term_table::{Table, TableStyle};
 use rushmap_core::model::PortStatus;
 use rushmap_core::result::{DomainScanResult, HostScanResult, PingResult, PortScanResult, TracerouteResult};
-use rushmap_core::option::{PortScanOption, HostScanOption, PingOption, TracerouteOption, CommandType, IpNextLevelProtocol, DomainScanOption};
+use rushmap_core::option::{PortScanOption, HostScanOption, PingOption, TracerouteOption, CommandType, DomainScanOption};
 
 pub fn get_spinner() -> ProgressBar {
     let pb = ProgressBar::new_spinner();
@@ -32,7 +33,7 @@ pub fn show_port_options(opt: PortScanOption) {
     ]));
     table.add_row(Row::new(vec![
         TableCell::new_with_alignment("Protocol", 1, Alignment::Left),
-        TableCell::new_with_alignment(opt.protocol.name(), 1, Alignment::Left),
+        TableCell::new_with_alignment(opt.protocol.as_str().to_uppercase(), 1, Alignment::Left),
     ]));
     table.add_row(Row::new(vec![
         TableCell::new_with_alignment("Interface Name", 1, Alignment::Left),
@@ -128,7 +129,7 @@ pub fn show_host_options(opt: HostScanOption) {
     ]));
     table.add_row(Row::new(vec![
         TableCell::new_with_alignment("Protocol", 1, Alignment::Left),
-        TableCell::new_with_alignment(opt.protocol.name(), 1, Alignment::Left),
+        TableCell::new_with_alignment(opt.protocol.as_str().to_uppercase(), 1, Alignment::Left),
     ]));
     table.add_row(Row::new(vec![
         TableCell::new_with_alignment("Interface Name", 1, Alignment::Left),
@@ -179,7 +180,7 @@ pub fn show_host_options(opt: HostScanOption) {
             Alignment::Left,
         ),
     ]));
-    if opt.targets.len() > 0 && opt.protocol == IpNextLevelProtocol::TCP {
+    if opt.targets.len() > 0 && opt.protocol == IpNextLevelProtocol::Tcp {
         if opt.targets[0].ports.len() > 0 {
             if opt.targets[0].ports[0] > 0 {
                 table.add_row(Row::new(vec![
@@ -211,7 +212,7 @@ pub fn show_ping_options(opt: PingOption) {
     ]));
     table.add_row(Row::new(vec![
         TableCell::new_with_alignment("Protocol", 1, Alignment::Left),
-        TableCell::new_with_alignment(opt.protocol.name(), 1, Alignment::Left),
+        TableCell::new_with_alignment(opt.protocol.as_str().to_uppercase(), 1, Alignment::Left),
     ]));
     table.add_row(Row::new(vec![
         TableCell::new_with_alignment("Interface Name", 1, Alignment::Left),
@@ -232,7 +233,7 @@ pub fn show_ping_options(opt: PingOption) {
 
     table.add_row(Row::new(vec![
         TableCell::new_with_alignment("Ping Type", 1, Alignment::Left),
-        TableCell::new_with_alignment(opt.protocol.name(), 1, Alignment::Left),
+        TableCell::new_with_alignment(opt.protocol.as_str().to_uppercase(), 1, Alignment::Left),
     ]));
     table.add_row(Row::new(vec![
         TableCell::new_with_alignment("Count", 1, Alignment::Left),
@@ -260,7 +261,7 @@ pub fn show_ping_options(opt: PingOption) {
             TableCell::new_with_alignment(opt.target.host_name, 1, Alignment::Left),
         ]));
     }
-    if opt.target.ports.len() > 0 && opt.protocol == IpNextLevelProtocol::TCP {
+    if opt.target.ports.len() > 0 && opt.protocol == IpNextLevelProtocol::Tcp {
         table.add_row(Row::new(vec![
             TableCell::new_with_alignment("Port", 1, Alignment::Left),
             TableCell::new_with_alignment(
@@ -289,7 +290,7 @@ pub fn show_trace_options(opt: TracerouteOption) {
     ]));
     table.add_row(Row::new(vec![
         TableCell::new_with_alignment("Protocol", 1, Alignment::Left),
-        TableCell::new_with_alignment(opt.protocol.name(), 1, Alignment::Left),
+        TableCell::new_with_alignment(opt.protocol.as_str().to_uppercase(), 1, Alignment::Left),
     ]));
     table.add_row(Row::new(vec![
         TableCell::new_with_alignment("Interface Name", 1, Alignment::Left),
@@ -348,7 +349,7 @@ pub fn show_domain_options(opt: DomainScanOption) {
     ]));
     table.add_row(Row::new(vec![
         TableCell::new_with_alignment("Protocol", 1, Alignment::Left),
-        TableCell::new_with_alignment(opt.protocol.name(), 1, Alignment::Left),
+        TableCell::new_with_alignment(opt.protocol.as_str().to_uppercase(), 1, Alignment::Left),
     ]));
     table.add_row(Row::new(vec![
         TableCell::new_with_alignment("Timeout(ms)", 1, Alignment::Left),
@@ -527,7 +528,7 @@ pub fn show_ping_result(result: PingResult) {
     ]));
     for r in result.stat.responses {
         let port_data: String = if let Some(port_number) = r.port_number {
-            if r.protocol == IpNextLevelProtocol::TCP.name() {
+            if r.protocol == IpNextLevelProtocol::Tcp.as_str().to_uppercase() {
                 port_number.to_string()
             } else {
                 "None".to_string()
@@ -544,7 +545,7 @@ pub fn show_ping_result(result: PingResult) {
             TableCell::new_with_alignment(r.ttl, 1, Alignment::Left),
             TableCell::new_with_alignment(r.hop, 1, Alignment::Left),
             TableCell::new_with_alignment(
-                format!("{:?}", (r.rtt as f64 / 1000.0) as f64),
+                format!("{:?}", r.rtt),
                 1,
                 Alignment::Left,
             ),
@@ -581,23 +582,23 @@ pub fn show_ping_result(result: PingResult) {
     table.add_row(Row::new(vec![
         TableCell::new_with_alignment("Min(ms)", 1, Alignment::Left),
         TableCell::new_with_alignment(
-            format!("{:?}", (result.stat.min as f64 / 1000.0) as f64),
+            format!("{:?}", result.stat.min),
             1,
             Alignment::Left,
         ),
     ]));
     table.add_row(Row::new(vec![
-        TableCell::new_with_alignment("Avg(ms)", 1, Alignment::Left),
+        TableCell::new_with_alignment("Avg", 1, Alignment::Left),
         TableCell::new_with_alignment(
-            format!("{:?}", (result.stat.avg as f64 / 1000.0) as f64),
+            format!("{:?}", result.stat.avg),
             1,
             Alignment::Left,
         ),
     ]));
     table.add_row(Row::new(vec![
-        TableCell::new_with_alignment("Max(ms)", 1, Alignment::Left),
+        TableCell::new_with_alignment("Max", 1, Alignment::Left),
         TableCell::new_with_alignment(
-            format!("{:?}", (result.stat.max as f64 / 1000.0) as f64),
+            format!("{:?}", result.stat.max),
             1,
             Alignment::Left,
         ),
@@ -620,7 +621,7 @@ pub fn show_trace_result(result: TracerouteResult) {
         TableCell::new_with_alignment("Node Type", 1, Alignment::Left),
         TableCell::new_with_alignment("TTL", 1, Alignment::Left),
         TableCell::new_with_alignment("Hop", 1, Alignment::Left),
-        TableCell::new_with_alignment("RTT(ms)", 1, Alignment::Left),
+        TableCell::new_with_alignment("RTT", 1, Alignment::Left),
     ]));
     for node in result.nodes {
         table.add_row(Row::new(vec![
@@ -638,7 +639,7 @@ pub fn show_trace_result(result: TracerouteResult) {
                 1,
                 Alignment::Left,
             ),
-            TableCell::new_with_alignment(format!("{:?}", (node.rtt as f64 / 1000.0) as f64), 1, Alignment::Left),
+            TableCell::new_with_alignment(format!("{:?}", node.rtt), 1, Alignment::Left),
         ]));
     }
     println!("{}", table.render());
@@ -683,7 +684,7 @@ pub fn save_json(json: String, file_path: String) -> bool {
     }
 }
 
-pub fn show_interfaces(interfaces: Vec<rushmap_core::interface::NetworkInterface>) {
+pub fn show_interfaces(interfaces: Vec<Interface>) {
     const INDENT: &str = "    ";
     let mut table = Table::new();
     table.max_column_width = 60;
@@ -695,17 +696,27 @@ pub fn show_interfaces(interfaces: Vec<rushmap_core::interface::NetworkInterface
     for interface in interfaces {
         println!("{}:", interface.index);
         println!("{}Name: {}", INDENT, interface.name);
-        println!("{}Interface Type: {}", INDENT, interface.if_type);
-        println!("{}MAC Address: {}", INDENT, interface.mac_addr);
+        println!("{}Interface Type: {}", INDENT, interface.if_type.name());
+        if let Some(mac_addr) = interface.mac_addr {
+            println!("{}MAC Address: {}", INDENT, mac_addr.address());
+        }
         println!("{}IPv4 Address: {:?}", INDENT, interface.ipv4);
         println!("{}IPv6 Address: {:?}", INDENT, interface.ipv6);
-        println!("{}IPv4 Gateway: {}", INDENT, if interface.gateway_ipv4 == Ipv4Addr::UNSPECIFIED {String::new()} else {interface.gateway_ipv4.to_string()});
-        println!("{}IPv6 Gateway: {}", INDENT, if interface.gateway_ipv6 == Ipv6Addr::UNSPECIFIED {String::new()} else {interface.gateway_ipv6.to_string()});
+        if let Some(gateway) = interface.gateway {
+            println!("{}Gateway:", INDENT);
+            println!(
+                "{}{}MAC Address: {}",
+                INDENT,
+                INDENT,
+                gateway.mac_addr.address()
+            );
+            println!("{}{}IP Address: {}", INDENT, INDENT, gateway.ip_addr);
+        }
     }
     println!("{}", table.render());
 }
 
-pub fn show_interfaces_json(interfaces: Vec<rushmap_core::interface::NetworkInterface>) {
+pub fn show_interfaces_json(interfaces: Vec<Interface>) {
     match serde_json::to_string_pretty(&interfaces) {
         Ok(json) => {
             println!("{}", json);
