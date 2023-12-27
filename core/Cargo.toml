@@ -15,7 +15,7 @@ serde_json = "1.0"
 default-net = { version = "0.21", features = ["serde"] }
 xenet = { version = "0.4", features = ["serde"] }
 netscan = { version = "0.26", features = ["full"] }
-netprobe = { version = "0.3", features = ["serde", "async"] }
+netprobe = { version = "0.4", features = ["serde", "async"] }
 domainscan = "0.3"
 privilege = "0.3"
 chrono = { version = "0.4", features = ["serde"] }
