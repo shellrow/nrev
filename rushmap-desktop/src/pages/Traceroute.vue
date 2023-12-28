@@ -5,10 +5,34 @@ import { listen } from '@tauri-apps/api/event';
 import { ElMessage } from 'element-plus';
 import { isIpv4NetworkAddress, isIpv6NetworkAddress, isValidHostname, isValidIPaddress } from '../logic/shared';
 import { useRoute } from 'vue-router';
+import { Duration, as_millis } from '../types/std';
 
 interface TraceProgress {
   content: string;
   timestamp: string;
+}
+
+type PingResponseRust = {
+  seq: number;
+  ip_addr: string;
+  host_name: string;
+  ttl: number;
+  hop: number;
+  rtt: Duration;
+  status: string;
+  protocol: string;
+  node_type: string;
+}
+
+type TracerouteResultRust = {
+  probe_id: string;
+  nodes: PingResponseRust[];
+  probe_status: string;
+  start_time: string;
+  end_time: string;
+  elapsed_time: Duration;
+  protocol: string;
+  command_type: string;
 }
 
 type PingResponse = {
@@ -29,7 +53,7 @@ type TracerouteResult = {
   probe_status: string;
   start_time: string;
   end_time: string;
-  elapsed_time: number;
+  elapsed_time: Duration;
   protocol: string;
   command_type: string;
 }
@@ -51,7 +75,7 @@ const result: TracerouteResult = reactive({
   probe_status: "",
   start_time: "",
   end_time: "",
-  elapsed_time: 0,
+  elapsed_time: new Duration(0, 0),
   protocol: "",
   command_type: "",
 });
@@ -64,7 +88,7 @@ const initResult = () => {
   result.probe_status = "";
   result.start_time = "";
   result.end_time = "";
-  result.elapsed_time = 0;
+  result.elapsed_time = new Duration(0, 0);
   result.protocol = "";
   result.command_type = "";
 }
@@ -87,7 +111,7 @@ const runTraceroute = async() => {
     os_detection_flag: option.os_detection_flag,
     save_flag: option.save_flag,
   };
-  invoke<TracerouteResult>('exec_traceroute', { "opt": opt }).then((trace_result) => {
+  invoke<TracerouteResultRust>('exec_traceroute', { "opt": opt }).then((trace_result) => {
     console.log(trace_result);
     trace_result.nodes.forEach(node => {
       result.nodes.push({
@@ -96,7 +120,7 @@ const runTraceroute = async() => {
         host_name: node.host_name,
         ttl: node.ttl,
         hop: node.hop,
-        rtt: node.rtt / 1000,
+        rtt: as_millis(node.rtt),
         status: node.status,
         protocol: node.protocol,
         node_type: node.node_type,
