@@ -338,9 +338,9 @@ onUnmounted(() => {
         </el-descriptions>
 
         <el-table :data="result.ports" style="width: 100%" class="mt-2">
-          <el-table-column prop="port_number" label="Port No" />
-          <el-table-column prop="port_status" label="Status"  />
-          <el-table-column prop="service_name" label="Service Name" />
+          <el-table-column prop="port_number" label="Port No" width="100" />
+          <el-table-column prop="port_status" label="Status" width="120" />
+          <el-table-column prop="service_name" label="Service Name" width="200" />
           <el-table-column prop="service_version" label="Service Version" />
         </el-table>
       </div>
