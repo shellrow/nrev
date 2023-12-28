@@ -464,7 +464,7 @@ pub fn show_portscan_result(result: PortScanResult) {
     println!("[Performance]");
     println!("────────────────────────────────────────");
     table.add_row(Row::new(vec![
-        TableCell::new_with_alignment("Total elapsed time(ms)", 1, Alignment::Left),
+        TableCell::new_with_alignment("Total elapsed time", 1, Alignment::Left),
         TableCell::new_with_alignment(format!("{:?}", result.elapsed_time), 1, Alignment::Left),
     ]));
     println!("{}", table.render());
@@ -482,6 +482,7 @@ pub fn show_hostscan_result(result: HostScanResult) {
         TableCell::new_with_alignment("IP Address", 1, Alignment::Left),
         TableCell::new_with_alignment("Host Name", 1, Alignment::Left),
         TableCell::new_with_alignment("TTL", 1, Alignment::Left),
+        TableCell::new_with_alignment("OS Info", 1, Alignment::Left),
         TableCell::new_with_alignment("MAC Address", 1, Alignment::Left),
         TableCell::new_with_alignment("Vendor Info", 1, Alignment::Left),
     ]));
@@ -490,6 +491,7 @@ pub fn show_hostscan_result(result: HostScanResult) {
             TableCell::new_with_alignment(host.ip_addr, 1, Alignment::Left),
             TableCell::new_with_alignment(host.host_name, 1, Alignment::Left),
             TableCell::new_with_alignment(host.ttl, 1, Alignment::Left),
+            TableCell::new_with_alignment(host.os_name, 1, Alignment::Left),
             TableCell::new_with_alignment(host.mac_addr, 1, Alignment::Left),
             TableCell::new_with_alignment(host.vendor_info, 1, Alignment::Left),
         ]));
@@ -502,7 +504,7 @@ pub fn show_hostscan_result(result: HostScanResult) {
     println!("[Performance]");
     println!("────────────────────────────────────────");
     table.add_row(Row::new(vec![
-        TableCell::new_with_alignment("Total elapsed time(ms)", 1, Alignment::Left),
+        TableCell::new_with_alignment("Total elapsed time", 1, Alignment::Left),
         TableCell::new_with_alignment(format!("{:?}", result.elapsed_time), 1, Alignment::Left),
     ]));
     println!("{}", table.render());
@@ -524,7 +526,7 @@ pub fn show_ping_result(result: PingResult) {
         TableCell::new_with_alignment("Port", 1, Alignment::Left),
         TableCell::new_with_alignment("TTL", 1, Alignment::Left),
         TableCell::new_with_alignment("Hop", 1, Alignment::Left),
-        TableCell::new_with_alignment("RTT(ms)", 1, Alignment::Left),
+        TableCell::new_with_alignment("RTT", 1, Alignment::Left),
     ]));
     for r in result.stat.responses {
         let port_data: String = if let Some(port_number) = r.port_number {
@@ -560,7 +562,7 @@ pub fn show_ping_result(result: PingResult) {
     println!("[Ping Stat]");
     println!("────────────────────────────────────────");
     table.add_row(Row::new(vec![
-        TableCell::new_with_alignment("Probe Time(ms)", 1, Alignment::Left),
+        TableCell::new_with_alignment("Probe Time", 1, Alignment::Left),
         TableCell::new_with_alignment(
             format!("{:?}", result.stat.probe_time),
             1,
@@ -580,7 +582,7 @@ pub fn show_ping_result(result: PingResult) {
         TableCell::new_with_alignment(format!("{:.2}%", ((1.0 - (result.stat.received_count as f64 / result.stat.transmitted_count as f64)) * 100.0).round()), 1, Alignment::Left),
     ]));
     table.add_row(Row::new(vec![
-        TableCell::new_with_alignment("Min(ms)", 1, Alignment::Left),
+        TableCell::new_with_alignment("Min", 1, Alignment::Left),
         TableCell::new_with_alignment(
             format!("{:?}", result.stat.min),
             1,
@@ -646,7 +648,7 @@ pub fn show_trace_result(result: TracerouteResult) {
     println!("[Performance]");
     println!("────────────────────────────────────────");
     println!(
-        "Total elapsed time(ms): {:?}",result.elapsed_time);
+        "Total elapsed time: {:?}",result.elapsed_time);
     println!();
 }
 
@@ -673,7 +675,7 @@ pub fn show_domainscan_result(result: DomainScanResult) {
     println!("{}", table.render());
     println!("[Performance]");
     println!("────────────────────────────────────────");
-    println!("Total elapsed time(ms): {:?}", result.elapsed_time);
+    println!("Total elapsed time: {:?}", result.elapsed_time);
     println!();
 }
 
