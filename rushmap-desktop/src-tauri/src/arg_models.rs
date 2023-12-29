@@ -43,11 +43,24 @@ impl PortArg {
             if let Some(selected_interface) = rushmap_core::interface::get_interface_by_index(selected_interface_index) {
                 opt.interface_index = selected_interface.index;
                 opt.interface_name = selected_interface.name.clone();
-                if selected_interface.ipv4.len() > 0 {
-                    opt.src_ip = IpAddr::V4(selected_interface.ipv4[0].addr);
-                } else {
-                    if selected_interface.ipv6.len() > 0 {
-                        opt.src_ip = IpAddr::V6(selected_interface.ipv6[0].addr);
+                match ip_addr {
+                    IpAddr::V4(_) => {
+                        if selected_interface.ipv4.len() > 0 {
+                            opt.src_ip = IpAddr::V4(selected_interface.ipv4[0].addr);
+                        }
+                    }
+                    IpAddr::V6(_) => {
+                        for ip in selected_interface.ipv6 {
+                            if rushmap_core::ip::is_global_addr(ip_addr) {
+                                if xenet::net::ipnet::is_global_ipv6(&ip.addr) {
+                                    opt.src_ip = IpAddr::V6(ip.addr);
+                                    break;
+                                }
+                            }else {
+                                opt.src_ip = IpAddr::V6(ip.addr);
+                                break;
+                            }
+                        }
                     }
                 }
             }
@@ -202,6 +215,34 @@ impl PingArg {
                                     },
                                 };
         let mut opt: PingOption = PingOption::default(target_ip, 4);
+        // Network Interface
+        let selected_interface_index = crate::db::get_selected_interface_index();
+        if selected_interface_index != 0 && selected_interface_index != opt.interface_index {
+            if let Some(selected_interface) = rushmap_core::interface::get_interface_by_index(selected_interface_index) {
+                opt.interface_index = selected_interface.index;
+                opt.interface_name = selected_interface.name.clone();
+                match target_ip {
+                    IpAddr::V4(_) => {
+                        if selected_interface.ipv4.len() > 0 {
+                            opt.src_ip = IpAddr::V4(selected_interface.ipv4[0].addr);
+                        }
+                    }
+                    IpAddr::V6(_) => {
+                        for ip in selected_interface.ipv6 {
+                            if rushmap_core::ip::is_global_addr(target_ip) {
+                                if xenet::net::ipnet::is_global_ipv6(&ip.addr) {
+                                    opt.src_ip = IpAddr::V6(ip.addr);
+                                    break;
+                                }
+                            }else {
+                                opt.src_ip = IpAddr::V6(ip.addr);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
         if self.protocol.to_uppercase() == IpNextLevelProtocol::Icmp.as_str().to_uppercase() {
             opt.protocol = IpNextLevelProtocol::Icmp;
         } else if self.protocol.to_uppercase() == IpNextLevelProtocol::Icmpv6.as_str().to_uppercase() {
@@ -249,6 +290,34 @@ impl TracerouteArg {
                                     },
                                 };
         let mut opt: TracerouteOption = TracerouteOption::default(target_ip);
+        // Network Interface
+        let selected_interface_index = crate::db::get_selected_interface_index();
+        if selected_interface_index != 0 && selected_interface_index != opt.interface_index {
+            if let Some(selected_interface) = rushmap_core::interface::get_interface_by_index(selected_interface_index) {
+                opt.interface_index = selected_interface.index;
+                opt.interface_name = selected_interface.name.clone();
+                match target_ip {
+                    IpAddr::V4(_) => {
+                        if selected_interface.ipv4.len() > 0 {
+                            opt.src_ip = IpAddr::V4(selected_interface.ipv4[0].addr);
+                        }
+                    }
+                    IpAddr::V6(_) => {
+                        for ip in selected_interface.ipv6 {
+                            if rushmap_core::ip::is_global_addr(target_ip) {
+                                if xenet::net::ipnet::is_global_ipv6(&ip.addr) {
+                                    opt.src_ip = IpAddr::V6(ip.addr);
+                                    break;
+                                }
+                            }else {
+                                opt.src_ip = IpAddr::V6(ip.addr);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
         opt.timeout = Duration::from_millis(self.timeout);
         opt.target = TargetInfo::new_with_ip_addr(target_ip).with_host_name(self.target_host.clone());
         opt.protocol = IpNextLevelProtocol::Udp;
