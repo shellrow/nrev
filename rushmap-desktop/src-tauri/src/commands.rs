@@ -1,7 +1,9 @@
+use std::net::IpAddr;
 use std::sync::mpsc::{channel ,Sender, Receiver};
 use std::thread;
 use tauri::Manager;
 use rusqlite::{Connection, Transaction};
+use xenet::net::interface::Interface;
 use crate::db_models::{self, ProbeLog, DataSetItem, ProbeStat, UserProbeData};
 use crate::arg_models;
 use crate::json_models;
@@ -119,31 +121,39 @@ pub async fn exec_ping(opt: arg_models::PingArg, app_handle: tauri::AppHandle) -
     } 
     match handle.join() {
         Ok(result) => {
-            // DB Insert
-            let probe_id = sys::get_probe_id();
-            let mut conn = crate::db::connect_db().unwrap();
-            match crate::db::insert_ping_result(&conn, probe_id, result.clone(), String::new()) {
-                Ok(_affected_rows) => {},
-                Err(e) => {
-                    println!("{}", e);
-                }
-            }
-            if result.stat.responses.len() > 0 {
-                let user_probe_data = crate::db_models::UserProbeData::from_ping_result(result.clone());
-                if !UserProbeData::exists(user_probe_data.host_id.clone()) {
-                    let tran: Transaction = conn.transaction().unwrap();
-                    match crate::db::save_user_probe_data(&tran, user_probe_data) {
-                        Ok(_affected_rows) => {
-                            tran.commit().unwrap();
-                        },
+            match result {
+                Ok(result) => {
+                    // DB Insert
+                    let probe_id = sys::get_probe_id();
+                    let mut conn = crate::db::connect_db().unwrap();
+                    match crate::db::insert_ping_result(&conn, probe_id, result.clone(), String::new()) {
+                        Ok(_affected_rows) => {},
                         Err(e) => {
-                            tran.rollback().unwrap();
                             println!("{}", e);
                         }
                     }
+                    if result.stat.responses.len() > 0 {
+                        let user_probe_data = crate::db_models::UserProbeData::from_ping_result(result.clone());
+                        if !UserProbeData::exists(user_probe_data.host_id.clone()) {
+                            let tran: Transaction = conn.transaction().unwrap();
+                            match crate::db::save_user_probe_data(&tran, user_probe_data) {
+                                Ok(_affected_rows) => {
+                                    tran.commit().unwrap();
+                                },
+                                Err(e) => {
+                                    tran.rollback().unwrap();
+                                    println!("{}", e);
+                                }
+                            }
+                        }
+                    }
+                    result
+                },
+                Err(e) => {
+                    println!("{}", e);
+                    PingResult::new()
                 }
             }
-            result
         },
         Err(_) => {
             PingResult::new()
@@ -167,36 +177,44 @@ pub async fn exec_traceroute(opt: arg_models::TracerouteArg, app_handle: tauri::
     } 
     match handle.join() {
         Ok(result) => {
-            // DB Insert
-            let probe_id = sys::get_probe_id();
-            let mut conn = crate::db::connect_db().unwrap();
-            match crate::db::insert_trace_result(&conn, probe_id, result.clone(), String::new()) {
-                Ok(_affected_rows) => {},
+            match result {
+                Ok(result) => {
+                    // DB Insert
+                    let probe_id = sys::get_probe_id();
+                    let mut conn = crate::db::connect_db().unwrap();
+                    match crate::db::insert_trace_result(&conn, probe_id, result.clone(), String::new()) {
+                        Ok(_affected_rows) => {},
+                        Err(e) => {
+                            println!("{}", e);
+                        }
+                    }
+                    let user_probe_data: Vec<db_models::UserProbeData> = crate::db_models::UserProbeData::from_trace_result(result.clone());
+                    let tran: Transaction = conn.transaction().unwrap();
+                    let mut no_error: bool = true;
+                    for data in user_probe_data {
+                        if UserProbeData::exists(data.host_id.clone()) {
+                            continue;
+                        }
+                        match crate::db::save_user_probe_data(&tran, data) {
+                            Ok(_affected_rows) => {},
+                            Err(e) => {
+                                no_error = false;
+                                println!("{}", e);
+                            }
+                        }
+                    }
+                    if no_error {
+                        tran.commit().unwrap();
+                    }else{
+                        tran.rollback().unwrap();
+                    }
+                    result
+                },
                 Err(e) => {
                     println!("{}", e);
+                    TracerouteResult::new()
                 }
             }
-            let user_probe_data: Vec<db_models::UserProbeData> = crate::db_models::UserProbeData::from_trace_result(result.clone());
-            let tran: Transaction = conn.transaction().unwrap();
-            let mut no_error: bool = true;
-            for data in user_probe_data {
-                if UserProbeData::exists(data.host_id.clone()) {
-                    continue;
-                }
-                match crate::db::save_user_probe_data(&tran, data) {
-                    Ok(_affected_rows) => {},
-                    Err(e) => {
-                        no_error = false;
-                        println!("{}", e);
-                    }
-                }
-            }
-            if no_error {
-                tran.commit().unwrap();
-            }else{
-                tran.rollback().unwrap();
-            }
-            result
         },
         Err(_) => {
             TracerouteResult::new()
@@ -214,8 +232,15 @@ pub fn lookup_hostname(hostname: String) -> String {
 }
 
 #[tauri::command]
-pub fn lookup_ipaddr(ipaddr: String) -> String {
-    return dns::lookup_ip_addr(ipaddr);
+pub fn lookup_ipaddr(ipaddr: String) -> Option<String> {
+    match ipaddr.parse::<IpAddr>() {
+        Ok(ip_addr) => {
+            dns::lookup_ip_addr(ip_addr)
+        },
+        Err(_) => {
+            None
+        }
+    }
 }
 
 #[tauri::command]
@@ -258,37 +283,23 @@ pub fn get_probe_stat() -> ProbeStat {
 }
 
 #[tauri::command]
-pub fn get_interfaces() -> Vec<rushmap_core::interface::NetworkInterface> {
-    rushmap_core::interface::get_interfaces()
+pub fn get_interfaces() -> Vec<Interface> {
+    xenet::net::interface::get_interfaces()
 }
 
 #[tauri::command]
-pub fn get_default_interface() -> rushmap_core::interface::NetworkInterface {
-    rushmap_core::interface::NetworkInterface::default()
+pub fn get_default_interface() -> Result<Interface, String> {
+    Interface::default()
 }
 
 #[tauri::command]
-pub fn get_interface_by_index(if_index: u32) -> rushmap_core::interface::NetworkInterface {
-    match rushmap_core::interface::get_interface_by_index(if_index) {
-        Some(iface) => {
-            rushmap_core::interface::NetworkInterface::from_default_net_type(iface) 
-        },
-        None => {
-            rushmap_core::interface::NetworkInterface::new()
-        }
-    }
+pub fn get_interface_by_index(if_index: u32) -> Option<Interface> {
+    rushmap_core::interface::get_interface_by_index(if_index)
 }
 
 #[tauri::command]
-pub fn get_interface_by_name(if_name: String) -> rushmap_core::interface::NetworkInterface {
-    match rushmap_core::interface::get_interface_by_name(if_name) {
-        Some(iface) => {
-            rushmap_core::interface::NetworkInterface::from_default_net_type(iface) 
-        },
-        None => {
-            rushmap_core::interface::NetworkInterface::new()
-        }
-    }
+pub fn get_interface_by_name(if_name: String) -> Option<Interface> {
+    rushmap_core::interface::get_interface_by_name(if_name)
 }
 
 #[tauri::command]

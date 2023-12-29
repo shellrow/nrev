@@ -170,7 +170,6 @@ const runPortScan = async() => {
     save_flag: option.save_flag,
   };
   invoke<PortScanResult>('exec_portscan', { "opt": opt }).then((scan_result) => {
-    console.log(scan_result);
     scanning.value = false;
     let open_ports: ServiceInfo[] = [];
     let node = scan_result.nodes[0];
@@ -338,9 +337,9 @@ onUnmounted(() => {
         </el-descriptions>
 
         <el-table :data="result.ports" style="width: 100%" class="mt-2">
-          <el-table-column prop="port_number" label="Port No" />
-          <el-table-column prop="port_status" label="Status"  />
-          <el-table-column prop="service_name" label="Service Name" />
+          <el-table-column prop="port_number" label="Port No" width="100" />
+          <el-table-column prop="port_status" label="Status" width="120" />
+          <el-table-column prop="service_name" label="Service Name" width="200" />
           <el-table-column prop="service_version" label="Service Version" />
         </el-table>
       </div>

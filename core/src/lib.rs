@@ -10,5 +10,3 @@ pub mod interface;
 pub mod define;
 pub mod db;
 pub mod util;
-
-pub use cross_socket;

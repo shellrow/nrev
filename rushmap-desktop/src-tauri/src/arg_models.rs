@@ -1,9 +1,10 @@
-use std::net::IpAddr;
+use std::net::{IpAddr, Ipv4Addr};
 use std::time::Duration;
 use serde::{Serialize, Deserialize};
 use rand::seq::SliceRandom;
+use xenet::packet::ip::IpNextLevelProtocol;
 use crate::validator;
-use rushmap_core::option::{PortScanOption, PortScanType, HostScanOption, HostScanType, PingOption, TracerouteOption, IpNextLevelProtocol, TargetInfo};
+use rushmap_core::option::{PortScanOption, PortScanType, HostScanOption, HostScanType, PingOption, TracerouteOption, TargetInfo};
 use rushmap_core::db;
 use rushmap_core::dns;
 
@@ -22,22 +23,6 @@ pub struct PortArg {
 
 impl PortArg {
     pub async fn to_scan_option(&self) -> PortScanOption {
-        let mut opt: PortScanOption = PortScanOption::default();
-        // Network Interface
-        let selected_interface_index = crate::db::get_selected_interface_index();
-        if selected_interface_index != 0 && selected_interface_index != opt.interface_index {
-            if let Some(selected_interface) = rushmap_core::interface::get_interface_by_index(selected_interface_index) {
-                opt.interface_index = selected_interface.index;
-                opt.interface_name = selected_interface.name.clone();
-                if selected_interface.ipv4.len() > 0 {
-                    opt.src_ip = IpAddr::V4(selected_interface.ipv4[0].addr);
-                } else {
-                    if selected_interface.ipv6.len() > 0 {
-                        opt.src_ip = IpAddr::V6(selected_interface.ipv6[0].addr);
-                    }
-                }
-            }
-        }
         let ip_addr: IpAddr;
         if validator::is_ipaddr(self.target_host.clone()) {
             ip_addr = self.target_host.parse::<IpAddr>().unwrap();
@@ -47,11 +32,41 @@ impl PortArg {
                     ip_addr = ip;
                 },
                 None => {
-                    return opt;
+                    ip_addr = IpAddr::V4(Ipv4Addr::LOCALHOST);
+                }
+            }
+        }
+        let mut opt: PortScanOption = PortScanOption::default(ip_addr);
+        // Network Interface
+        let selected_interface_index = crate::db::get_selected_interface_index();
+        if selected_interface_index != 0 && selected_interface_index != opt.interface_index {
+            if let Some(selected_interface) = rushmap_core::interface::get_interface_by_index(selected_interface_index) {
+                opt.interface_index = selected_interface.index;
+                opt.interface_name = selected_interface.name.clone();
+                match ip_addr {
+                    IpAddr::V4(_) => {
+                        if selected_interface.ipv4.len() > 0 {
+                            opt.src_ip = IpAddr::V4(selected_interface.ipv4[0].addr);
+                        }
+                    }
+                    IpAddr::V6(_) => {
+                        for ip in selected_interface.ipv6 {
+                            if rushmap_core::ip::is_global_addr(ip_addr) {
+                                if xenet::net::ipnet::is_global_ipv6(&ip.addr) {
+                                    opt.src_ip = IpAddr::V6(ip.addr);
+                                    break;
+                                }
+                            }else {
+                                opt.src_ip = IpAddr::V6(ip.addr);
+                                break;
+                            }
+                        }
+                    }
                 }
             }
         }
         let mut target: TargetInfo = TargetInfo::new_with_ip_addr(ip_addr).with_host_name(self.target_host.clone());
+
         if self.port_option == String::from("well_known") {
             target.ports = db::get_wellknown_ports();
         }else if self.port_option == String::from("custom_list") {
@@ -116,20 +131,20 @@ impl HostArg {
                 }
             }
         }
-        if self.protocol.to_lowercase() == IpNextLevelProtocol::ICMPv4.id() {
-            opt.protocol = IpNextLevelProtocol::ICMPv4;
+        if self.protocol.to_uppercase() == IpNextLevelProtocol::Icmp.as_str().to_uppercase() {
+            opt.protocol = IpNextLevelProtocol::Icmp;
             opt.scan_type = HostScanType::IcmpPingScan;
-        } else if self.protocol.to_lowercase() == IpNextLevelProtocol::ICMPv6.id() {
-            opt.protocol = IpNextLevelProtocol::ICMPv6;
+        } else if self.protocol.to_uppercase() == IpNextLevelProtocol::Icmpv6.as_str().to_uppercase() {
+            opt.protocol = IpNextLevelProtocol::Icmpv6;
             opt.scan_type = HostScanType::IcmpPingScan;
-        } else if self.protocol.to_lowercase() == IpNextLevelProtocol::TCP.id() {
-            opt.protocol = IpNextLevelProtocol::TCP;
+        } else if self.protocol.to_uppercase() == IpNextLevelProtocol::Tcp.as_str().to_uppercase() {
+            opt.protocol = IpNextLevelProtocol::Tcp;
             opt.scan_type = HostScanType::TcpPingScan;
-        } else if self.protocol.to_lowercase() == IpNextLevelProtocol::UDP.id() {
-            opt.protocol = IpNextLevelProtocol::UDP;
+        } else if self.protocol.to_uppercase() == IpNextLevelProtocol::Udp.as_str().to_uppercase() {
+            opt.protocol = IpNextLevelProtocol::Udp;
             opt.scan_type = HostScanType::UdpPingScan;
         }else{
-            opt.protocol = IpNextLevelProtocol::ICMPv4;
+            opt.protocol = IpNextLevelProtocol::Icmp;
             opt.scan_type = HostScanType::IcmpPingScan;
         }
         opt.async_scan = self.async_flag;
@@ -184,7 +199,6 @@ pub struct PingArg {
 
 impl PingArg {
     pub async fn to_scan_option(&self) -> PingOption {
-        let mut opt: PingOption = PingOption::default();
         let target_ip: IpAddr = match self.target_host.parse::<IpAddr>(){
                                     Ok(ip) => {
                                         ip
@@ -195,22 +209,51 @@ impl PingArg {
                                                 ip
                                             },
                                             None => {
-                                                return opt;
+                                                IpAddr::V4(Ipv4Addr::LOCALHOST)
                                             }
                                         }
                                     },
                                 };
-        if self.protocol.to_lowercase() == IpNextLevelProtocol::ICMPv4.id() {
-            opt.protocol = IpNextLevelProtocol::ICMPv4;
-        } else if self.protocol.to_lowercase() == IpNextLevelProtocol::ICMPv6.id() {
-            opt.protocol = IpNextLevelProtocol::ICMPv6;
-        } else if self.protocol.to_lowercase() == IpNextLevelProtocol::TCP.id() {
-            opt.protocol = IpNextLevelProtocol::TCP;
-        } else if self.protocol.to_lowercase() == IpNextLevelProtocol::UDP.id() {
-            opt.protocol = IpNextLevelProtocol::UDP;
+        let mut opt: PingOption = PingOption::default(target_ip, 4);
+        // Network Interface
+        let selected_interface_index = crate::db::get_selected_interface_index();
+        if selected_interface_index != 0 && selected_interface_index != opt.interface_index {
+            if let Some(selected_interface) = rushmap_core::interface::get_interface_by_index(selected_interface_index) {
+                opt.interface_index = selected_interface.index;
+                opt.interface_name = selected_interface.name.clone();
+                match target_ip {
+                    IpAddr::V4(_) => {
+                        if selected_interface.ipv4.len() > 0 {
+                            opt.src_ip = IpAddr::V4(selected_interface.ipv4[0].addr);
+                        }
+                    }
+                    IpAddr::V6(_) => {
+                        for ip in selected_interface.ipv6 {
+                            if rushmap_core::ip::is_global_addr(target_ip) {
+                                if xenet::net::ipnet::is_global_ipv6(&ip.addr) {
+                                    opt.src_ip = IpAddr::V6(ip.addr);
+                                    break;
+                                }
+                            }else {
+                                opt.src_ip = IpAddr::V6(ip.addr);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if self.protocol.to_uppercase() == IpNextLevelProtocol::Icmp.as_str().to_uppercase() {
+            opt.protocol = IpNextLevelProtocol::Icmp;
+        } else if self.protocol.to_uppercase() == IpNextLevelProtocol::Icmpv6.as_str().to_uppercase() {
+            opt.protocol = IpNextLevelProtocol::Icmpv6;
+        } else if self.protocol.to_uppercase() == IpNextLevelProtocol::Tcp.as_str().to_uppercase() {
+            opt.protocol = IpNextLevelProtocol::Tcp;
+        } else if self.protocol.to_uppercase() == IpNextLevelProtocol::Udp.as_str().to_uppercase() {
+            opt.protocol = IpNextLevelProtocol::Udp;
         }
 
-        if opt.protocol == IpNextLevelProtocol::TCP {
+        if opt.protocol == IpNextLevelProtocol::Tcp {
             opt.target = TargetInfo::new_with_socket(target_ip, self.port).with_ip_lookup_async().await;
         }else{
             opt.target = TargetInfo::new_with_ip_lookup_async(target_ip).await;
@@ -231,8 +274,6 @@ pub struct TracerouteArg {
 
 impl TracerouteArg {
     pub async fn to_scan_option(&self) -> TracerouteOption {
-        let mut opt: TracerouteOption = TracerouteOption::default();
-        opt.timeout = Duration::from_millis(self.timeout);
         let target_ip: IpAddr = match self.target_host.parse::<IpAddr>(){
                                     Ok(ip) => {
                                         ip
@@ -243,13 +284,43 @@ impl TracerouteArg {
                                                 ip
                                             },
                                             None => {
-                                                return opt;
+                                                IpAddr::V4(Ipv4Addr::LOCALHOST)
                                             }
                                         }
                                     },
                                 };
+        let mut opt: TracerouteOption = TracerouteOption::default(target_ip);
+        // Network Interface
+        let selected_interface_index = crate::db::get_selected_interface_index();
+        if selected_interface_index != 0 && selected_interface_index != opt.interface_index {
+            if let Some(selected_interface) = rushmap_core::interface::get_interface_by_index(selected_interface_index) {
+                opt.interface_index = selected_interface.index;
+                opt.interface_name = selected_interface.name.clone();
+                match target_ip {
+                    IpAddr::V4(_) => {
+                        if selected_interface.ipv4.len() > 0 {
+                            opt.src_ip = IpAddr::V4(selected_interface.ipv4[0].addr);
+                        }
+                    }
+                    IpAddr::V6(_) => {
+                        for ip in selected_interface.ipv6 {
+                            if rushmap_core::ip::is_global_addr(target_ip) {
+                                if xenet::net::ipnet::is_global_ipv6(&ip.addr) {
+                                    opt.src_ip = IpAddr::V6(ip.addr);
+                                    break;
+                                }
+                            }else {
+                                opt.src_ip = IpAddr::V6(ip.addr);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        opt.timeout = Duration::from_millis(self.timeout);
         opt.target = TargetInfo::new_with_ip_addr(target_ip).with_host_name(self.target_host.clone());
-        opt.protocol = IpNextLevelProtocol::UDP;
+        opt.protocol = IpNextLevelProtocol::Udp;
         opt.max_hop = self.max_hop;
         opt
     }

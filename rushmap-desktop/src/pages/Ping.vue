@@ -6,6 +6,7 @@ import { ElMessage } from 'element-plus';
 import { PROTOCOL_ICMPv4, PROTOCOL_TCP, PROTOCOL_UDP }  from '../config/define';
 import { isIpv4NetworkAddress, isIpv6NetworkAddress, isValidHostname, isValidIPaddress } from '../logic/shared';
 import { useRoute } from 'vue-router';
+import { Duration, as_millis } from '../types/time';
 
 interface PingOption {
   target_host: string;
@@ -19,6 +20,40 @@ interface PingOption {
 type PingProgress = {
   content: string;
   timestamp: string;
+}
+
+type PingResponseRust = {
+  seq: number;
+  ip_addr: string;
+  host_name: string;
+  port_number: number;
+  ttl: number;
+  hop: number;
+  rtt: Duration;
+  status: string;
+  protocol: string;
+  node_type: string;
+}
+
+type PingStatRust = {
+    responses: PingResponseRust[];
+    probe_time: Duration;
+    transmitted_count: number;
+    received_count: number;
+    min: Duration;
+    avg: Duration;
+    max: Duration;
+}
+
+type PingResultRust = {
+  probe_id: string;
+  stat: PingStatRust;
+  probe_status: string;
+  start_time: string;
+  end_time: string;
+  elapsed_time: Duration;
+  protocol: string;
+  command_type: string;
 }
 
 type PingResponse = {
@@ -36,12 +71,12 @@ type PingResponse = {
 
 type PingStat = {
     responses: PingResponse[];
-    probe_time: number;
+    probe_time: Duration;
     transmitted_count: number;
     received_count: number;
-    min: number;
-    avg: number;
-    max: number;
+    min: Duration;
+    avg: Duration;
+    max: Duration;
 }
 
 type PingResult = {
@@ -50,7 +85,7 @@ type PingResult = {
   probe_status: string;
   start_time: string;
   end_time: string;
-  elapsed_time: number;
+  elapsed_time: Duration;
   protocol: string;
   command_type: string;
 }
@@ -73,17 +108,17 @@ const result: PingResult = reactive({
   probe_id: "",
   stat: {
     responses: [],
-    probe_time: 0,
+    probe_time: new Duration(0, 0),
     transmitted_count: 0,
     received_count: 0,
-    min: 0,
-    avg: 0,
-    max: 0,
+    min: new Duration(0, 0),
+    avg: new Duration(0, 0),
+    max: new Duration(0, 0),
   },
   probe_status: "",
   start_time: "",
   end_time: "",
-  elapsed_time: 0,
+  elapsed_time: new Duration(0, 0),
   protocol: "",
   command_type: "",
 });
@@ -109,7 +144,7 @@ const initResult = () => {
   result.probe_status = "";
   result.start_time = "";
   result.end_time = "";
-  result.elapsed_time = 0;
+  result.elapsed_time = new Duration(0, 0);
   result.protocol = "";
   result.command_type = "";
 }
@@ -133,8 +168,7 @@ const runPing = async() => {
     os_detection_flag: option.os_detection_flag,
     save_flag: option.save_flag,
   };
-  invoke<PingResult>('exec_ping', { "opt": opt }).then((ping_result) => {
-    console.log(ping_result);
+  invoke<PingResultRust>('exec_ping', { "opt": opt }).then((ping_result) => {
     ping_result.stat.responses.forEach(ping_res => {
       result.stat.responses.push({
         seq: ping_res.seq,
@@ -143,7 +177,7 @@ const runPing = async() => {
         port_number: ping_res.port_number,
         ttl: ping_res.ttl,
         hop: ping_res.hop,
-        rtt: ping_res.rtt / 1000,
+        rtt: as_millis(ping_res.rtt),
         status: ping_res.status,
         protocol: ping_res.protocol,
         node_type: ping_res.node_type,
@@ -152,10 +186,10 @@ const runPing = async() => {
     //result.ping_results = ping_stat.ping_results;
     result.stat.transmitted_count = ping_result.stat.transmitted_count;
     result.stat.received_count = ping_result.stat.received_count;
-    result.stat.probe_time = ping_result.stat.probe_time / 1000;
-    result.stat.min = ping_result.stat.min / 1000;
-    result.stat.avg = ping_result.stat.avg / 1000;
-    result.stat.max = ping_result.stat.max / 1000;
+    result.stat.probe_time = ping_result.stat.probe_time;
+    result.stat.min = ping_result.stat.min;
+    result.stat.avg = ping_result.stat.avg;
+    result.stat.max = ping_result.stat.max;
     result.elapsed_time = ping_result.elapsed_time;
     result.probe_status = ping_result.probe_status;
     result.start_time = ping_result.start_time;

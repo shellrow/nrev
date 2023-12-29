@@ -4,6 +4,7 @@ import { invoke } from '@tauri-apps/api/tauri';
 import { ElMessage } from 'element-plus';
 import { isValidIPaddress, isValidHostname, isIpv4NetworkAddress, isValidIPv6Address } from '../logic/shared';
 import { PROTOCOL_ICMPv4, PROTOCOL_ICMPv6, PROTOCOL_TCP, PROTOCOL_UDP, HOSTSCAN_TYPE_NETWORK, HOSTSCAN_TYPE_CUSTOM_HOSTS, OS_TYPE_WINDOWS } from '../config/define';
+import { Duration, as_millis } from '../types/time';
 
 type Host = {
     ip_addr: string,
@@ -37,7 +38,7 @@ type HostScanResult = {
     probe_status: string,
     start_time: string,
     end_time: string,
-    elapsed_time: number,
+    elapsed_time: Duration,
     protocol: string,
     command_type: string,
     scan_type: string,
@@ -166,7 +167,6 @@ const runHostScan = async() => {
         save_flag: option.save_flag,
     };
     invoke<HostScanResult>('exec_hostscan', { "opt": opt }).then((scan_result) => {
-        console.log(scan_result);
         scanning.value = false;
         result.hosts = scan_result.nodes;
         result.protocol = scan_result.protocol;
@@ -175,7 +175,7 @@ const runHostScan = async() => {
                 result.port_number = scan_result.nodes[0].services[0].port_number;
             }
         }
-        result.total_scan_time = (scan_result.elapsed_time).toFixed(4);
+        result.total_scan_time = as_millis(scan_result.elapsed_time).toFixed(4);
     });
 };
 
@@ -313,10 +313,10 @@ onUnmounted(() => {
             >
             </el-descriptions>
             <el-table :data="result.hosts" style="width: 100%" class="mt-2">
-                <el-table-column prop="ip_addr" label="IP Address" />
+                <el-table-column prop="ip_addr" label="IP Address" width="120" />
                 <el-table-column prop="host_name" label="Host Name"  />
-                <el-table-column prop="ttl" label="TTL" />
-                <el-table-column prop="mac_addr" label="MAC Address" />
+                <el-table-column prop="ttl" label="TTL" width="80" />
+                <el-table-column prop="mac_addr" label="MAC Address" width="150" />
                 <el-table-column prop="vendor_info" label="Vendor Info" />
             </el-table>
         </div>

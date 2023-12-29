@@ -2,7 +2,6 @@
 extern crate clap;
 
 mod handler;
-mod json_models;
 mod output;
 mod parser;
 mod validator;
@@ -16,7 +15,7 @@ use rushmap_core::define;
 
 // APP information
 pub const CRATE_BIN_NAME: &str = "rmap";
-pub const CRATE_UPDATE_DATE: &str = "2023-10-22";
+pub const CRATE_UPDATE_DATE: &str = "2023-12-29";
 pub const CRATE_REPOSITORY: &str = "https://github.com/shellrow/rushmap";
 
 fn main() {
@@ -27,7 +26,7 @@ fn main() {
     }
     let matches = get_app_settings();
 
-    if matches.contains_id("ifs") {
+    if matches.contains_id("interfaces") {
         show_app_desc();
         handler::list_interfaces(matches.contains_id("json"));
         std::process::exit(0);
@@ -62,19 +61,29 @@ fn main() {
             output::show_port_options(opt.clone());
             match opt.scan_type {
                 option::PortScanType::TcpSynScan => {
-                    if opt.async_scan && sys::get_os_type() == "windows" {
-                        exit_with_error_message("Async TCP SYN Scan is not supported on Windows");
-                    }
-                    if process::privileged() || sys::get_os_type() == "windows" {
-                        async_io::block_on(async {
-                            handler::handle_port_scan(opt).await;
-                        })
+                    if opt.async_scan {
+                        if sys::get_os_type() == "windows" {
+                            exit_with_error_message("Async TCP SYN Scan is not supported on Windows");
+                        }
+                        if process::privileged() {
+                            async_io::block_on(async {
+                                handler::handle_port_scan(opt).await;
+                            })
+                        }else{
+                            exit_with_error_message("Requires administrator privilege");
+                        }
                     } else {
-                        exit_with_error_message("Requires administrator privilege");
+                        if process::privileged() || (sys::get_os_type() == "windows" || sys::get_os_type() == "macos") {
+                            async_io::block_on(async {
+                                handler::handle_port_scan(opt).await;
+                            })
+                        }else {
+                            exit_with_error_message("Requires administrator privilege");
+                        }
                     }
-                },
+                }
                 option::PortScanType::TcpConnectScan => {
-                    // rmap's connect scan captures response packets in parallel with connection attempts for speed. 
+                    // rmap's connect scan captures response packets in parallel with connection attempts for speed.
                     // This requires administrator privileges on Linux.
                     if sys::get_os_type() == "linux" && !process::privileged() {
                         exit_with_error_message("Requires administrator privilege");
@@ -82,7 +91,7 @@ fn main() {
                     async_io::block_on(async {
                         handler::handle_port_scan(opt).await;
                     })
-                },
+                }
             }
         },
         option::CommandType::HostScan => {
@@ -96,7 +105,7 @@ fn main() {
                 },
                 _ => {},
             }
-            if sys::get_os_type() == "windows" {
+            if sys::get_os_type() == "windows" || sys::get_os_type() == "macos" {
                 if opt.async_scan && !process::privileged() {
                     exit_with_error_message("Requires administrator privilege");
                 }
@@ -112,7 +121,7 @@ fn main() {
         option::CommandType::Ping => {
             let opt: option::PingOption = parser::parse_ping_args(matches).unwrap();
             output::show_ping_options(opt.clone());
-            if process::privileged() || sys::get_os_type() == "windows" {
+            if process::privileged() || sys::get_os_type() == "windows" || sys::get_os_type() == "macos" {
                 handler::handle_ping(opt);
             } else {
                 exit_with_error_message("Requires administrator privilege");
@@ -121,7 +130,7 @@ fn main() {
         option::CommandType::Traceroute => {
             let opt: option::TracerouteOption = parser::parse_trace_args(matches).unwrap();
             output::show_trace_options(opt.clone());
-            if process::privileged() || sys::get_os_type() == "windows" {
+            if process::privileged() || sys::get_os_type() == "windows" || sys::get_os_type() == "macos" {
                 handler::handle_trace(opt);
             } else {
                 exit_with_error_message("Requires administrator privilege");
@@ -181,9 +190,9 @@ fn get_app_settings() -> ArgMatches {
             .value_name("target")
             .validator(validator::validate_domain_opt)
         )
-        .arg(Arg::new("ifs")
+        .arg(Arg::new("interfaces")
             .help("List network interfaces")
-            .long("ifs")
+            .long("interfaces")
             .takes_value(false)
         )
         .arg(Arg::new("interface")
@@ -312,7 +321,7 @@ fn get_app_settings() -> ArgMatches {
             .long("acceptinvalidcerts")
             .takes_value(false)
         )
-        .group(ArgGroup::new("mode").args(&["port", "host", "ping", "trace", "domain", "ifs"]))
+        .group(ArgGroup::new("mode").args(&["port", "host", "ping", "trace", "domain", "interfaces"]))
         .setting(AppSettings::DeriveDisplayOrder)
         ;
     app.get_matches()

@@ -11,30 +11,28 @@ use std::net::SocketAddr;
 use std::str::FromStr;
 use std::time::Duration;
 use rand::seq::SliceRandom;
+use xenet::packet::ip::IpNextLevelProtocol;
 
 use rushmap_core::dns;
 use rushmap_core::interface;
-use rushmap_core::option::{PortScanOption, HostScanOption, TargetInfo, PortListOption, PortScanType, IpNextLevelProtocol};
+use rushmap_core::option::{PortScanOption, HostScanOption, TargetInfo, PortListOption, PortScanType};
 
 pub fn parse_port_args(matches: ArgMatches) -> Result<PortScanOption, String>  {
     if !matches.contains_id("port") {
         return Err("Invalid command".to_string());  
     }
-    let mut opt: PortScanOption = PortScanOption::default();
     let target: &str = matches.value_of("port").unwrap();
     let socketaddr_vec: Vec<&str> = target.split(":").collect();
     let host: String = socketaddr_vec[0].to_string();
     let mut target_info: TargetInfo = TargetInfo::new();
     if validator::is_ipaddr(host.clone()) {
         target_info.ip_addr = host.parse::<IpAddr>().unwrap();
-        target_info.host_name = dns::lookup_ip_addr(host);
+        target_info.host_name = dns::lookup_ip_addr(target_info.ip_addr).unwrap_or(target_info.ip_addr.to_string());
     } else {
         match dns::lookup_host_name(host.clone()) {
             Some(ip) => {
-                if ip.is_ipv4() {
-                    target_info.ip_addr = ip;
-                    target_info.host_name = host;
-                }
+                target_info.ip_addr = ip;
+                target_info.host_name = host;
             }
             None => {}
         }
@@ -74,7 +72,8 @@ pub fn parse_port_args(matches: ArgMatches) -> Result<PortScanOption, String>  {
             target_info.set_ports_from_option(PortListOption::Default);
         }
     }
-    opt.targets.push(target_info);
+    let mut opt: PortScanOption = PortScanOption::default(target_info.ip_addr);
+    opt.targets.push(target_info.clone());
 
     // Flags
     if matches.contains_id("interface") {
@@ -82,11 +81,24 @@ pub fn parse_port_args(matches: ArgMatches) -> Result<PortScanOption, String>  {
         if let Some(interface) = interface::get_interface_by_name(v_interface) {
             opt.interface_index = interface.index;
             opt.interface_name = interface.name;
-            if interface.ipv4.len() > 0 {
-                opt.src_ip = IpAddr::V4(interface.ipv4[0].addr);
-            } else {
-                if interface.ipv6.len() > 0 {
-                    opt.src_ip = IpAddr::V6(interface.ipv6[0].addr);
+            match target_info.ip_addr {
+                IpAddr::V4(_) => {
+                    if interface.ipv4.len() > 0 {
+                        opt.src_ip = IpAddr::V4(interface.ipv4[0].addr);
+                    }
+                }
+                IpAddr::V6(_) => {
+                    for ip in interface.ipv6 {
+                        if rushmap_core::ip::is_global_addr(target_info.ip_addr) {
+                            if xenet::net::ipnet::is_global_ipv6(&ip.addr) {
+                                opt.src_ip = IpAddr::V6(ip.addr);
+                                break;
+                            }
+                        }else {
+                            opt.src_ip = IpAddr::V6(ip.addr);
+                            break;
+                        }
+                    }
                 }
             }
         }
@@ -174,17 +186,17 @@ pub fn parse_host_args(matches: ArgMatches) -> Result<HostScanOption, String>  {
     // Set protocol
     if matches.contains_id("protocol") {
         let v_protocol: String = matches.get_one::<String>("protocol").unwrap().to_string();
-        if v_protocol.to_lowercase() == IpNextLevelProtocol::ICMPv4.id() {
-            opt.protocol = IpNextLevelProtocol::ICMPv4;
+        if v_protocol.to_uppercase() == IpNextLevelProtocol::Icmp.as_str().to_uppercase() {
+            opt.protocol = IpNextLevelProtocol::Icmp;
             opt.scan_type = HostScanType::IcmpPingScan;
-        } else if v_protocol.to_lowercase() == IpNextLevelProtocol::ICMPv6.id() {
-            opt.protocol = IpNextLevelProtocol::ICMPv6;
+        } else if v_protocol.to_uppercase() == IpNextLevelProtocol::Icmpv6.as_str().to_uppercase() {
+            opt.protocol = IpNextLevelProtocol::Icmpv6;
             opt.scan_type = HostScanType::IcmpPingScan;
-        } else if v_protocol.to_lowercase() == IpNextLevelProtocol::TCP.id() {
-            opt.protocol = IpNextLevelProtocol::TCP;
+        } else if v_protocol.to_uppercase() == IpNextLevelProtocol::Tcp.as_str().to_uppercase() {
+            opt.protocol = IpNextLevelProtocol::Tcp;
             opt.scan_type = HostScanType::TcpPingScan;
-        } else if v_protocol.to_lowercase() == IpNextLevelProtocol::UDP.id() {
-            opt.protocol = IpNextLevelProtocol::UDP;
+        } else if v_protocol.to_uppercase() == IpNextLevelProtocol::Udp.as_str().to_uppercase() {
+            opt.protocol = IpNextLevelProtocol::Udp;
             opt.scan_type = HostScanType::UdpPingScan;
         }
     }
@@ -192,22 +204,22 @@ pub fn parse_host_args(matches: ArgMatches) -> Result<HostScanOption, String>  {
         let v_scantype: String = matches.get_one::<String>("scantype").unwrap().to_string();
         if v_scantype.to_lowercase() == HostScanType::IcmpPingScan.arg_name() {
             opt.scan_type = HostScanType::IcmpPingScan;
-            if opt.protocol != IpNextLevelProtocol::ICMPv4 && opt.protocol != IpNextLevelProtocol::ICMPv6 {
-                opt.protocol = IpNextLevelProtocol::ICMPv4;
+            if opt.protocol != IpNextLevelProtocol::Icmp && opt.protocol != IpNextLevelProtocol::Icmpv6 {
+                opt.protocol = IpNextLevelProtocol::Icmp;
             }
         } else if v_scantype.to_lowercase() == HostScanType::TcpPingScan.arg_name() {
             opt.scan_type = HostScanType::TcpPingScan;
-            opt.protocol = IpNextLevelProtocol::TCP;
+            opt.protocol = IpNextLevelProtocol::Tcp;
         } else if v_scantype.to_lowercase() == HostScanType::UdpPingScan.arg_name() {
             opt.scan_type = HostScanType::UdpPingScan;
-            opt.protocol = IpNextLevelProtocol::UDP;
+            opt.protocol = IpNextLevelProtocol::Udp;
         }
     }
     // Set targets
     let target: &str = matches.value_of("host").unwrap();
     let target_vec: Vec<&str> = target.split("/").collect();
-    let mut port: u16 = if opt.protocol == IpNextLevelProtocol::ICMPv4
-        || opt.protocol == IpNextLevelProtocol::ICMPv6
+    let mut port: u16 = if opt.protocol == IpNextLevelProtocol::Icmp
+        || opt.protocol == IpNextLevelProtocol::Icmpv6
     {
         0
     } else {
@@ -224,7 +236,7 @@ pub fn parse_host_args(matches: ArgMatches) -> Result<HostScanOption, String>  {
             IpAddr::from_str(target_vec[0]).unwrap()
         };
         if ip_addr.is_ipv6() && opt.scan_type == HostScanType::IcmpPingScan {
-            opt.protocol = IpNextLevelProtocol::ICMPv6;
+            opt.protocol = IpNextLevelProtocol::Icmpv6;
         }
         let nw_addr: String = match ip::get_network_address(ip_addr) {
             Ok(nw_addr) => nw_addr,
@@ -234,7 +246,7 @@ pub fn parse_host_args(matches: ArgMatches) -> Result<HostScanOption, String>  {
             }
         };
         // network
-        if opt.protocol == IpNextLevelProtocol::ICMPv6 {
+        if opt.protocol == IpNextLevelProtocol::Icmpv6 {
             return Err("ICMPv6 network scan is not supported".to_string());
         }
         match target.parse::<IpNet>() {
@@ -348,38 +360,42 @@ pub fn parse_ping_args(matches: ArgMatches) -> Result<PingOption, String>  {
     if !matches.contains_id("ping") {
         return Err("Invalid command".to_string());  
     }
-    let mut opt: PingOption = PingOption::default();
 
-    opt.protocol = IpNextLevelProtocol::ICMPv4;
-    if matches.contains_id("protocol") {
-        let v_protocol: String = matches.get_one::<String>("protocol").unwrap().to_string();
-        if v_protocol.to_lowercase() == IpNextLevelProtocol::ICMPv4.id() {
-            opt.protocol = IpNextLevelProtocol::ICMPv4;
-        } else if v_protocol.to_lowercase() == IpNextLevelProtocol::ICMPv6.id() {
-            opt.protocol = IpNextLevelProtocol::ICMPv6;
-        } else if v_protocol.to_lowercase() == IpNextLevelProtocol::TCP.id() {
-            opt.protocol = IpNextLevelProtocol::TCP;
-        } else if v_protocol.to_lowercase() == IpNextLevelProtocol::UDP.id() {
-            opt.protocol = IpNextLevelProtocol::UDP;
-        }
-    }
-    let target: &str = matches.value_of("ping").unwrap();
-    match target.parse::<IpAddr>() {
+    let target_str: &str = matches.value_of("ping").unwrap();
+    let mut target: TargetInfo = TargetInfo::new();
+    match target_str.parse::<IpAddr>() {
         Ok(ip) => {
-            opt.target = TargetInfo::new_with_ip_lookup(ip);
+            target = TargetInfo::new_with_ip_lookup(ip);
         }
-        Err(_) => match SocketAddr::from_str(&target) {
+        Err(_) => match SocketAddr::from_str(&target_str) {
             Ok(socket_addr) => {
-                opt.target = TargetInfo::new_with_socket(socket_addr.ip(), socket_addr.port()).with_ip_lookup();
+                target = TargetInfo::new_with_socket(socket_addr.ip(), socket_addr.port()).with_ip_lookup();
             }
-            Err(_) => match dns::lookup_host_name(target.to_string()) {
+            Err(_) => match dns::lookup_host_name(target_str.to_string()) {
                 Some(ip) => {
-                    opt.target = TargetInfo::new_with_ip_addr(ip).with_host_name(target.to_string());
+                    target = TargetInfo::new_with_ip_addr(ip).with_host_name(target_str.to_string());
                 }
                 None => {}
             },
         },
     }
+
+    let mut opt: PingOption = PingOption::default(target.ip_addr, 4);
+    opt.target = target;
+    opt.protocol = IpNextLevelProtocol::Icmp;
+    if matches.contains_id("protocol") {
+        let v_protocol: String = matches.get_one::<String>("protocol").unwrap().to_string();
+        if v_protocol.to_uppercase() == IpNextLevelProtocol::Icmp.as_str().to_uppercase() {
+            opt.protocol = IpNextLevelProtocol::Icmp;
+        } else if v_protocol.to_uppercase() == IpNextLevelProtocol::Icmpv6.as_str().to_uppercase() {
+            opt.protocol = IpNextLevelProtocol::Icmpv6;
+        } else if v_protocol.to_uppercase() == IpNextLevelProtocol::Tcp.as_str().to_uppercase() {
+            opt.protocol = IpNextLevelProtocol::Tcp;
+        } else if v_protocol.to_uppercase() == IpNextLevelProtocol::Udp.as_str().to_uppercase() {
+            opt.protocol = IpNextLevelProtocol::Udp;
+        }
+    }
+    
     // Flags
     if matches.contains_id("interface") {
         let v_interface: String = matches.get_one::<String>("interface").unwrap().to_string();
@@ -450,20 +466,24 @@ pub fn parse_trace_args(matches: ArgMatches) -> Result<TracerouteOption, String>
     if !matches.contains_id("trace") {
         return Err("Invalid command".to_string());  
     }
-    let mut opt: TracerouteOption = TracerouteOption::default();
-    opt.protocol = IpNextLevelProtocol::UDP;
-    let target: &str = matches.value_of("trace").unwrap();
-    match target.parse::<IpAddr>() {
+    let target_str: &str = matches.value_of("trace").unwrap();
+    let mut target: TargetInfo = TargetInfo::new();
+    match target_str.parse::<IpAddr>() {
         Ok(ip) => {
-            opt.target = TargetInfo::new_with_ip_lookup(ip);
+            target = TargetInfo::new_with_ip_lookup(ip);
         }
-        Err(_) => match dns::lookup_host_name(target.to_string()) {
+        Err(_) => match dns::lookup_host_name(target_str.to_string()) {
             Some(ip) => {
-                opt.target = TargetInfo::new_with_ip_addr(ip).with_host_name(target.to_string());
+                target = TargetInfo::new_with_ip_addr(ip).with_host_name(target_str.to_string());
             }
             None => {}
         },
     }
+
+    let mut opt: TracerouteOption = TracerouteOption::default(target.ip_addr);
+    opt.target = target;
+    opt.protocol = IpNextLevelProtocol::Udp;
+    
     // Flags
     if matches.contains_id("interface") {
         let v_interface: String = matches.get_one::<String>("interface").unwrap().to_string();
@@ -536,7 +556,7 @@ pub fn parse_domain_args(matches: ArgMatches) -> Result<DomainScanOption, String
         return Err("Invalid command".to_string());  
     }
     let mut opt: DomainScanOption = DomainScanOption::default();
-    opt.protocol = IpNextLevelProtocol::UDP;
+    opt.protocol = IpNextLevelProtocol::Udp;
     let base_domain: &str = matches.value_of("domain").unwrap();
     opt.base_domain = base_domain.to_string();
     // Flags

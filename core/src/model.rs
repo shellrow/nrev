@@ -120,11 +120,18 @@ impl NodeType {
             NodeType::Destination => String::from("Destination"),
         }
     }
-    pub fn from_tracert_type(node_type: tracert::node::NodeType) -> NodeType {
+    pub fn from_tracert_type(node_type: netprobe::result::NodeType) -> NodeType {
         match node_type {
-            tracert::node::NodeType::DefaultGateway => NodeType::DefaultGateway,
-            tracert::node::NodeType::Relay => NodeType::Relay,
-            tracert::node::NodeType::Destination => NodeType::Destination,
+            netprobe::result::NodeType::DefaultGateway => NodeType::DefaultGateway,
+            netprobe::result::NodeType::Relay => NodeType::Relay,
+            netprobe::result::NodeType::Destination => NodeType::Destination,
+        }
+    }
+    pub fn from_netprobe_type(node_type: netprobe::result::NodeType) -> NodeType {
+        match node_type {
+            netprobe::result::NodeType::DefaultGateway => NodeType::DefaultGateway,
+            netprobe::result::NodeType::Relay => NodeType::Relay,
+            netprobe::result::NodeType::Destination => NodeType::Destination,
         }
     }
 }
@@ -156,6 +163,15 @@ impl NodeInfo {
             services: Vec::new(),
             node_type: NodeType::Destination,
         }
+    }
+    pub fn get_open_ports(&self) -> Vec<u16> {
+        let mut open_ports: Vec<u16> = Vec::new();
+        for service in &self.services {
+            if service.port_status == PortStatus::Open {
+                open_ports.push(service.port_number);
+            }
+        }
+        open_ports
     }
 }
 

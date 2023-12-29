@@ -1,6 +1,7 @@
 use std::{env, vec, fs};
 use std::path::{PathBuf, Path};
 use rusqlite::{Connection, Result, params, Transaction, Statement, Rows};
+use xenet::packet::ip::IpNextLevelProtocol;
 use crate::define;
 use crate::db_models::{ProbeLog, DataSetItem, MapInfo, MapNode, MapEdge, MapLayout, MapData, ProbeStat, UserProbeData, UserHostGroup, UserHostTag, UserHost, UserService, UserSetting};
 use rushmap_core::option;
@@ -70,7 +71,7 @@ pub fn insert_port_scan_result(conn:&Connection, probe_id: String, scan_result: 
         option::CommandType::PortScan.id(),
         node.ip_addr.to_string(),
         node.host_name,
-        option::IpNextLevelProtocol::TCP.id(),
+        IpNextLevelProtocol::Tcp.as_str().to_uppercase(),
         option_value
     ];
     match conn.execute(sql, params_vec) {
@@ -87,7 +88,7 @@ pub fn insert_port_scan_result(conn:&Connection, probe_id: String, scan_result: 
         node.ip_addr.to_string(),
         node.host_name,
         0,
-        option::IpNextLevelProtocol::TCP.id(),
+        IpNextLevelProtocol::Tcp.as_str().to_uppercase(),
         node.mac_addr,
         node.vendor_info,
         node.os_name,
@@ -110,7 +111,7 @@ pub fn insert_port_scan_result(conn:&Connection, probe_id: String, scan_result: 
             node.host_name,
             port.port_number,
             port.port_status.name(),
-            option::IpNextLevelProtocol::TCP.id(),
+            IpNextLevelProtocol::Tcp.as_str().to_uppercase(),
             port.service_name,
             port.service_version
         ];   
@@ -140,7 +141,7 @@ pub fn insert_host_scan_result(conn:&Connection, probe_id: String, scan_result: 
         option::CommandType::HostScan.id(),
         String::new(),
         String::new(),
-        scan_result.protocol.id(),
+        scan_result.protocol.as_str().to_uppercase(),
         option_value
     ];   
     match conn.execute(sql, params_vec) {
@@ -156,8 +157,8 @@ pub fn insert_host_scan_result(conn:&Connection, probe_id: String, scan_result: 
             probe_id,
             host.ip_addr.to_string(),
             host.host_name,
-            if scan_result.protocol == option::IpNextLevelProtocol::TCP {host.services[0].port_number} else {0},
-            scan_result.protocol.id(),
+            if scan_result.protocol == IpNextLevelProtocol::Tcp {host.services[0].port_number} else {0},
+            scan_result.protocol.as_str().to_uppercase(),
             host.mac_addr,
             host.vendor_info,
             host.os_name
@@ -209,9 +210,9 @@ pub fn insert_ping_result(conn:&Connection, probe_id: String, ping_result: PingR
         ping_response.host_name,
         ping_result.stat.transmitted_count,
         ping_result.stat.received_count,
-        ping_result.stat.min,
-        ping_result.stat.avg,
-        ping_result.stat.max
+        ping_result.stat.min.as_millis() as u64,
+        ping_result.stat.avg.as_millis() as u64,
+        ping_result.stat.max.as_millis() as u64,
     ];
     match conn.execute(sql, params_vec) {
         Ok(row_count) => {
@@ -231,7 +232,7 @@ pub fn insert_ping_result(conn:&Connection, probe_id: String, ping_result: PingR
             ping.status.name(),
             ping.ttl,
             ping.hop,
-            ping.rtt
+            ping.rtt.as_millis() as u64
         ];   
         match conn.execute(sql, params_vec) {
             Ok(row_count) => {
@@ -260,7 +261,7 @@ pub fn insert_trace_result(conn:&Connection, probe_id: String, trace_result: Tra
         option::CommandType::Traceroute.id(),
         first_node.ip_addr.to_string(),
         first_node.host_name,
-        option::IpNextLevelProtocol::UDP.id(),
+        IpNextLevelProtocol::Udp.as_str().to_uppercase(),
         option_value
     ];   
     match conn.execute(sql, params_vec) {
@@ -279,7 +280,7 @@ pub fn insert_trace_result(conn:&Connection, probe_id: String, trace_result: Tra
             node.host_name,
             node.ttl,
             node.hop,
-            node.rtt,
+            node.rtt.as_millis() as u64,
             node.node_type.name()
         ];   
         match conn.execute(sql, params_vec) {
