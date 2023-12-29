@@ -4,7 +4,7 @@ import { invoke } from '@tauri-apps/api/tauri';
 import { ElMessage } from 'element-plus';
 import { isValidIPaddress, isValidHostname, isIpv4NetworkAddress, isValidIPv6Address } from '../logic/shared';
 import { PROTOCOL_ICMPv4, PROTOCOL_ICMPv6, PROTOCOL_TCP, PROTOCOL_UDP, HOSTSCAN_TYPE_NETWORK, HOSTSCAN_TYPE_CUSTOM_HOSTS, OS_TYPE_WINDOWS } from '../config/define';
-import { Duration, as_millis } from '../types/std';
+import { Duration, as_millis } from '../types/time';
 
 type Host = {
     ip_addr: string,
@@ -167,7 +167,6 @@ const runHostScan = async() => {
         save_flag: option.save_flag,
     };
     invoke<HostScanResult>('exec_hostscan', { "opt": opt }).then((scan_result) => {
-        console.log(scan_result);
         scanning.value = false;
         result.hosts = scan_result.nodes;
         result.protocol = scan_result.protocol;

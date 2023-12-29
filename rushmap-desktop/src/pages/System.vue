@@ -2,6 +2,7 @@
 import { ref, reactive, onMounted, onUnmounted } from 'vue';
 import { invoke } from '@tauri-apps/api/tauri';
 import { Refresh } from '@element-plus/icons-vue';
+import { IpNet, Device } from '../types/net';
 
 interface NetworkInterface {
     index: number;
@@ -10,13 +11,11 @@ interface NetworkInterface {
     description: string;
     if_type: string;
     mac_addr: string;
-    ipv4: string[];
+    ipv4: Array<IpNet>;
     ipv4_csv: string;
-    ipv6: string[];
+    ipv6: Array<IpNet>;
     ipv6_csv: string;
-    gateway_mac_addr: string;
-    gateway_ipv4: string;
-    gateway_ipv6: string;
+    gateway: Device;
 }
 
 type NetworkInterfaceModel = {
@@ -26,11 +25,9 @@ type NetworkInterfaceModel = {
     description: string;
     if_type: string;
     mac_addr: string;
-    ipv4: string[];
-    ipv6: string[];
-    gateway_mac_addr: string;
-    gateway_ipv4: string;
-    gateway_ipv6: string;
+    ipv4: IpNet[];
+    ipv6: IpNet[];
+    gateway: Device;
 }
 
 type UserSetting = {
@@ -54,16 +51,18 @@ const network_interface: NetworkInterface = reactive({
     ipv6: [],
     ipv6_csv: '',
     gateway_mac_addr: '',
-    gateway_ipv4: '',
-    gateway_ipv6: '',
+    gateway: {
+        ip_addr: '',
+        mac_addr: '',
+    },
 });
 
 const getIpv4Csv = () => {
-    return network_interface.ipv4.join(',\n');
+    return network_interface.ipv4.map((item) => item.addr).join(',\n');
 }
 
 const getIpv6Csv = () => {
-    return network_interface.ipv6.join(',\n');
+    return network_interface.ipv6.map((item) => item.addr).join(',\n');
 }
 
 function reloadSysInfo() {
@@ -114,8 +113,7 @@ function selectNetworkInterface(interface_index: number) {
         network_interface.mac_addr = res.mac_addr;
         network_interface.ipv4 = res.ipv4;
         network_interface.ipv6 = res.ipv6;
-        network_interface.gateway_mac_addr = res.gateway_mac_addr;
-        network_interface.gateway_ipv4 = res.gateway_ipv4;
+        network_interface.gateway = res.gateway;
 
         //selectedInterfaceIndex.value = network_interface.index;
         saveNetworkInterfaceSetting();
@@ -146,8 +144,7 @@ function selectDefaultNetworkInterface() {
         network_interface.mac_addr = res.mac_addr;
         network_interface.ipv4 = res.ipv4;
         network_interface.ipv6 = res.ipv6;
-        network_interface.gateway_mac_addr = res.gateway_mac_addr;
-        network_interface.gateway_ipv4 = res.gateway_ipv4;
+        network_interface.gateway = res.gateway;
 
         selectedInterfaceIndex.value = network_interface.index;
         saveNetworkInterfaceSetting();
@@ -299,23 +296,15 @@ onUnmounted(() => {
                     Gateway MAC Address
                     </div>
                 </template>
-                {{ network_interface.gateway_mac_addr }}
+                {{ network_interface.gateway.mac_addr }}
             </el-descriptions-item>
             <el-descriptions-item>
                 <template #label>
                     <div class="cell-item">
-                    Gateway IPv4 Address
+                    Gateway IP Address
                     </div>
                 </template>
-                {{ network_interface.gateway_ipv4 }}
-            </el-descriptions-item>
-            <el-descriptions-item v-if="network_interface.gateway_ipv6">
-                <template #label>
-                    <div class="cell-item">
-                    Gateway IPv6 Address
-                    </div>
-                </template>
-                {{ network_interface.gateway_ipv6 }}
+                {{ network_interface.gateway.ip_addr }}
             </el-descriptions-item>
         </el-descriptions>
         <!-- Content -->

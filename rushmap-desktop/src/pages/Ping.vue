@@ -6,7 +6,7 @@ import { ElMessage } from 'element-plus';
 import { PROTOCOL_ICMPv4, PROTOCOL_TCP, PROTOCOL_UDP }  from '../config/define';
 import { isIpv4NetworkAddress, isIpv6NetworkAddress, isValidHostname, isValidIPaddress } from '../logic/shared';
 import { useRoute } from 'vue-router';
-import { Duration, as_millis } from '../types/std';
+import { Duration, as_millis } from '../types/time';
 
 interface PingOption {
   target_host: string;
@@ -169,7 +169,6 @@ const runPing = async() => {
     save_flag: option.save_flag,
   };
   invoke<PingResultRust>('exec_ping', { "opt": opt }).then((ping_result) => {
-    console.log(ping_result);
     ping_result.stat.responses.forEach(ping_res => {
       result.stat.responses.push({
         seq: ping_res.seq,

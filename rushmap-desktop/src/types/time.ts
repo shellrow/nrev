@@ -38,19 +38,3 @@ export function as_millis(duration: Duration): number {
 export function as_nanos(duration: Duration): number {
   return duration.secs * 1000000000 + duration.nanos;
 }
-
-// Rust IpAddr
-export interface IpAddr {
-  V4?: string;
-  V6?: string;
-}
-
-// Rust Ipv4Addr
-export interface Ipv4Addr {
-  octets: number[];
-}
-
-// Rust Ipv6Addr
-export interface Ipv6Addr {
-  segments: number[];
-}

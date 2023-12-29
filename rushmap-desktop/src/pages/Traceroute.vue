@@ -5,7 +5,7 @@ import { listen } from '@tauri-apps/api/event';
 import { ElMessage } from 'element-plus';
 import { isIpv4NetworkAddress, isIpv6NetworkAddress, isValidHostname, isValidIPaddress } from '../logic/shared';
 import { useRoute } from 'vue-router';
-import { Duration, as_millis } from '../types/std';
+import { Duration, as_millis } from '../types/time';
 
 interface TraceProgress {
   content: string;
@@ -112,7 +112,6 @@ const runTraceroute = async() => {
     save_flag: option.save_flag,
   };
   invoke<TracerouteResultRust>('exec_traceroute', { "opt": opt }).then((trace_result) => {
-    console.log(trace_result);
     trace_result.nodes.forEach(node => {
       result.nodes.push({
         seq: node.seq,
@@ -225,7 +224,7 @@ onUnmounted(() => {
             <el-table-column prop="host_name" label="Host Name" />
             <el-table-column prop="ttl" label="TTL" width="80" />
             <el-table-column prop="hop" label="HOP" width="80" />
-            <el-table-column prop="rtt" label="RTT(ms)" width="90" />
+            <el-table-column prop="rtt" label="RTT(ms)" width="100" />
             <el-table-column prop="node_type" label="Node Type" width="130"/>
         </el-table>
       </div>
