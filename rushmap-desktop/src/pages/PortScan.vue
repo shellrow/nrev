@@ -170,7 +170,6 @@ const runPortScan = async() => {
     save_flag: option.save_flag,
   };
   invoke<PortScanResult>('exec_portscan', { "opt": opt }).then((scan_result) => {
-    console.log(scan_result);
     scanning.value = false;
     let open_ports: ServiceInfo[] = [];
     let node = scan_result.nodes[0];
