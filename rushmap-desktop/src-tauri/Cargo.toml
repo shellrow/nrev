@@ -1,8 +1,8 @@
 [package]
 name = "rushmap-desktop"
-version = "0.8.0"
+version = "0.9.0"
 description = "RushMapDesktop"
-authors = ["shellrow <shellrow@protonmail.com>"]
+authors = ["shellrow <shellrow@intsigma.com>"]
 license = "MIT"
 repository = "https://github.com/shellrow/rushmap"
 documentation = "https://github.com/shellrow/rushmap"
@@ -24,7 +24,7 @@ rusqlite = { version = "0.28.0", features = ["bundled"] }
 ipnet = "2.5.0"
 rand = "0.8"
 xenet = { version = "0.4", features = ["serde"] }
-rushmap-core = { path = "../../core", version = "0.8.0"}
+rushmap-core = { path = "../../core", version = "0.9.0"}
 
 [features]
 # this feature is used for production builds or when `devPath` points to the filesystem

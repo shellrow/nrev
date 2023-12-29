@@ -45,18 +45,19 @@ rmap --help
 ## Privileges
 `rmap` uses a raw socket which require elevated privileges.  Execute with administrator privileges.
 
-## Note for Windows users
-- You must have npcap or WinPcap installed.
-- For Traceroute, you may need to set up firewall rules that allow `ICMP Time-to-live Exceeded` and `ICMP Destination (Port) Unreachable` packets to be received.
+## Note for Windows Users
+If you are using Windows, please consider the following points before building and running the application:
 
-`netsh` example 
-```
-netsh advfirewall firewall add rule name="All ICMP v4" dir=in action=allow protocol=icmpv4:any,any
-netsh advfirewall firewall add rule name="All ICMP v6" dir=in action=allow protocol=icmpv6:any,any
-```
+- Npcap or WinPcap Installation:
+    - Ensure that you have [Npcap](https://npcap.com/#download) or WinPcap installed on your system.
+    - If using Npcap, make sure to install it with the "Install Npcap in WinPcap API-compatible Mode" option.
+- Build Dependencies:
+    - Place the Packet.lib file from the [Npcap SDK](https://npcap.com/#download) or WinPcap Developers pack in a directory named lib at the root of this repository.
+    - You can use any of the locations listed in the %LIB% or $Env:LIB environment variables.
+    - For the 64-bit toolchain, the Packet.lib is located in <SDK>/Lib/x64/Packet.lib.
+    - For the 32-bit toolchain, the Packet.lib is located in <SDK>/Lib/Packet.lib.
 
 ## Related my projects
-- [default-net](https://github.com/shellrow/default-net)
-- [cross-socket](https://github.com/shellrow/cross-socket)
-- [netscan](https://github.com/shellrow/netscan)
-- [tracert](https://github.com/shellrow/tracert)
+- [default-net](https://github.com/shellrow/default-net) Cross-platform library for network interface and gateway 
+- [xenet](https://github.com/shellrow/xenet) Cross-platform networking library
+- [netscan](https://github.com/shellrow/netscan) Cross-platform network scan library 

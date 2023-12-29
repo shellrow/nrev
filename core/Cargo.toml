@@ -1,8 +1,8 @@
 [package]
 name = "rushmap-core"
-version = "0.8.0"
+version = "0.9.0"
 edition = "2021"
-authors = ["shellrow <shellrow@protonmail.com>"]
+authors = ["shellrow <shellrow@intsigma.com>"]
 repository = "https://github.com/shellrow/rushmap"
 documentation = "https://github.com/shellrow/rushmap"
 readme = "README.md"

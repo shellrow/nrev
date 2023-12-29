@@ -4,9 +4,9 @@ import { invoke } from '@tauri-apps/api/tauri';
 
 const about_app = reactive({
     name: 'RushMap Desktop',
-    version: 'v0.3.0',
-    release_date: '2023-08-28',
-    author: 'shellrow <shellrow@protonmail.com>',
+    version: 'v0.9.0',
+    release_date: '2023-12-29',
+    author: 'shellrow <shellrow@intsigma.com>',
     description: 'The Simple and High-Performance Network Mapper for discovery and management.',
     repository: 'https://github.com/shellrow/rushmap',
 });
