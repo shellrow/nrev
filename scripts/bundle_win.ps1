@@ -4,7 +4,7 @@
 # .\scripts\bundle.ps1
 
 $binName = "rmap.exe"
-$version = "0.8.0"
+$version = "0.9.0"
 $osArch = "x86_64-pc-windows-msvc"
 $distDir = ".\dist"
 
