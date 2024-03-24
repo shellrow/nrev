@@ -2,11 +2,11 @@
 
 # build and bundle the nerum binary and license files into a zip file
 # usage: 
-# chmod +x ./scripts/bundle.sh　(Only needed if not already set)
+# chmod +x ./scripts/bundle_mac.sh　(Only needed if not already set)
 # ./scripts/bundle_mac.sh
 
 bin_name="nerum"
-version="0.1.0"
+version="1.0.0"
 os_arch="x86_64-apple-darwin"
 dist_dir="./dist"
 

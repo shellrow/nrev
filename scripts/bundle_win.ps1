@@ -4,7 +4,7 @@
 # .\scripts\bundle_win.ps1
 
 $binName = "nerum.exe"
-$version = "0.1.0"
+$version = "1.0.0"
 $osArch = "x86_64-pc-windows-msvc"
 $distDir = ".\dist"
 
