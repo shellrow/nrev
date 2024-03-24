@@ -16,8 +16,8 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-    - name: Build rushmap-core
-      run: cargo build --package rushmap-core --verbose
-    - name: Build rushmap
-      run: cargo build --package rushmap --verbose
+    - name: Build nerum-core
+      run: cargo build --package nerum-core --verbose
+    - name: Build nerum
+      run: cargo build --package nerum --verbose
       
