@@ -1,18 +1,18 @@
 #!/bin/bash
 
-# build and bundle the rushmap(rmap) binary and license files into a zip file
+# build and bundle the nerum binary and license files into a zip file
 # usage: 
 # chmod +x ./scripts/bundle.sh　(Only needed if not already set)
-# ./scripts/bundle.sh
+# ./scripts/bundle_linux.sh
 
-bin_name="rmap"
-version="0.9.0"
+bin_name="nerum"
+version="0.1.0"
 os_arch="x86_64-unknown-linux-gnu"
 dist_dir="./dist"
 
-zip_filename="rushmap-$version-$os_arch.zip"
+zip_filename="nerum-$version-$os_arch.zip"
 
-echo "Building rushmap binary for $os_arch"
+echo "Building nerum binary for $os_arch"
 cargo build --release
 
 # if dist_dir does not exist, create it

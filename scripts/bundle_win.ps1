@@ -1,16 +1,16 @@
-# build and bundle the rushmap(rmap) binary and license files into a zip file
+# build and bundle the nerum binary and license files into a zip file
 # usage: 
-# Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope Process (Only needed if not already set)
-# .\scripts\bundle.ps1
+# Set-ExecutionPolicy -ExecutionPolicy Unrestricted -Scope Process (Only needed if not already set)
+# .\scripts\bundle_win.ps1
 
-$binName = "rmap.exe"
-$version = "0.9.0"
+$binName = "nerum.exe"
+$version = "0.1.0"
 $osArch = "x86_64-pc-windows-msvc"
 $distDir = ".\dist"
 
-$zipFilename = "rushmap-$version-$osArch.zip"
+$zipFilename = "nerum-$version-$osArch.zip"
 
-Write-Host "Building rushmap binary for $osArch"
+Write-Host "Building nerum binary for $osArch"
 cargo build --release
 
 # if distDir does not exist, create it
