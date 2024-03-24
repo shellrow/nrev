@@ -6,7 +6,7 @@
 # ./scripts/bundle_linux.sh
 
 bin_name="nerum"
-version="1.0.0"
+version="1.1.0"
 os_arch="x86_64-unknown-linux-gnu"
 dist_dir="./dist"
 
