@@ -2,7 +2,7 @@
 [crates-url]: https://crates.io/crates/nerum
 
 # nerum [![Crates.io][crates-badge]][crates-url]
-Simple and Fast Network Mapper. Written in Rust.
+Simple and Fast Network Mapper. Written in Rust.  
 Designed to be used in network mapping, probe, and security tests.
 
 ## Features
@@ -76,8 +76,8 @@ nerum pscan scanme.nmap.org --wellknown
 #### Settings
 By default, nerum determines the waiting time until packet reception (before concluding the scan task) based on the results of the initial PING.  
 The initial PING is executed in the order of ICMP Ping, UDP Ping, TCP Ping (on port 80), and if successful, proceeds to the next scan task.  
-If all PING attempts fail, nerum exits before executing the scan. This step can be skipped by setting the --noping flag.  
-For other settings, please refer to nerum pscan -h for details.
+If all PING attempts fail, nerum exits before executing the scan. This step can be skipped by setting the `--noping` flag.  
+For other settings, please refer to `nerum pscan -h` for details.
 
 ### Host scan
 ```
@@ -138,7 +138,7 @@ If you are using Windows, please consider the following points before building a
 
 - Npcap or WinPcap Installation:
     - Ensure that you have [Npcap](https://npcap.com/#download) or WinPcap installed on your system.
-    - You can check installation by 'nerum check' command. Or Please install Npcap from https://npcap.com/#download
+    - You can check installation by `nerum check` command. Or Please install Npcap from https://npcap.com/#download
     - If using Npcap, make sure to install it with the "Install Npcap in WinPcap API-compatible Mode" option.
 - Build Dependencies:
     - Place the Packet.lib file from the [Npcap SDK](https://npcap.com/#download) or WinPcap Developers pack in a directory named lib at the root of this repository.
