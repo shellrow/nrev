@@ -26,7 +26,26 @@ pub fn handle_subdomain_scan(args: &ArgMatches) {
         None => Duration::from_secs(30),
     };
     
-    let word_list: Vec<String> = db::get_subdomain();
+    let word_list: Vec<String> = match host_args.get_one::<PathBuf>("wordlist") {
+        Some(file_path) => {
+            match std::fs::read_to_string(&file_path) {
+                Ok(contents) => {
+                    let mut word_list: Vec<String> = Vec::new();
+                    for word in contents.lines() {
+                        let word = word.trim();
+                        if word.is_empty() {
+                            continue;
+                        }
+                        word_list.push(word.to_owned());
+                    }
+                    word_list
+                }
+                Err(_) => vec![],
+            }
+        },
+        None => db::get_subdomain(),
+    };
+    
     // Display progress with indicatif
     println!("[Progress]");
     let bar = ProgressBar::new(word_list.len() as u64);
