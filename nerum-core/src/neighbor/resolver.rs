@@ -133,15 +133,11 @@ pub(crate) fn run_arp(
                     if let Some(datalink_layer) = &frame.datalink {
                         // Ethernet
                         if let Some(_ethernet_header) = &datalink_layer.ethernet {
-                            if let Some(ip_layer) = &frame.ip {
-                                if let Some(ipv4_header) = &ip_layer.ipv4 {
-                                    if IpAddr::V4(ipv4_header.source) != setting.dst_ip || IpAddr::V4(ipv4_header.destination) != packet_setting.src_ip {
-                                        continue;
-                                    }
-                                }
-                            }
                             // ARP
                             if let Some(arp_header) = &datalink_layer.arp {
+                                if IpAddr::V4(arp_header.sender_proto_addr) != setting.dst_ip || IpAddr::V4(arp_header.target_proto_addr) != packet_setting.src_ip {
+                                    continue;
+                                }
                                 if arp_header.operation == ArpOperation::Reply {
                                     let probe_result: ProbeResult = ProbeResult {
                                         seq: seq,
