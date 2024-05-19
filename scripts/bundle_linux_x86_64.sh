@@ -3,7 +3,7 @@
 # build and bundle the nerum binary and license files into a zip file
 # usage: 
 # chmod +x ./scripts/bundle_linux.sh　(Only needed if not already set)
-# ./scripts/bundle_linux.sh
+# ./scripts/bundle_linux_x86_64.sh
 
 bin_name="nerum"
 version="1.2.0"

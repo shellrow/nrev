@@ -1,7 +1,7 @@
 # build and bundle the nerum binary and license files into a zip file
 # usage: 
 # Set-ExecutionPolicy -ExecutionPolicy Unrestricted -Scope Process (Only needed if not already set)
-# .\scripts\bundle_win.ps1
+# .\scripts\bundle_win_x86_64.ps1
 
 $binName = "nerum.exe"
 $version = "1.2.0"
