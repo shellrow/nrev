@@ -16,3 +16,4 @@ pub mod ip;
 pub mod dns;
 pub mod fs;
 pub mod json;
+pub mod dep;

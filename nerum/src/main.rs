@@ -45,7 +45,7 @@ fn main() {
             handler::interface::show_default_interface(&arg_matches);
         }
         Some(AppCommands::CheckDependencies) => {
-            handler::update::check_dependencies(&arg_matches);
+            handler::check::check_dependencies(&arg_matches);
         }
         None => {
             match arg_matches.get_one::<String>("target") {
@@ -402,11 +402,11 @@ fn parse_args() -> ArgMatches {
 }
 
 fn check_deps() {
-    if cfg!(target_os = "windows"){
-        if !nerum_core::sys::dep::check_dependencies() {
-            println!("Npcap is not installed.");
-            println!("On Windows, Npcap is required for some features.");
-            println!("You can check installation by 'nerum check' command. Or Please install Npcap from https://npcap.com/#download");
+    match nerum_core::dep::check_dependencies() {
+        Ok(_) => {},
+        Err(e) => {
+            println!("Dependency error:");
+            println!("{}", e);
             println!("Exiting...");
             std::process::exit(1);
         }

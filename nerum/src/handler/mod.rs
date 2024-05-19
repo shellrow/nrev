@@ -5,7 +5,7 @@ pub mod neighbor;
 pub mod ping;
 pub mod port;
 pub mod trace;
-pub mod update;
+pub mod check;
 
 use clap::ArgMatches;
 use indicatif::ProgressBar;
