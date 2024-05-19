@@ -28,9 +28,7 @@ phf = { version = "0.11", features = ["macros"] }
 rand = "0.8"
 
 [target.'cfg(windows)'.dependencies]
-nex-npcap-helper = { version = "0.9" }
-inquire = "0.6"
-home = "0.5"
+winreg = "0.50"
 
 [dev-dependencies]
 ipnet = "2.7"
