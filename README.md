@@ -36,56 +36,80 @@ Or you can use [binstall](https://github.com/cargo-bins/cargo-binstall) for inst
 cargo binstall nerum
 ```
 
-## Usage
+## Basic Usage
+### Default Port Scan 
+To scan the default 1000 ports on a target, simply specify the target
 ```
-nerum --help
+nerum --target scanme.nmap.org
 ```
-Or
+
+Sub-commands and Options
 ```
-nerum <sub-command> --help
+Usage: nerum [OPTIONS] [COMMAND]
+
+Commands:
+  port        Scan port. nerum port --help for more information
+  host        Scan host in specified network or host-list. nerum host --help for more information
+  ping        Ping to specified host. nerum ping --help for more information
+  trace       Traceroute to specified host. nerum trace --help for more information
+  subdomain   Find subdomains. nerum subdomain --help for more information
+  nei         Resolve IP address to MAC address
+  interfaces  Show network interfaces
+  interface   Show default network interface
+  check       Check dependencies (Windows only)
+  help        Print this message or the help of the given subcommand(s)
+
+Options:
+  -t, --target <target>             Specify the target host. IP address or Hostname
+  -i, --interface <interface_name>  Specify the network interface
+      --noping                      Disable initial ping
+  -F, --full                        Scan all ports (1-65535)
+  -j, --json                        Displays results in JSON format.
+  -o, --save <file_path>            Save scan result in JSON format - Example: -o result.json
+  -h, --help                        Print help
+  -V, --version                     Print version
 ```
 
 ## Examples
-### Default 
-Initial ping and scan default 1000 ports
-```
-nerum --host scanme.nmap.org
-```
-
 ### Port scan
 Scan default 1000 ports
 ```
-nerum pscan scanme.nmap.org
+nerum port scanme.nmap.org
 ```
 
 Specify the ports
 ```
-nerum pscan scanme.nmap.org --ports 22,80,443,5000,8080
+nerum port scanme.nmap.org --ports 22,80,443,5000,8080
 ```
 
 Specify the range
 ```
-nerum pscan scanme.nmap.org --range 20-100
+nerum port scanme.nmap.org --range 20-100
 ```
 
 Scan well-known ports
 ```
-nerum pscan scanme.nmap.org --wellknown
+nerum port scanme.nmap.org --wellknown
 ```
 
 #### Settings
 By default, nerum determines the waiting time until packet reception (before concluding the scan task) based on the results of the initial PING.  
 The initial PING is executed in the order of ICMP Ping, UDP Ping, TCP Ping (on port 80), and if successful, proceeds to the next scan task.  
 If all PING attempts fail, nerum exits before executing the scan. This step can be skipped by setting the `--noping` flag.  
-For other settings, please refer to `nerum pscan -h` for details.
+For other settings, please refer to `nerum port -h` for details.
 
 ### Host scan
+ICMP Host scan
 ```
-nerum hscan 192.168.1.1/24
+nerum host 192.168.1.0/24
+```
+```
+nerum host <path-to-host-list>
 ```
 
+TCP Host scan
 ```
-nerum hscan <path-to-host-list>
+nerum host 192.168.1.0/24 -P TCP --port 80
 ```
 
 ### Ping 
@@ -127,7 +151,7 @@ nerum nei 192.168.1.1
 
 ### Specify the network interface
 ```
-nerum -i tun0 pscan 10.10.11.14
+nerum -i tun0 port 10.10.11.14
 ```
 
 ## Privileges

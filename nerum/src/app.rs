@@ -3,7 +3,7 @@ use nerum_core::sys;
 
 // APP information
 pub const CRATE_BIN_NAME: &str = "nerum";
-pub const CRATE_UPDATE_DATE: &str = "2024-3-24";
+pub const CRATE_UPDATE_DATE: &str = "2024-5-19";
 pub const CRATE_REPOSITORY: &str = "https://github.com/shellrow/nerum";
 
 pub enum AppCommands {
@@ -21,8 +21,8 @@ pub enum AppCommands {
 impl AppCommands {
     pub fn from_str(s: &str) -> Option<AppCommands> {
         match s {
-            "pscan" => Some(AppCommands::PortScan),
-            "hscan" => Some(AppCommands::HostScan),
+            "port" => Some(AppCommands::PortScan),
+            "host" => Some(AppCommands::HostScan),
             "ping" => Some(AppCommands::Ping),
             "trace" => Some(AppCommands::Trace),
             "subdomain" => Some(AppCommands::Subdomain),
@@ -37,9 +37,8 @@ impl AppCommands {
 
 pub fn show_app_desc() {
     println!(
-        "{}({}) {} ({}) {}",
+        "{} v{} ({}) {}",
         crate_name!(),
-        CRATE_BIN_NAME,
         crate_version!(),
         CRATE_UPDATE_DATE,
         sys::os::get_os_type()
@@ -53,7 +52,7 @@ pub fn show_app_desc() {
 
 pub fn show_banner_with_starttime() {
     println!(
-        "{} {} {}",
+        "{} v{} {}",
         crate_name!(),
         crate_version!(),
         sys::os::get_os_type()
@@ -61,6 +60,7 @@ pub fn show_banner_with_starttime() {
     println!("{}", CRATE_REPOSITORY);
     println!();
     println!("Starting at {}", sys::time::get_sysdate());
+    println!();
 }
 
 pub fn exit_with_error_message(message: &str) {
