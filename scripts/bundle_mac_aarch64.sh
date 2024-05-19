@@ -6,8 +6,8 @@
 # ./scripts/bundle_mac.sh
 
 bin_name="nerum"
-version="1.1.0"
-os_arch="x86_64-apple-darwin"
+version="1.2.0"
+os_arch="aarch64-apple-darwin"
 dist_dir="./dist"
 
 zip_filename="nerum-$version-$os_arch.zip"
