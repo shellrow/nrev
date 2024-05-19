@@ -12,7 +12,7 @@ description = "Simple and Fast Network Mapper"
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-nerum-core = { path = "../nerum-core", version = "1.1.0"}
+nerum-core = { path = "../nerum-core", version = "1.2.0"}
 netdev = { version = "0.26", features = ["serde"] }
 clap = { version = "4.4", features = ["cargo"] }
 indicatif = "0.16"
