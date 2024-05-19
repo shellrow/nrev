@@ -48,7 +48,7 @@ fn main() {
             handler::update::check_dependencies(&arg_matches);
         }
         None => {
-            match arg_matches.get_one::<String>("host") {
+            match arg_matches.get_one::<String>("target") {
                 Some(target_host) => {
                     if nerum_core::host::is_valid_target(target_host) {
                         handler::default_probe(target_host, &arg_matches);
@@ -70,11 +70,11 @@ fn parse_args() -> ArgMatches {
         .version(crate_version!())
         .about(format!("{} \n{}", app_description, CRATE_REPOSITORY))
         .allow_external_subcommands(true)
-        .arg(Arg::new("host")
+        .arg(Arg::new("target")
             .help("Specify the target host. IP address or Hostname")
             .short('t')
-            .long("host")
-            .value_name("host")
+            .long("target")
+            .value_name("target")
             .display_order(1)
             .value_parser(value_parser!(String))
         )
@@ -110,8 +110,8 @@ fn parse_args() -> ArgMatches {
             .value_name("file_path")
             .value_parser(value_parser!(PathBuf))
         )
-        .subcommand(Command::new("pscan")
-            .about("Scan port. nerum pscan --help for more information")
+        .subcommand(Command::new("port")
+            .about("Scan port. nerum port --help for more information")
             .arg(Arg::new("target")
                 .help("Specify the target. IP address or Hostname")
                 .value_name("target")
@@ -190,8 +190,8 @@ fn parse_args() -> ArgMatches {
                 .value_parser(value_parser!(u64))
             )
         )
-        .subcommand(Command::new("hscan")
-            .about("Scan host in specified network or host-list. nerum hscan --help for more information")
+        .subcommand(Command::new("host")
+            .about("Scan host in specified network or host-list. nerum host --help for more information")
             .arg(Arg::new("target")
                 .help("Specify the target network")
                 .value_name("target")
