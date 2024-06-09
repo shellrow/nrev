@@ -8,7 +8,7 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use netdev::Interface;
-use nex::datalink::{FrameReceiver, FrameSender};
+use nex::datalink::{RawReceiver, RawSender};
 use nex::net::mac::MacAddr;
 use nex::packet::frame::{Frame, ParseOption};
 use nex::packet::icmp::IcmpType;
@@ -100,8 +100,8 @@ fn run_traceroute(
 }
 
 pub fn udp_trace(
-    tx: &mut Box<dyn FrameSender>,
-    rx: &mut Box<dyn FrameReceiver>,
+    tx: &mut Box<dyn RawSender>,
+    rx: &mut Box<dyn RawReceiver>,
     setting: &TraceSetting,
     msg_tx: &Arc<Mutex<Sender<ProbeResult>>>,
 ) -> TracerouteResult {
