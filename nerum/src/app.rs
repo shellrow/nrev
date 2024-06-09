@@ -3,7 +3,7 @@ use nerum_core::sys;
 
 // APP information
 pub const CRATE_BIN_NAME: &str = "nerum";
-pub const CRATE_UPDATE_DATE: &str = "2024-5-19";
+pub const CRATE_UPDATE_DATE: &str = "2024-06-09";
 pub const CRATE_REPOSITORY: &str = "https://github.com/shellrow/nerum";
 
 pub enum AppCommands {
