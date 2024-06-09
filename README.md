@@ -20,10 +20,26 @@ Designed to be used in network mapping, probe, and security tests.
 - Windows
 
 ## Installation
+### Install prebuilt binaries via shell script
 
-### Precompiled binaries
-Archives of precompiled binaries for `nerum` are available for Linux, macOS and Windows.  
-You can download from the [releases](https://github.com/shellrow/nerum/releases) .
+```sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/shellrow/nerum/releases/latest/download/nerum-installer.sh | sh
+```
+
+### Install prebuilt binaries via powershell script
+
+```sh
+irm https://github.com/shellrow/nerum/releases/latest/download/nerum-installer.ps1 | iex
+```
+
+### Install prebuilt binaries via Homebrew
+
+```sh
+brew install shellrow/tap-nerum/nerum
+```
+
+### From Releases
+You can download archives of precompiled binaries from the [releases](https://github.com/shellrow/nerum/releases) .
 
 ### Cargo
 If you have Rust and the Cargo package manager installed on your system, you can install (download and build) `nerum` with the following command:
