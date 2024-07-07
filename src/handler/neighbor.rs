@@ -1,6 +1,6 @@
 use clap::ArgMatches;
-use nerum_core::neighbor::resolver::DeviceResolver;
-use nerum_core::neighbor::setting::AddressResolveSetting;
+use crate::neighbor::resolver::DeviceResolver;
+use crate::neighbor::setting::AddressResolveSetting;
 use std::net::IpAddr;
 use std::path::PathBuf;
 use std::str::FromStr;
@@ -35,7 +35,7 @@ pub fn handle_neighbor_discovery(args: &ArgMatches) {
         },
     }
     let interface: netdev::Interface = if let Some(if_name) = args.get_one::<String>("interface") {
-        match nerum_core::interface::get_interface_by_name(if_name.to_string()) {
+        match crate::interface::get_interface_by_name(if_name.to_string()) {
             Some(iface) => iface,
             None => return,
         }
@@ -76,7 +76,7 @@ pub fn handle_neighbor_discovery(args: &ArgMatches) {
     let rx = resolver.get_progress_receiver();
     let handle = thread::spawn(move || resolver.resolve());
     for r in rx.lock().unwrap().iter() {
-        if r.probe_status.kind == nerum_core::probe::ProbeStatusKind::Done {
+        if r.probe_status.kind == crate::probe::ProbeStatusKind::Done {
             output::log_with_time(&format!(
                 "{} [{:?}] {} Bytes from MAC:{}, IP:{}, RTT:{:?}",
                 r.seq, r.protocol, r.received_packet_size, r.mac_addr, r.ip_addr, r.rtt
@@ -98,7 +98,7 @@ pub fn handle_neighbor_discovery(args: &ArgMatches) {
                 }
                 match args.get_one::<PathBuf>("save") {
                     Some(file_path) => {
-                        match nerum_core::fs::save_text(file_path, serde_json::to_string_pretty(&r).unwrap()) {
+                        match crate::fs::save_text(file_path, serde_json::to_string_pretty(&r).unwrap()) {
                             Ok(_) => {
                                 output::log_with_time(&format!("Saved to {}", file_path.to_string_lossy()), "INFO");
                             },
@@ -109,7 +109,7 @@ pub fn handle_neighbor_discovery(args: &ArgMatches) {
                     },
                     None => {},
                 }
-                if r.probe_status.kind == nerum_core::probe::ProbeStatusKind::Done {
+                if r.probe_status.kind == crate::probe::ProbeStatusKind::Done {
                     output::log_with_time("Resolve Success", "INFO");
                 }else{
                     output::log_with_time(&format!("Resolve Failed: {}", r.probe_status.message), "ERROR");

@@ -1,21 +1,20 @@
 use clap::ArgMatches;
 use indicatif::ProgressBar;
-use nerum_core::db::model::OsFamilyFingerprint;
-use nerum_core::host::{Host, PortStatus};
-use nerum_core::json::port::PortScanResult;
-use nerum_core::scan::scanner::{PortScanner, ServiceDetector};
-use nerum_core::scan::setting::{PortScanSetting, PortScanType, ServiceProbeSetting};
+use crate::db::model::OsFamilyFingerprint;
+use crate::host::{Host, PortStatus};
+use crate::json::port::PortScanResult;
+use crate::scan::scanner::{PortScanner, ServiceDetector};
+use crate::scan::setting::{PortScanSetting, PortScanType, ServiceProbeSetting};
 use netdev::mac::MacAddr;
 use netdev::Interface;
-use term_table::row::Row;
-use term_table::table_cell::{Alignment, TableCell};
-use term_table::{Table, TableStyle};
+use comfy_table::presets::NOTHING;
+use comfy_table::{Cell, CellAlignment, ContentArrangement, Table};
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::path::PathBuf;
 use std::thread;
 use std::time::Duration;
-use nerum_core::scan::result::ScanResult;
+use crate::scan::result::ScanResult;
 
 use crate::output;
 
@@ -32,12 +31,12 @@ pub fn handle_portscan(args: &ArgMatches) {
     let target_host_name: String;
     let target_ip_addr: IpAddr;
     let target_ports: Vec<u16>;
-    if nerum_core::host::is_valid_ip_addr(&target) {
+    if crate::host::is_valid_ip_addr(&target) {
         target_ip_addr = target.parse().unwrap();
-        target_host_name = nerum_core::dns::lookup_ip_addr(&target_ip_addr).unwrap_or(target.clone());
+        target_host_name = crate::dns::lookup_ip_addr(&target_ip_addr).unwrap_or(target.clone());
     } else {
         target_host_name = target.clone();
-        target_ip_addr = match nerum_core::dns::lookup_host_name(target.clone()){
+        target_ip_addr = match crate::dns::lookup_host_name(target.clone()){
             Some(ip) => ip,
             None => return,
         };
@@ -52,18 +51,18 @@ pub fn handle_portscan(args: &ArgMatches) {
         target_ports = (range[0]..=range[1]).collect();
     }else if port_args.get_flag("wellknown") {
         // Use well-known ports
-        target_ports = nerum_core::db::get_wellknown_ports();
+        target_ports = crate::db::get_wellknown_ports();
     }else{
         if port_args.get_flag("full") {
             // Use full ports (1-65535)
             target_ports = (1..=65535).collect();
         }else{
             // Use default 1000 ports
-            target_ports = nerum_core::db::get_default_ports();
+            target_ports = crate::db::get_default_ports();
         }
     }
     let interface: netdev::Interface = if let Some(if_name) = args.get_one::<String>("interface") {
-        match nerum_core::interface::get_interface_by_name(if_name.to_string()) {
+        match crate::interface::get_interface_by_name(if_name.to_string()) {
             Some(iface) => iface,
             None => return,
         }
@@ -183,15 +182,15 @@ pub fn handle_portscan(args: &ArgMatches) {
     // OS detection
     if result.host.get_open_port_numbers().len() > 0 {
         if let Some(fingerprint) = portscan_result.get_syn_ack_fingerprint(result.host.ip_addr, result.host.get_open_port_numbers()[0]) {
-            let os_fingerprint: OsFamilyFingerprint = nerum_core::db::verify_os_family_fingerprint(&fingerprint);
+            let os_fingerprint: OsFamilyFingerprint = crate::db::verify_os_family_fingerprint(&fingerprint);
             result.host.os_family = os_fingerprint.os_family;
         }
     }
     // Set vendor name
-    if !nerum_core::ip::is_global_addr(&result.host.ip_addr) {
+    if !crate::ip::is_global_addr(&result.host.ip_addr) {
         if let Some(h) = portscan_result.get_host(result.host.ip_addr) {
             if h.mac_addr != MacAddr::zero() {
-                let oui_map: HashMap<String, String> = nerum_core::db::get_oui_detail_map();
+                let oui_map: HashMap<String, String> = crate::db::get_oui_detail_map();
                 let vendor_name = if h.mac_addr.address().len() > 16 {
                     let prefix8 = h.mac_addr.address()[0..8].to_uppercase();
                     oui_map.get(&prefix8).unwrap_or(&String::new()).to_string()
@@ -220,7 +219,7 @@ pub fn handle_portscan(args: &ArgMatches) {
 
     match args.get_one::<PathBuf>("save") {
         Some(file_path) => {
-            match nerum_core::fs::save_text(file_path, serde_json::to_string_pretty(&result).unwrap()) {
+            match crate::fs::save_text(file_path, serde_json::to_string_pretty(&result).unwrap()) {
                 Ok(_) => {
                     output::log_with_time(&format!("Saved to {}", file_path.to_string_lossy()), "INFO");
                 },
@@ -235,152 +234,131 @@ pub fn handle_portscan(args: &ArgMatches) {
 
 pub fn print_option(setting: &PortScanSetting, interface: &Interface) {
     let mut table = Table::new();
-    table.max_column_width = 60;
-    table.separate_rows = false;
-    table.has_top_boarder = false;
-    table.has_bottom_boarder = false;
-    table.style = TableStyle::blank();
+    table
+        .load_preset(NOTHING)
+        .set_content_arrangement(ContentArrangement::Dynamic);
+    table.add_row(vec![
+        Cell::new("Protocol").set_alignment(CellAlignment::Left),
+        Cell::new(setting.protocol.to_str()).set_alignment(CellAlignment::Left),
+    ]);
+    table.add_row(vec![
+        Cell::new("ScanType").set_alignment(CellAlignment::Left),
+        Cell::new(setting.scan_type.to_str()).set_alignment(CellAlignment::Left),
+    ]);
+    table.add_row(vec![
+        Cell::new("InterfaceName").set_alignment(CellAlignment::Left),
+        Cell::new(&interface.name).set_alignment(CellAlignment::Left),
+    ]);
+    table.add_row(vec![
+        Cell::new("Timeout").set_alignment(CellAlignment::Left),
+        Cell::new(format!("{:?}", setting.timeout)).set_alignment(CellAlignment::Left),
+    ]);
+    table.add_row(vec![
+        Cell::new("WaitTime").set_alignment(CellAlignment::Left),
+        Cell::new(format!("{:?}", setting.wait_time)).set_alignment(CellAlignment::Left),
+    ]);
+    table.add_row(vec![
+        Cell::new("SendRate").set_alignment(CellAlignment::Left),
+        Cell::new(format!("{:?}", setting.send_rate)).set_alignment(CellAlignment::Left),
+    ]);
     println!("[Options]");
-    table.add_row(Row::new(vec![
-        TableCell::new_with_alignment("Protocol", 1, Alignment::Left),
-        TableCell::new_with_alignment(setting.protocol.to_str(), 1, Alignment::Left),
-    ]));
-    table.add_row(Row::new(vec![
-        TableCell::new_with_alignment("ScanType", 1, Alignment::Left),
-        TableCell::new_with_alignment(setting.scan_type.to_str(), 1, Alignment::Left),
-    ]));
-    table.add_row(Row::new(vec![
-        TableCell::new_with_alignment("InterfaceName", 1, Alignment::Left),
-        TableCell::new_with_alignment(&interface.name, 1, Alignment::Left),
-    ]));
-    table.add_row(Row::new(vec![
-        TableCell::new_with_alignment("Timeout", 1, Alignment::Left),
-        TableCell::new_with_alignment(format!("{:?}", setting.timeout), 1, Alignment::Left),
-    ]));
-    table.add_row(Row::new(vec![
-        TableCell::new_with_alignment("WaitTime", 1, Alignment::Left),
-        TableCell::new_with_alignment(format!("{:?}", setting.wait_time), 1, Alignment::Left),
-    ]));
-    table.add_row(Row::new(vec![
-        TableCell::new_with_alignment("SendRate", 1, Alignment::Left),
-        TableCell::new_with_alignment(format!("{:?}", setting.send_rate), 1, Alignment::Left),
-    ]));
-    println!("{}", table.render());
+    println!("{}", table);
 
     let mut table = Table::new();
-    table.max_column_width = 60;
-    table.separate_rows = false;
-    table.has_top_boarder = false;
-    table.has_bottom_boarder = false;
-    table.style = TableStyle::blank();
-    println!("[Target]");
+    table
+        .load_preset(NOTHING)
+        .set_content_arrangement(ContentArrangement::Dynamic);
     for target in &setting.targets {
         if target.ip_addr.to_string() == target.hostname || target.hostname.is_empty() {
-            table.add_row(Row::new(vec![
-                TableCell::new_with_alignment("IP Address", 1, Alignment::Left),
-                TableCell::new_with_alignment(target.ip_addr, 1, Alignment::Left),
-            ]));
+            table.add_row(vec![
+                Cell::new("IP Address").set_alignment(CellAlignment::Left),
+                Cell::new(target.ip_addr).set_alignment(CellAlignment::Left),
+            ]);
         } else {
-            table.add_row(Row::new(vec![
-                TableCell::new_with_alignment("IP Address", 1, Alignment::Left),
-                TableCell::new_with_alignment(target.ip_addr, 1, Alignment::Left),
-            ]));
-            table.add_row(Row::new(vec![
-                TableCell::new_with_alignment("Host Name", 1, Alignment::Left),
-                TableCell::new_with_alignment(&target.hostname, 1, Alignment::Left),
-            ]));
+            table.add_row(vec![
+                Cell::new("IP Address").set_alignment(CellAlignment::Left),
+                Cell::new(target.ip_addr).set_alignment(CellAlignment::Left),
+            ]);
+            table.add_row(vec![
+                Cell::new("Host Name").set_alignment(CellAlignment::Left),
+                Cell::new(&target.hostname).set_alignment(CellAlignment::Left),
+            ]);
         }
         if target.ports.len() > 10 {
-            table.add_row(Row::new(vec![
-                TableCell::new_with_alignment("Port", 1, Alignment::Left),
-                TableCell::new_with_alignment(
-                    format!("{} port(s)", target.ports.len()),
-                    1,
-                    Alignment::Left,
-                ),
-            ]));
+            table.add_row(vec![
+                Cell::new("Port").set_alignment(CellAlignment::Left),
+                Cell::new(format!("{} port(s)", target.ports.len())).set_alignment(CellAlignment::Left),
+            ]);
         } else {
-            table.add_row(Row::new(vec![
-                TableCell::new_with_alignment("Port", 1, Alignment::Left),
-                TableCell::new_with_alignment(
-                    format!("{:?}", target.get_ports()),
-                    1,
-                    Alignment::Left,
-                ),
-            ]));
+            table.add_row(vec![
+                Cell::new("Port").set_alignment(CellAlignment::Left),
+                Cell::new(format!("{:?}", target.get_ports())).set_alignment(CellAlignment::Left),
+            ]);
         }
     }
-    println!("{}", table.render());
+    println!("[Target]");
+    println!("{}", table);
 }
 
 pub fn show_portscan_result(host: &Host) {
     let mut table = Table::new();
-    table.max_column_width = 60;
-    table.separate_rows = false;
-    table.has_top_boarder = false;
-    table.has_bottom_boarder = false;
-    table.style = TableStyle::blank();
-    println!();
-    println!("[Host Info]");
-    table.add_row(Row::new(vec![
-        TableCell::new_with_alignment("IP Address", 1, Alignment::Left),
-        TableCell::new_with_alignment(host.ip_addr.to_string(), 1, Alignment::Left),
-    ]));
-    table.add_row(Row::new(vec![
-        TableCell::new_with_alignment("Host Name", 1, Alignment::Left),
-        TableCell::new_with_alignment(&host.hostname, 1, Alignment::Left),
-    ]));
+    table
+        .load_preset(NOTHING)
+        .set_content_arrangement(ContentArrangement::Dynamic);
+    table.add_row(vec![
+        Cell::new("IP Address").set_alignment(CellAlignment::Left),
+        Cell::new(host.ip_addr.to_string()).set_alignment(CellAlignment::Left),
+    ]);
+    table.add_row(vec![
+        Cell::new("Host Name").set_alignment(CellAlignment::Left),
+        Cell::new(&host.hostname).set_alignment(CellAlignment::Left),
+    ]);
     if host.mac_addr != MacAddr::zero() {
-        table.add_row(Row::new(vec![
-            TableCell::new_with_alignment("MAC Address", 1, Alignment::Left),
-            TableCell::new_with_alignment(host.mac_addr, 1, Alignment::Left),
-        ]));
+        table.add_row(vec![
+            Cell::new("MAC Address").set_alignment(CellAlignment::Left),
+            Cell::new(host.mac_addr).set_alignment(CellAlignment::Left),
+        ]);
     }
     if !host.vendor_name.is_empty() {
-        table.add_row(Row::new(vec![
-            TableCell::new_with_alignment("Vendor Name", 1, Alignment::Left),
-            TableCell::new_with_alignment(&host.vendor_name, 1, Alignment::Left),
-        ]));
+        table.add_row(vec![
+            Cell::new("Vendor Name").set_alignment(CellAlignment::Left),
+            Cell::new(&host.vendor_name).set_alignment(CellAlignment::Left),
+        ]);
     }
     if !host.os_family.is_empty() {
-        table.add_row(Row::new(vec![
-            TableCell::new_with_alignment("OS Family", 1, Alignment::Left),
-            TableCell::new_with_alignment(&host.os_family, 1, Alignment::Left),
-        ]));
+        table.add_row(vec![
+            Cell::new("OS Family").set_alignment(CellAlignment::Left),
+            Cell::new(&host.os_family).set_alignment(CellAlignment::Left),
+        ]);
     }
-    println!("{}", table.render());
+    println!();
+    println!("[Host Info]");
+    println!("{}", table);
     let mut table = Table::new();
-    table.max_column_width = 60;
-    table.separate_rows = false;
-    table.has_top_boarder = false;
-    table.has_bottom_boarder = false;
-    table.style = TableStyle::blank();
-    println!("[Port Info]");
+    table
+        .load_preset(NOTHING)
+        .set_content_arrangement(ContentArrangement::Dynamic)
+        .set_header(vec!["Number", "Status", "Service Name", "Service Version"]);
     let port_count: usize = host.get_ports().len();
-    table.add_row(Row::new(vec![
-        TableCell::new_with_alignment("Number", 1, Alignment::Left),
-        TableCell::new_with_alignment("Status", 1, Alignment::Left),
-        TableCell::new_with_alignment("Service Name", 1, Alignment::Left),
-        TableCell::new_with_alignment("Service Version", 1, Alignment::Left),
-    ]));
     for port in &host.ports {
         if port_count > 10 {
             if port.status == PortStatus::Open {
-                table.add_row(Row::new(vec![
-                    TableCell::new_with_alignment(port.number, 1, Alignment::Left),
-                    TableCell::new_with_alignment(port.status.name(), 1, Alignment::Left),
-                    TableCell::new_with_alignment(&port.service_name, 1, Alignment::Left),
-                    TableCell::new_with_alignment(&port.service_version, 1, Alignment::Left),
-                ]));
+                table.add_row(vec![
+                    Cell::new(port.number).set_alignment(CellAlignment::Left),
+                    Cell::new(port.status.name()).set_alignment(CellAlignment::Left),
+                    Cell::new(&port.service_name).set_alignment(CellAlignment::Left),
+                    Cell::new(&port.service_version).set_alignment(CellAlignment::Left),
+                ]);
             }
         } else {
-            table.add_row(Row::new(vec![
-                TableCell::new_with_alignment(port.number, 1, Alignment::Left),
-                TableCell::new_with_alignment(port.status.name(), 1, Alignment::Left),
-                TableCell::new_with_alignment(&port.service_name, 1, Alignment::Left),
-                TableCell::new_with_alignment(&port.service_version, 1, Alignment::Left),
-            ]));
+            table.add_row(vec![
+                Cell::new(port.number).set_alignment(CellAlignment::Left),
+                Cell::new(port.status.name()).set_alignment(CellAlignment::Left),
+                Cell::new(&port.service_name).set_alignment(CellAlignment::Left),
+                Cell::new(&port.service_version).set_alignment(CellAlignment::Left),
+            ]);
         }
     }
-    println!("{}", table.render());
+    println!("[Port Info]");
+    println!("{}", table);
 }

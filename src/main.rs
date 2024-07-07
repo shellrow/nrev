@@ -1,3 +1,24 @@
+// Core
+pub mod config;
+pub mod packet;
+pub mod host;
+pub mod probe;
+pub mod db;
+pub mod fp;
+pub mod interface;
+pub mod neighbor;
+pub mod pcap;
+pub mod ping;
+pub mod protocol;
+pub mod scan;
+pub mod trace;
+pub mod sys;
+pub mod ip;
+pub mod dns;
+pub mod fs;
+pub mod json;
+pub mod dep;
+// CLI
 pub mod app;
 pub mod handler;
 pub mod output;
@@ -50,7 +71,7 @@ fn main() {
         None => {
             match arg_matches.get_one::<String>("target") {
                 Some(target_host) => {
-                    if nerum_core::host::is_valid_target(target_host) {
+                    if crate::host::is_valid_target(target_host) {
                         handler::default_probe(target_host, &arg_matches);
                     } else {
                         app::show_app_desc();
@@ -111,7 +132,7 @@ fn parse_args() -> ArgMatches {
             .value_parser(value_parser!(PathBuf))
         )
         .subcommand(Command::new("port")
-            .about("Scan port. nerum port --help for more information")
+            .about("Scan port. nemio port --help for more information")
             .arg(Arg::new("target")
                 .help("Specify the target. IP address or Hostname")
                 .value_name("target")
@@ -148,7 +169,7 @@ fn parse_args() -> ArgMatches {
                 .num_args(0)
             )
             .arg(Arg::new("random")
-                .help("Don't randomize targets. By default, nerum randomizes the order of targets.")
+                .help("Don't randomize targets. By default, nemio randomizes the order of targets.")
                 .short('R')
                 .long("random")
                 .num_args(0)
@@ -191,7 +212,7 @@ fn parse_args() -> ArgMatches {
             )
         )
         .subcommand(Command::new("host")
-            .about("Scan host in specified network or host-list. nerum host --help for more information")
+            .about("Scan host in specified network or host-list. nemio host --help for more information")
             .arg(Arg::new("target")
                 .help("Specify the target network")
                 .value_name("target")
@@ -212,7 +233,7 @@ fn parse_args() -> ArgMatches {
                 .value_parser(value_parser!(u16))
             )
             .arg(Arg::new("random")
-                .help("Don't randomize targets. By default, nerum randomizes the order of targets.")
+                .help("Don't randomize targets. By default, nemio randomizes the order of targets.")
                 .short('R')
                 .long("random")
                 .num_args(0)
@@ -238,7 +259,7 @@ fn parse_args() -> ArgMatches {
             )
         )
         .subcommand(Command::new("ping")
-            .about("Ping to specified host. nerum ping --help for more information")
+            .about("Ping to specified host. nemio ping --help for more information")
             .arg(Arg::new("target")
                 .help("Specify the target. IP address or Hostname")
                 .value_name("target")
@@ -293,7 +314,7 @@ fn parse_args() -> ArgMatches {
             )
         )
         .subcommand(Command::new("trace")
-            .about("Traceroute to specified host. nerum trace --help for more information")
+            .about("Traceroute to specified host. nemio trace --help for more information")
             .arg(Arg::new("target")
                 .help("Specify the target. IP address or Hostname")
                 .value_name("target")
@@ -334,7 +355,7 @@ fn parse_args() -> ArgMatches {
             )
         )
         .subcommand(Command::new("subdomain")
-            .about("Find subdomains. nerum subdomain --help for more information")
+            .about("Find subdomains. nemio subdomain --help for more information")
             .arg(Arg::new("target")
                 .help("Specify the target apex-domain")
                 .value_name("target")
@@ -402,7 +423,7 @@ fn parse_args() -> ArgMatches {
 }
 
 fn check_deps() {
-    match nerum_core::dep::check_dependencies() {
+    match crate::dep::check_dependencies() {
         Ok(_) => {},
         Err(e) => {
             println!("Dependency error:");

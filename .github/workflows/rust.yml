@@ -16,8 +16,6 @@ jobs:
 
     steps:
     - uses: actions/checkout@v3
-    - name: Build nerum-core
-      run: cargo build --package nerum-core --verbose
-    - name: Build nerum
-      run: cargo build --package nerum --verbose
+    - name: Build
+      run: cargo build --verbose
       
