@@ -35,6 +35,9 @@ inquire = "0.6"
 comfy-table = "7.1"
 ipnet = "2.7"
 
+[target.'cfg(windows)'.dependencies]
+winreg = "0.52"
+
 # The profile that 'cargo dist' will build with
 [profile.dist]
 inherits = "release"
