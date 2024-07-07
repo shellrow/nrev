@@ -1,13 +1,13 @@
 [package]
 name = "nerum-core"
-version = "1.4.0"
+version = "1.4.1"
 edition = "2021"
 authors = ["shellrow <shellrow@fortnium.com>"]
 repository = "https://github.com/shellrow/nerum"
 documentation = "https://github.com/shellrow/nerum"
 readme = "../README.md"
 license = "MIT"
-description = "Core library for nerum"
+description = "This project has been rebranded to nemio"
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }
