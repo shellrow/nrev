@@ -2,12 +2,12 @@ use clap::ArgMatches;
 use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
 use std::time::Duration;
-use nerum_core::trace::setting::TraceSetting;
-use nerum_core::trace::tracer::Tracer;
+use crate::trace::setting::TraceSetting;
+use crate::trace::tracer::Tracer;
 use std::thread;
 use netdev::Interface;
 use std::str::FromStr;
-use nerum_core::config::DEFAULT_BASE_TARGET_UDP_PORT;
+use crate::config::DEFAULT_BASE_TARGET_UDP_PORT;
 use crate::output;
 
 pub fn handle_traceroute(args: &ArgMatches) {
@@ -17,7 +17,7 @@ pub fn handle_traceroute(args: &ArgMatches) {
         None => return,
     };
     let interface: Interface = if let Some(if_name) = args.get_one::<String>("interface") {
-        match nerum_core::interface::get_interface_by_name(if_name.to_string()) {
+        match crate::interface::get_interface_by_name(if_name.to_string()) {
             Some(iface) => iface,
             None => return,
         }
@@ -50,7 +50,7 @@ pub fn handle_traceroute(args: &ArgMatches) {
                     socket_addr.ip()
                 },
                 Err(_) => {
-                    match nerum_core::dns::lookup_host_name(target.clone()) {
+                    match crate::dns::lookup_host_name(target.clone()) {
                         Some(ip_addr) => {
                             ip_addr
                         },
@@ -86,7 +86,7 @@ pub fn handle_traceroute(args: &ArgMatches) {
     let rx = tracer.get_progress_receiver();
     let handle = thread::spawn(move || tracer.trace());
     for r in rx.lock().unwrap().iter() {
-        if r.probe_status.kind == nerum_core::probe::ProbeStatusKind::Done {
+        if r.probe_status.kind == crate::probe::ProbeStatusKind::Done {
             output::log_with_time(&format!(
                 "{} {} Bytes from {}, HOP:{}, TTL:{}, RTT:{:?}, NodeType: {}",
                 r.seq, r.received_packet_size, r.ip_addr, r.hop, r.ttl, r.rtt, r.node_type.name()
@@ -109,7 +109,7 @@ pub fn handle_traceroute(args: &ArgMatches) {
                 output::log_with_time(&format!("Traceroute completed in: {:?}", trace_result.elapsed_time), "INFO");
                 match args.get_one::<PathBuf>("save") {
                     Some(file_path) => {
-                        match nerum_core::fs::save_text(file_path, serde_json::to_string_pretty(&trace_result).unwrap()) {
+                        match crate::fs::save_text(file_path, serde_json::to_string_pretty(&trace_result).unwrap()) {
                             Ok(_) => {
                                 output::log_with_time(&format!("Saved to {}", file_path.to_string_lossy()), "INFO");
                             },

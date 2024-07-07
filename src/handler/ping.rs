@@ -2,18 +2,17 @@ use std::net::{IpAddr, SocketAddr};
 use std::path::PathBuf;
 use std::time::Duration;
 use clap::ArgMatches;
-use nerum_core::ping::{pinger::Pinger, setting::PingSetting, result::PingResult};
-use nerum_core::protocol::Protocol;
+use crate::ping::{pinger::Pinger, setting::PingSetting, result::PingResult};
+use crate::protocol::Protocol;
 use netdev::Interface;
-use term_table::row::Row;
 use std::str::FromStr;
 use std::thread;
-use term_table::table_cell::{Alignment, TableCell};
-use term_table::{Table, TableStyle};
+use comfy_table::presets::NOTHING;
+use comfy_table::{Cell, CellAlignment, ContentArrangement, Table};
 use crate::output;
 
 pub fn oneshot_ping(if_index: u32, dst_ip: IpAddr, protocol: Protocol, port: Option<u16>) -> Result<PingResult, String> {
-    let interface: Interface = match nerum_core::interface::get_interface_by_index(if_index) {
+    let interface: Interface = match crate::interface::get_interface_by_index(if_index) {
         Some(interface) => interface,
         None => return Err("Failed to get interface information".to_string()),
     };
@@ -37,7 +36,7 @@ pub fn oneshot_ping(if_index: u32, dst_ip: IpAddr, protocol: Protocol, port: Opt
     };
     match pinger.ping() {
         Ok(ping_result) => {
-            if ping_result.probe_status.kind == nerum_core::probe::ProbeStatusKind::Done {
+            if ping_result.probe_status.kind == crate::probe::ProbeStatusKind::Done {
                 Ok(ping_result)
             }else{
                 Err(format!("Failed to ping: {}", ping_result.probe_status.message))
@@ -58,7 +57,7 @@ pub fn initial_ping(if_index: u32, target_ip_addr: IpAddr, target_host_name: Str
             } else {
                 output::log_with_time(&format!("[ICMP] {} is up. RTT:{:?}", target_ip_addr, response.rtt), "INFO");
             }
-            return Ok(nerum_core::sys::time::ceil_duration_millis(response.rtt.mul_f64(1.5)));
+            return Ok(crate::sys::time::ceil_duration_millis(response.rtt.mul_f64(1.5)));
         },
         Err(e) => {
             output::log_with_time(&format!("[ICMP] {}", e), "ERROR");
@@ -74,7 +73,7 @@ pub fn initial_ping(if_index: u32, target_ip_addr: IpAddr, target_host_name: Str
             } else {
                 output::log_with_time(&format!("[UDP] {} is up. RTT:{:?}", target_ip_addr, response.rtt), "INFO");
             }
-            return Ok(nerum_core::sys::time::ceil_duration_millis(response.rtt.mul_f64(1.5)));
+            return Ok(crate::sys::time::ceil_duration_millis(response.rtt.mul_f64(1.5)));
         },
         Err(e) => {
             output::log_with_time(&format!("[UDP] {}", e), "ERROR");
@@ -90,7 +89,7 @@ pub fn initial_ping(if_index: u32, target_ip_addr: IpAddr, target_host_name: Str
             } else {
                 output::log_with_time(&format!("[TCP] {} is up. RTT:{:?}", target_ip_addr, response.rtt), "INFO");
             }
-            return Ok(nerum_core::sys::time::ceil_duration_millis(response.rtt.mul_f64(1.5)));
+            return Ok(crate::sys::time::ceil_duration_millis(response.rtt.mul_f64(1.5)));
         },
         Err(e) => {
             output::log_with_time(&format!("[TCP] {}", e), "ERROR");
@@ -107,7 +106,7 @@ pub fn handle_ping(args: &ArgMatches) {
         None => return,
     };
     let interface: netdev::Interface = if let Some(if_name) = args.get_one::<String>("interface") {
-        match nerum_core::interface::get_interface_by_name(if_name.to_string()) {
+        match crate::interface::get_interface_by_name(if_name.to_string()) {
             Some(iface) => iface,
             None => return,
         }
@@ -157,7 +156,7 @@ pub fn handle_ping(args: &ArgMatches) {
                     socket_addr.ip()
                 },
                 Err(_) => {
-                    match nerum_core::dns::lookup_host_name(target.clone()) {
+                    match crate::dns::lookup_host_name(target.clone()) {
                         Some(ip_addr) => {
                             ip_addr
                         },
@@ -211,7 +210,7 @@ pub fn handle_ping(args: &ArgMatches) {
         } else {
             r.ip_addr.to_string()
         };
-        if r.probe_status.kind == nerum_core::probe::ProbeStatusKind::Done {
+        if r.probe_status.kind == crate::probe::ProbeStatusKind::Done {
             if let Some(port) = r.port_number {
                 output::log_with_time(&format!(
                     "{} [{:?}] {} Bytes from {}:{}, HOP:{}, TTL:{}, RTT:{:?}",
@@ -240,7 +239,7 @@ pub fn handle_ping(args: &ArgMatches) {
     match handle.join() {
         Ok(ping_result) => match ping_result {
             Ok(ping_result) => {
-                if ping_result.probe_status.kind == nerum_core::probe::ProbeStatusKind::Done {
+                if ping_result.probe_status.kind == crate::probe::ProbeStatusKind::Done {
                     // Print results
                     if args.get_flag("json") {
                         let json_result = serde_json::to_string_pretty(&ping_result).unwrap();
@@ -250,7 +249,7 @@ pub fn handle_ping(args: &ArgMatches) {
                     }
                     match args.get_one::<PathBuf>("save") {
                         Some(file_path) => {
-                            match nerum_core::fs::save_text(file_path, serde_json::to_string_pretty(&ping_result).unwrap()) {
+                            match crate::fs::save_text(file_path, serde_json::to_string_pretty(&ping_result).unwrap()) {
                                 Ok(_) => {
                                     output::log_with_time(&format!("Saved to {}", file_path.to_string_lossy()), "INFO");
                                 },
@@ -273,39 +272,37 @@ pub fn handle_ping(args: &ArgMatches) {
 
 fn show_statistics(ping_result: &PingResult) {
     let mut table = Table::new();
-    table.max_column_width = 60;
-    table.separate_rows = false;
-    table.has_top_boarder = false;
-    table.has_bottom_boarder = false;
-    table.style = TableStyle::blank();
-    println!();
-    println!("[Statistics]");
-    table.add_row(Row::new(vec![
-        TableCell::new_with_alignment("Transmitted", 1, Alignment::Left),
-        TableCell::new_with_alignment(ping_result.stat.transmitted_count, 1, Alignment::Left),
-    ]));
-    table.add_row(Row::new(vec![
-        TableCell::new_with_alignment("Received", 1, Alignment::Left),
-        TableCell::new_with_alignment(ping_result.stat.received_count, 1, Alignment::Left),
-    ]));
-    table.add_row(Row::new(vec![
-        TableCell::new_with_alignment("Loss", 1, Alignment::Left),
-        TableCell::new_with_alignment(format!("{}%",100.0
+    table
+        .load_preset(NOTHING)
+        .set_content_arrangement(ContentArrangement::Dynamic);
+    table.add_row(vec![
+        Cell::new("Transmitted").set_alignment(CellAlignment::Left),
+        Cell::new(ping_result.stat.transmitted_count).set_alignment(CellAlignment::Left),
+    ]);
+    table.add_row(vec![
+        Cell::new("Received").set_alignment(CellAlignment::Left),
+        Cell::new(ping_result.stat.received_count).set_alignment(CellAlignment::Left),
+    ]);
+    table.add_row(vec![
+        Cell::new("Loss").set_alignment(CellAlignment::Left),
+        Cell::new(format!("{}%",100.0
         - (ping_result.stat.received_count as f64
             / ping_result.stat.transmitted_count as f64)
-            * 100.0), 1, Alignment::Left),
-    ]));
-    table.add_row(Row::new(vec![
-        TableCell::new_with_alignment("Min", 1, Alignment::Left),
-        TableCell::new_with_alignment(format!("{:?}", ping_result.stat.min), 1, Alignment::Left),
-    ]));
-    table.add_row(Row::new(vec![
-        TableCell::new_with_alignment("Max", 1, Alignment::Left),
-        TableCell::new_with_alignment(format!("{:?}", ping_result.stat.max), 1, Alignment::Left),
-    ]));
-    table.add_row(Row::new(vec![
-        TableCell::new_with_alignment("Avg", 1, Alignment::Left),
-        TableCell::new_with_alignment(format!("{:?}", ping_result.stat.avg), 1, Alignment::Left),
-    ]));
-    println!("{}", table.render());
+            * 100.0)).set_alignment(CellAlignment::Left),
+    ]);
+    table.add_row(vec![
+        Cell::new("Min").set_alignment(CellAlignment::Left),
+        Cell::new(format!("{:?}", ping_result.stat.min)).set_alignment(CellAlignment::Left),
+    ]);
+    table.add_row(vec![
+        Cell::new("Max").set_alignment(CellAlignment::Left),
+        Cell::new(format!("{:?}", ping_result.stat.max)).set_alignment(CellAlignment::Left),
+    ]);
+    table.add_row(vec![
+        Cell::new("Avg").set_alignment(CellAlignment::Left),
+        Cell::new(format!("{:?}", ping_result.stat.avg)).set_alignment(CellAlignment::Left),
+    ]);
+    println!();
+    println!("[Statistics]");
+    println!("{}", table);
 }

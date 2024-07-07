@@ -1,12 +1,11 @@
 use std::path::PathBuf;
 use std::{thread, time::Duration};
-use nerum_core::db;
-use term_table::row::Row;
-use term_table::table_cell::{Alignment, TableCell};
-use term_table::{Table, TableStyle};
+use crate::db;
+use comfy_table::presets::NOTHING;
+use comfy_table::{Cell, CellAlignment, ContentArrangement, Table};
 use clap::ArgMatches;
 use indicatif::ProgressBar;
-use nerum_core::dns::{result::DomainScanResult, scanner::DomainScanner};
+use crate::dns::{result::DomainScanResult, scanner::DomainScanner};
 use tokio::runtime::Runtime;
 
 use crate::output;
@@ -81,7 +80,7 @@ pub fn handle_subdomain_scan(args: &ArgMatches) {
     output::log_with_time(&format!("Scan completed in {:?}", result.scan_time), "INFO");
     match args.get_one::<PathBuf>("save") {
         Some(file_path) => {
-            match nerum_core::fs::save_text(file_path, serde_json::to_string_pretty(&result).unwrap()) {
+            match crate::fs::save_text(file_path, serde_json::to_string_pretty(&result).unwrap()) {
                 Ok(_) => {
                     output::log_with_time(&format!("Saved to {}", file_path.to_string_lossy()), "INFO");
                 },
@@ -96,22 +95,17 @@ pub fn handle_subdomain_scan(args: &ArgMatches) {
 
 fn show_domainscan_result(scan_result: &DomainScanResult) {
     let mut table = Table::new();
-    table.max_column_width = 60;
-    table.separate_rows = false;
-    table.has_top_boarder = false;
-    table.has_bottom_boarder = false;
-    table.style = TableStyle::blank();
+    table
+        .load_preset(NOTHING)
+        .set_content_arrangement(ContentArrangement::Dynamic)
+        .set_header(vec!["Host Name", "IP Address"]);
     println!();
     println!("[Scan Result]");
-    table.add_row(Row::new(vec![
-        TableCell::new_with_alignment("Host Name", 1, Alignment::Left),
-        TableCell::new_with_alignment("IP Address", 1, Alignment::Left),
-    ]));
     for domain in &scan_result.domains {
-        table.add_row(Row::new(vec![
-            TableCell::new_with_alignment(&domain.domain_name, 1, Alignment::Left),
-            TableCell::new_with_alignment(format!("{:?}", &domain.ips), 1, Alignment::Left),
-        ]));
+        table.add_row(vec![
+            Cell::new(&domain.domain_name).set_alignment(CellAlignment::Left),
+            Cell::new(format!("{:?}", &domain.ips)).set_alignment(CellAlignment::Left),
+        ]);
     }
-    println!("{}", table.render());
+    println!("{}", table);
 }

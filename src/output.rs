@@ -7,12 +7,12 @@ pub fn log(message: &str, level: &str) {
 }
 
 pub fn log_with_time(message: &str, level: &str) {
-    let now: String = nerum_core::sys::time::get_systime();
+    let now: String = crate::sys::time::get_systime();
     println!("[{}] [{}] {}", now, level, message);
 }
 
 pub fn log_with_datetime(message: &str, level: &str) {
-    let now: String = nerum_core::sys::time::get_sysdate();
+    let now: String = crate::sys::time::get_sysdate();
     println!("[{}] [{}] {}", now, level, message);
 }
 

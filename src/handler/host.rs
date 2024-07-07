@@ -1,15 +1,14 @@
 use clap::ArgMatches;
 use indicatif::ProgressBar;
 use ipnet::Ipv4Net;
-use nerum_core::host::Host;
-use nerum_core::json::host::HostScanResult;
-use nerum_core::scan::result::ScanResult;
-use nerum_core::scan::scanner::HostScanner;
-use nerum_core::scan::setting::{HostScanSetting, HostScanType};
+use crate::host::Host;
+use crate::json::host::HostScanResult;
+use crate::scan::result::ScanResult;
+use crate::scan::scanner::HostScanner;
+use crate::scan::setting::{HostScanSetting, HostScanType};
 use netdev::Interface;
-use term_table::row::Row;
-use term_table::table_cell::{Alignment, TableCell};
-use term_table::{Table, TableStyle};
+use comfy_table::presets::NOTHING;
+use comfy_table::{Cell, CellAlignment, ContentArrangement, Table};
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::PathBuf;
@@ -90,7 +89,7 @@ pub fn handle_hostscan(args: &ArgMatches) {
         targets.push(host);
     }
     let interface: Interface = if let Some(if_name) = args.get_one::<String>("interface") {
-        match nerum_core::interface::get_interface_by_name(if_name.to_string()) {
+        match crate::interface::get_interface_by_name(if_name.to_string()) {
             Some(iface) => iface,
             None => return,
         }
@@ -136,7 +135,7 @@ pub fn handle_hostscan(args: &ArgMatches) {
     }
     hostscan_result.sort_ports();
     hostscan_result.sort_hosts();
-    let os_family_map: HashMap<IpAddr, String> = nerum_core::db::get_fingerprint_map(&hostscan_result.fingerprints);
+    let os_family_map: HashMap<IpAddr, String> = crate::db::get_fingerprint_map(&hostscan_result.fingerprints);
     for host in &mut hostscan_result.hosts {
         host.os_family = os_family_map.get(&host.ip_addr).unwrap_or(&String::new()).to_string();
     }
@@ -151,7 +150,7 @@ pub fn handle_hostscan(args: &ArgMatches) {
     output::log_with_time("Scan completed", "INFO");
     match args.get_one::<PathBuf>("save") {
         Some(file_path) => {
-            match nerum_core::fs::save_text(file_path, serde_json::to_string_pretty(&result).unwrap()) {
+            match crate::fs::save_text(file_path, serde_json::to_string_pretty(&result).unwrap()) {
                 Ok(_) => {
                     output::log_with_time(&format!("Saved to {}", file_path.to_string_lossy()), "INFO");
                 },
@@ -166,102 +165,89 @@ pub fn handle_hostscan(args: &ArgMatches) {
 
 fn print_option(target: &str, setting: &HostScanSetting, interface: &Interface) {
     let mut table = Table::new();
-    table.max_column_width = 60;
-    table.separate_rows = false;
-    table.has_top_boarder = false;
-    table.has_bottom_boarder = false;
-    table.style = TableStyle::blank();
+    table
+        .load_preset(NOTHING)
+        .set_content_arrangement(ContentArrangement::Dynamic);
+    
+    table.add_row(vec![
+        Cell::new("Protocol").set_alignment(CellAlignment::Left),
+        Cell::new(setting.protocol.to_str()).set_alignment(CellAlignment::Left),
+    ]);
+    table.add_row(vec![
+        Cell::new("ScanType").set_alignment(CellAlignment::Left),
+        Cell::new(setting.scan_type.to_str()).set_alignment(CellAlignment::Left),
+    ]);
+    table.add_row(vec![
+        Cell::new("InterfaceName").set_alignment(CellAlignment::Left),
+        Cell::new(&interface.name).set_alignment(CellAlignment::Left),
+    ]);
+    table.add_row(vec![
+        Cell::new("Timeout").set_alignment(CellAlignment::Left),
+        Cell::new(format!("{:?}", setting.timeout)).set_alignment(CellAlignment::Left),
+    ]);
+    table.add_row(vec![
+        Cell::new("WaitTime").set_alignment(CellAlignment::Left),
+        Cell::new(format!("{:?}", setting.wait_time)).set_alignment(CellAlignment::Left),
+    ]);
+    table.add_row(vec![
+        Cell::new("SendRate").set_alignment(CellAlignment::Left),
+        Cell::new(format!("{:?}", setting.send_rate)).set_alignment(CellAlignment::Left),
+    ]);
     println!("[Options]");
-    table.add_row(Row::new(vec![
-        TableCell::new_with_alignment("Protocol", 1, Alignment::Left),
-        TableCell::new_with_alignment(setting.protocol.to_str(), 1, Alignment::Left),
-    ]));
-    table.add_row(Row::new(vec![
-        TableCell::new_with_alignment("ScanType", 1, Alignment::Left),
-        TableCell::new_with_alignment(setting.scan_type.to_str(), 1, Alignment::Left),
-    ]));
-    table.add_row(Row::new(vec![
-        TableCell::new_with_alignment("InterfaceName", 1, Alignment::Left),
-        TableCell::new_with_alignment(&interface.name, 1, Alignment::Left),
-    ]));
-    table.add_row(Row::new(vec![
-        TableCell::new_with_alignment("Timeout", 1, Alignment::Left),
-        TableCell::new_with_alignment(format!("{:?}", setting.timeout), 1, Alignment::Left),
-    ]));
-    table.add_row(Row::new(vec![
-        TableCell::new_with_alignment("WaitTime", 1, Alignment::Left),
-        TableCell::new_with_alignment(format!("{:?}", setting.wait_time), 1, Alignment::Left),
-    ]));
-    table.add_row(Row::new(vec![
-        TableCell::new_with_alignment("SendRate", 1, Alignment::Left),
-        TableCell::new_with_alignment(format!("{:?}", setting.send_rate), 1, Alignment::Left),
-    ]));
-    println!("{}", table.render());
+    println!("{}", table);
 
     let mut table = Table::new();
-    table.max_column_width = 60;
-    table.separate_rows = false;
-    table.has_top_boarder = false;
-    table.has_bottom_boarder = false;
-    table.style = TableStyle::blank();
-    println!("[Target]");
+    table
+        .load_preset(NOTHING)
+        .set_content_arrangement(ContentArrangement::Dynamic);
+    
     match Ipv4Net::from_str(&target) {
         Ok(ipv4net) => {
-            table.add_row(Row::new(vec![
-                TableCell::new_with_alignment("Network", 1, Alignment::Left),
-                TableCell::new_with_alignment(ipv4net.to_string(), 1, Alignment::Left),
-            ]));
+            table.add_row(vec![
+                Cell::new("Network").set_alignment(CellAlignment::Left),
+                Cell::new(ipv4net.to_string()).set_alignment(CellAlignment::Left),
+            ]);
         }
         Err(_) => {
             match Ipv4Addr::from_str(&target) {
                 Ok(ip_addr) => {
                     let net = Ipv4Net::new(ip_addr, 24).unwrap();
-                    table.add_row(Row::new(vec![
-                        TableCell::new_with_alignment("Network", 1, Alignment::Left),
-                        TableCell::new_with_alignment(net.to_string(), 1, Alignment::Left),
-                    ]));
+                    table.add_row(vec![
+                        Cell::new("Network").set_alignment(CellAlignment::Left),
+                        Cell::new(net.to_string()).set_alignment(CellAlignment::Left),
+                    ]);
                 }
                 Err(_) => {
-                    table.add_row(Row::new(vec![
-                        TableCell::new_with_alignment("List", 1, Alignment::Left),
-                        TableCell::new_with_alignment(target, 1, Alignment::Left),
-                    ]));
+                    table.add_row(vec![
+                        Cell::new("List").set_alignment(CellAlignment::Left),
+                        Cell::new(target).set_alignment(CellAlignment::Left),
+                    ]);
                 }
             }
         },
     }
-    println!("{}", table.render());
+    println!("[Target]");
+    println!("{}", table);
 }
 
 fn show_hostscan_result(hostscan_result: &HostScanResult) {
-    let oui_map: HashMap<String, String> = nerum_core::db::get_oui_detail_map();
-    //let os_family_map: HashMap<IpAddr, String> = nerum_core::db::get_fingerprint_map(&hostscan_result.fingerprints);
+    let oui_map: HashMap<String, String> = crate::db::get_oui_detail_map();
     let mut table = Table::new();
-    table.max_column_width = 60;
-    table.separate_rows = false;
-    table.has_top_boarder = false;
-    table.has_bottom_boarder = false;
-    table.style = TableStyle::blank();
-    println!();
-    println!("[Up Hosts]");
-    table.add_row(Row::new(vec![
-        TableCell::new_with_alignment("IP Address", 1, Alignment::Left),
-        TableCell::new_with_alignment("Host Name", 1, Alignment::Left),
-        TableCell::new_with_alignment("TTL", 1, Alignment::Left),
-        TableCell::new_with_alignment("OS Family", 1, Alignment::Left),
-        TableCell::new_with_alignment("MAC Address", 1, Alignment::Left),
-        TableCell::new_with_alignment("Vendor Name", 1, Alignment::Left),
-    ]));
+    table
+        .load_preset(NOTHING)
+        .set_content_arrangement(ContentArrangement::Dynamic)
+        .set_header(vec!["IP Address", "Host Name", "TTL","OS Family", "MAC Address", "Vendor Name"]);
+    
     for host in &hostscan_result.hosts {
-        if nerum_core::ip::is_global_addr(&host.ip_addr) {
-            table.add_row(Row::new(vec![
-                TableCell::new_with_alignment(&host.ip_addr.to_string(), 1, Alignment::Left),
-                TableCell::new_with_alignment(&host.hostname, 1, Alignment::Left),
-                TableCell::new_with_alignment(&host.ttl, 1, Alignment::Left),
-                TableCell::new_with_alignment(&host.os_family, 1, Alignment::Left),
-                TableCell::new_with_alignment("-", 1, Alignment::Left),
-                TableCell::new_with_alignment("-", 1, Alignment::Left),
-            ]));
+        if crate::ip::is_global_addr(&host.ip_addr) {
+            table.add_row(vec![
+                Cell::new(&host.ip_addr.to_string()).set_alignment(CellAlignment::Left),
+                Cell::new(&host.hostname).set_alignment(CellAlignment::Left),
+                Cell::new(&host.ttl).set_alignment(CellAlignment::Left),
+                Cell::new(&host.os_family).set_alignment(CellAlignment::Left),
+                Cell::new("-").set_alignment(CellAlignment::Left),
+                Cell::new("-").set_alignment(CellAlignment::Left),
+            ]);
         }else{
             let vendor_name = if host.mac_addr.address().len() > 16 {
                 let prefix8 = host.mac_addr.address()[0..8].to_uppercase();
@@ -269,15 +255,17 @@ fn show_hostscan_result(hostscan_result: &HostScanResult) {
             } else {
                 oui_map.get(&host.mac_addr.address()).unwrap_or(&String::new()).to_string()
             };
-            table.add_row(Row::new(vec![
-                TableCell::new_with_alignment(&host.ip_addr.to_string(), 1, Alignment::Left),
-                TableCell::new_with_alignment(&host.hostname, 1, Alignment::Left),
-                TableCell::new_with_alignment(&host.ttl, 1, Alignment::Left),
-                TableCell::new_with_alignment(&host.os_family, 1, Alignment::Left),
-                TableCell::new_with_alignment(&host.mac_addr.to_string(), 1, Alignment::Left),
-                TableCell::new_with_alignment(vendor_name, 1, Alignment::Left),
-            ]));
+            table.add_row(vec![
+                Cell::new(&host.ip_addr.to_string()).set_alignment(CellAlignment::Left),
+                Cell::new(&host.hostname).set_alignment(CellAlignment::Left),
+                Cell::new(&host.ttl).set_alignment(CellAlignment::Left),
+                Cell::new(&host.os_family).set_alignment(CellAlignment::Left),
+                Cell::new(&host.mac_addr.to_string()).set_alignment(CellAlignment::Left),
+                Cell::new(vendor_name).set_alignment(CellAlignment::Left),
+            ]);
         }
     }
-    println!("{}", table.render());
+    println!();
+    println!("[Up Hosts]");
+    println!("{}", table);
 }

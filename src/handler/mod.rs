@@ -9,16 +9,16 @@ pub mod check;
 
 use clap::ArgMatches;
 use indicatif::ProgressBar;
-use nerum_core::db::model::OsFamilyFingerprint;
-use nerum_core::host::Host;
-use nerum_core::scan::scanner::{PortScanner, ServiceDetector};
-use nerum_core::scan::setting::{PortScanSetting, PortScanType, ServiceProbeSetting};
+use crate::db::model::OsFamilyFingerprint;
+use crate::host::Host;
+use crate::scan::scanner::{PortScanner, ServiceDetector};
+use crate::scan::setting::{PortScanSetting, PortScanType, ServiceProbeSetting};
 use netdev::mac::MacAddr;
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::thread;
 use std::time::Duration;
-use nerum_core::scan::result::ScanResult;
+use crate::scan::result::ScanResult;
 
 use crate::output;
 
@@ -26,12 +26,12 @@ pub fn default_probe(target_host: &str, args: &ArgMatches) {
     output::log_with_time("Initiating port scan...", "INFO");
     let target_host_name: String;
     let target_ip_addr: IpAddr;
-    if nerum_core::host::is_valid_ip_addr(&target_host) {
+    if crate::host::is_valid_ip_addr(&target_host) {
         target_ip_addr = target_host.parse().unwrap();
-        target_host_name = nerum_core::dns::lookup_ip_addr(&target_ip_addr).unwrap_or(target_host.to_string());
+        target_host_name = crate::dns::lookup_ip_addr(&target_ip_addr).unwrap_or(target_host.to_string());
     } else {
         target_host_name = target_host.to_string();
-        target_ip_addr = match nerum_core::dns::lookup_host_name(target_host.to_string()){
+        target_ip_addr = match crate::dns::lookup_host_name(target_host.to_string()){
             Some(ip) => ip,
             None => return,
         };
@@ -41,11 +41,11 @@ pub fn default_probe(target_host: &str, args: &ArgMatches) {
         (1..=65535).collect()
     }else{
         // Use default 1000 ports
-        nerum_core::db::get_default_ports()
+        crate::db::get_default_ports()
     };
     
     let interface: netdev::Interface = if let Some(if_name) = args.get_one::<String>("interface") {
-        match nerum_core::interface::get_interface_by_name(if_name.to_string()) {
+        match crate::interface::get_interface_by_name(if_name.to_string()) {
             Some(iface) => iface,
             None => return,
         }
@@ -145,15 +145,15 @@ pub fn default_probe(target_host: &str, args: &ArgMatches) {
     // OS detection
     if result_host.get_open_port_numbers().len() > 0 {
         if let Some(fingerprint) = portscan_result.get_syn_ack_fingerprint(result_host.ip_addr, result_host.get_open_port_numbers()[0]) {
-            let os_fingerprint: OsFamilyFingerprint = nerum_core::db::verify_os_family_fingerprint(&fingerprint);
+            let os_fingerprint: OsFamilyFingerprint = crate::db::verify_os_family_fingerprint(&fingerprint);
             result_host.os_family = os_fingerprint.os_family;
         }
     }
     // Set vendor name
-    if !nerum_core::ip::is_global_addr(&result_host.ip_addr) {
+    if !crate::ip::is_global_addr(&result_host.ip_addr) {
         if let Some(h) = portscan_result.get_host(result_host.ip_addr) {
             if h.mac_addr != MacAddr::zero() {
-                let oui_map: HashMap<String, String> = nerum_core::db::get_oui_detail_map();
+                let oui_map: HashMap<String, String> = crate::db::get_oui_detail_map();
                 let vendor_name = if h.mac_addr.address().len() > 16 {
                     let prefix8 = h.mac_addr.address()[0..8].to_uppercase();
                     oui_map.get(&prefix8).unwrap_or(&String::new()).to_string()

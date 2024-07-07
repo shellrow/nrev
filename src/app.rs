@@ -1,10 +1,10 @@
 use clap::{crate_name, crate_version, crate_description};
-use nerum_core::sys;
+use crate::sys;
 
 // APP information
-pub const CRATE_BIN_NAME: &str = "nerum";
-pub const CRATE_UPDATE_DATE: &str = "2024-06-09";
-pub const CRATE_REPOSITORY: &str = "https://github.com/shellrow/nerum";
+pub const CRATE_BIN_NAME: &str = "nemio";
+pub const CRATE_UPDATE_DATE: &str = "2024-07-07";
+pub const CRATE_REPOSITORY: &str = "https://github.com/shellrow/nemio";
 
 pub enum AppCommands {
     PortScan,
