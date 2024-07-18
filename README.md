@@ -2,7 +2,7 @@
 [crates-url]: https://crates.io/crates/nrev
 
 # nrev [![Crates.io][crates-badge]][crates-url]
-Simple and Fast Network Mapper. Written in Rust.  
+Simple and Fast Network Revealer/Mapper. Written in Rust.  
 Designed to be used in network mapping, probe, and security tests.
 
 ## Features
