@@ -7,14 +7,16 @@ use crate::scan::scanner::{PortScanner, ServiceDetector};
 use crate::scan::setting::{PortScanSetting, PortScanType, ServiceProbeSetting};
 use netdev::mac::MacAddr;
 use netdev::Interface;
-use comfy_table::presets::NOTHING;
-use comfy_table::{Cell, CellAlignment, ContentArrangement, Table};
+// use comfy_table::presets::NOTHING;
+// use comfy_table::{Cell, CellAlignment, ContentArrangement, Table};
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::path::PathBuf;
 use std::thread;
 use std::time::Duration;
 use crate::scan::result::ScanResult;
+use termtree::Tree;
+use crate::util::tree::node_label;
 
 use crate::output;
 
@@ -232,7 +234,7 @@ pub fn handle_portscan(args: &ArgMatches) {
     }
 }
 
-pub fn print_option(setting: &PortScanSetting, interface: &Interface) {
+/* pub fn print_option(setting: &PortScanSetting, interface: &Interface) {
     let mut table = Table::new();
     table
         .load_preset(NOTHING)
@@ -298,9 +300,39 @@ pub fn print_option(setting: &PortScanSetting, interface: &Interface) {
     }
     println!("[Target]");
     println!("{}", table);
+} */
+
+pub fn print_option(setting: &PortScanSetting, interface: &Interface) {
+    println!();
+    let mut tree = Tree::new(node_label("PortScan Config", None, None));
+    let mut setting_tree = Tree::new(node_label("Settings", None, None));
+    setting_tree.push(node_label("Protocol", Some(setting.protocol.to_str()), None));
+    setting_tree.push(node_label("ScanType", Some(setting.scan_type.to_str()), None));
+    setting_tree.push(node_label("InterfaceName", Some(&interface.name), None));
+    setting_tree.push(node_label("Timeout", Some(format!("{:?}", setting.timeout).as_str()), None));
+    setting_tree.push(node_label("WaitTime", Some(format!("{:?}", setting.wait_time).as_str()), None));
+    setting_tree.push(node_label("SendRate", Some(format!("{:?}", setting.send_rate).as_str()), None));
+    tree.push(setting_tree);
+
+    let mut target_tree = Tree::new(node_label("Target", None, None));
+    for target in &setting.targets {
+        if target.ip_addr.to_string() == target.hostname || target.hostname.is_empty() {
+            target_tree.push(node_label("IP Address", Some(&target.ip_addr.to_string()), None));
+        } else {
+            target_tree.push(node_label("IP Address", Some(&target.ip_addr.to_string()), None));
+            target_tree.push(node_label("Host Name", Some(&target.hostname), None));
+        }
+        if target.ports.len() > 10 {
+            target_tree.push(node_label("Port", Some(format!("{} port(s)", target.ports.len()).as_str()), None));
+        } else {
+            target_tree.push(node_label("Port", Some(format!("{:?}", target.get_ports()).as_str()), None));
+        }
+    }
+    tree.push(target_tree);
+    println!("{}", tree);
 }
 
-pub fn show_portscan_result(host: &Host) {
+/* pub fn show_portscan_result(host: &Host) {
     let mut table = Table::new();
     table
         .load_preset(NOTHING)
@@ -361,4 +393,34 @@ pub fn show_portscan_result(host: &Host) {
     }
     println!("[Port Info]");
     println!("{}", table);
+} */
+
+pub fn show_portscan_result(host: &Host) {
+    println!();
+    let mut tree = Tree::new(node_label("Result", None, None));
+    let mut host_tree = Tree::new(node_label("Host Info", None, None));
+    host_tree.push(node_label("IP Address", Some(&host.ip_addr.to_string()), None));
+    host_tree.push(node_label("Host Name", Some(&host.hostname), None));
+    if host.mac_addr != MacAddr::zero() {
+        host_tree.push(node_label("MAC Address", Some(&host.mac_addr.to_string()), None));
+    }
+    if !host.vendor_name.is_empty() {
+        host_tree.push(node_label("Vendor Name", Some(&host.vendor_name), None));
+    }
+    if !host.os_family.is_empty() {
+        host_tree.push(node_label("OS Family", Some(&host.os_family), None));
+    }
+    let mut port_info_tree = Tree::new(node_label("Port Info", None, None));
+    for port in &host.ports {
+        if port.status == PortStatus::Open {
+            let mut port_tree = Tree::new(node_label(&port.number.to_string(), None, None));
+            port_tree.push(node_label("Status", Some(&port.status.name()), None));
+            port_tree.push(node_label("Service Name", Some(&port.service_name), None));
+            port_tree.push(node_label("Service Version", Some(&port.service_version), None));
+            port_info_tree.push(port_tree);
+        }
+    }
+    host_tree.push(port_info_tree);
+    tree.push(host_tree);
+    println!("{}", tree);
 }

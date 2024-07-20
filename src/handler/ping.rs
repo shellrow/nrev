@@ -7,9 +7,11 @@ use crate::protocol::Protocol;
 use netdev::Interface;
 use std::str::FromStr;
 use std::thread;
-use comfy_table::presets::NOTHING;
-use comfy_table::{Cell, CellAlignment, ContentArrangement, Table};
+// use comfy_table::presets::NOTHING;
+// use comfy_table::{Cell, CellAlignment, ContentArrangement, Table};
 use crate::output;
+use termtree::Tree;
+use crate::util::tree::node_label;
 
 pub fn oneshot_ping(if_index: u32, dst_ip: IpAddr, protocol: Protocol, port: Option<u16>) -> Result<PingResult, String> {
     let interface: Interface = match crate::interface::get_interface_by_index(if_index) {
@@ -18,13 +20,13 @@ pub fn oneshot_ping(if_index: u32, dst_ip: IpAddr, protocol: Protocol, port: Opt
     };
     let setting: PingSetting = match protocol {
         Protocol::ICMP => {
-            PingSetting::icmp_ping(interface, dst_ip, 1).unwrap()
+            PingSetting::icmp_ping(&interface, dst_ip, 1).unwrap()
         },
         Protocol::TCP => {
-            PingSetting::tcp_ping(interface, dst_ip, port.unwrap_or(80), 1).unwrap()
+            PingSetting::tcp_ping(&interface, dst_ip, port.unwrap_or(80), 1).unwrap()
         },
         Protocol::UDP => {
-            PingSetting::udp_ping(interface, dst_ip, 1).unwrap()
+            PingSetting::udp_ping(&interface, dst_ip, 1).unwrap()
         },
         _ => {
             return Err("Unsupported protoco".to_string());
@@ -183,13 +185,13 @@ pub fn handle_ping(args: &ArgMatches) {
     };
     let mut setting: PingSetting = match protocol {
         Protocol::ICMP => {
-            PingSetting::icmp_ping(interface, dst_ip, count).unwrap()
+            PingSetting::icmp_ping(&interface, dst_ip, count).unwrap()
         },
         Protocol::TCP => {
-            PingSetting::tcp_ping(interface, dst_ip, port, count).unwrap()
+            PingSetting::tcp_ping(&interface, dst_ip, port, count).unwrap()
         },
         Protocol::UDP => {
-            PingSetting::udp_ping(interface, dst_ip, count).unwrap()
+            PingSetting::udp_ping(&interface, dst_ip, count).unwrap()
         },
         _ => {
             output::log_with_time("Unsupported protocol", "ERROR");
@@ -201,6 +203,9 @@ pub fn handle_ping(args: &ArgMatches) {
     setting.receive_timeout = wait_time;
     setting.probe_timeout = timeout;
     setting.send_rate = send_rate;
+
+    print_option(&setting, &interface);
+    
     let pinger: Pinger = Pinger::new(setting).unwrap();
     let rx = pinger.get_progress_receiver();
     let handle = thread::spawn(move || pinger.ping());
@@ -245,7 +250,7 @@ pub fn handle_ping(args: &ArgMatches) {
                         let json_result = serde_json::to_string_pretty(&ping_result).unwrap();
                         println!("{}", json_result);
                     }else {
-                        show_statistics(&ping_result);
+                        show_ping_result(&ping_result);
                     }
                     match args.get_one::<PathBuf>("save") {
                         Some(file_path) => {
@@ -270,7 +275,70 @@ pub fn handle_ping(args: &ArgMatches) {
     }
 }
 
-fn show_statistics(ping_result: &PingResult) {
+fn print_option(setting: &PingSetting, interface: &Interface) {
+    println!();
+    // Options
+    let mut tree = Tree::new(node_label("Ping Config", None, None));
+    let mut setting_tree = Tree::new(node_label("Settings", None, None));
+    setting_tree.push(node_label("Interface", Some(interface.name.as_str()), None));
+    setting_tree.push(node_label("Protocol", Some(format!("{:?}", setting.protocol).as_str()), None));
+    setting_tree.push(node_label("Count", Some(setting.count.to_string().as_str()), None));
+    setting_tree.push(node_label("Hop Limit", Some(setting.hop_limit.to_string().as_str()), None));
+    setting_tree.push(node_label("Timeout", Some(format!("{:?}", setting.probe_timeout).as_str()), None));
+    setting_tree.push(node_label("Wait Time", Some(format!("{:?}", setting.receive_timeout).as_str()), None));
+    setting_tree.push(node_label("Send Rate", Some(format!("{:?}", setting.send_rate).as_str()), None));
+    tree.push(setting_tree);
+    // Target
+    let mut target_tree = Tree::new(node_label("Target", None, None));
+    target_tree.push(node_label("IP Address", Some(setting.dst_ip.to_string().as_str()), None));
+    target_tree.push(node_label("Host Name", Some(&setting.dst_hostname), None));
+    if let Some(port) = setting.dst_port {
+        target_tree.push(node_label("Port", Some(port.to_string().as_str()), None));
+    }
+    tree.push(target_tree);
+    println!("{}", tree);
+}
+
+fn show_ping_result(ping_result: &PingResult) {
+    println!();
+    let mut tree = Tree::new(node_label("Ping Result", None, None));
+    // Responses
+    let mut responses_tree = Tree::new(node_label("Responses", None, None));
+    for response in &ping_result.stat.responses {
+        let source: String = if response.ip_addr.to_string() != response.host_name && !response.host_name.is_empty() {
+            format!("{}({})", response.host_name, response.ip_addr)
+        } else {
+            response.ip_addr.to_string()
+        };
+        let mut response_tree = Tree::new(node_label("Sequence", Some(response.seq.to_string().as_str()), None));
+        response_tree.push(node_label("Source", Some(&source), None));
+        response_tree.push(node_label("Protocol", Some(format!("{:?}", response.protocol).as_str()), None));
+        response_tree.push(node_label("Received Bytes", Some(response.received_packet_size.to_string().as_str()), None));
+        response_tree.push(node_label("HOP", Some(response.hop.to_string().as_str()), None));
+        response_tree.push(node_label("TTL", Some(response.ttl.to_string().as_str()), None));
+        response_tree.push(node_label("RTT", Some(format!("{:?}", response.rtt).as_str()), None));
+        
+        responses_tree.push(response_tree);
+    }
+    tree.push(responses_tree);
+
+    // Statistics
+    let mut stat_tree = Tree::new(node_label("Statistics", None, None));
+    stat_tree.push(node_label("Transmitted", Some(format!("{}", ping_result.stat.transmitted_count).as_str()), None));
+    stat_tree.push(node_label("Received", Some(format!("{}", ping_result.stat.received_count).as_str()), None));
+    stat_tree.push(node_label("Loss", Some(format!("{}%",100.0
+        - (ping_result.stat.received_count as f64
+            / ping_result.stat.transmitted_count as f64)
+            * 100.0).as_str()), None));
+    stat_tree.push(node_label("Min", Some(format!("{:?}", ping_result.stat.min).as_str()), None));
+    stat_tree.push(node_label("Max", Some(format!("{:?}", ping_result.stat.max).as_str()), None));
+    stat_tree.push(node_label("Avg", Some(format!("{:?}", ping_result.stat.avg).as_str()), None));
+    tree.push(stat_tree);
+
+    println!("{}", tree);
+}
+
+/* fn show_statistics(ping_result: &PingResult) {
     let mut table = Table::new();
     table
         .load_preset(NOTHING)
@@ -305,4 +373,4 @@ fn show_statistics(ping_result: &PingResult) {
     println!();
     println!("[Statistics]");
     println!("{}", table);
-}
+} */

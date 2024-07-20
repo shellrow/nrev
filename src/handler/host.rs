@@ -7,14 +7,16 @@ use crate::scan::result::ScanResult;
 use crate::scan::scanner::HostScanner;
 use crate::scan::setting::{HostScanSetting, HostScanType};
 use netdev::Interface;
-use comfy_table::presets::NOTHING;
-use comfy_table::{Cell, CellAlignment, ContentArrangement, Table};
+//use comfy_table::presets::NOTHING;
+//use comfy_table::{Cell, CellAlignment, ContentArrangement, Table};
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::thread;
 use std::time::Duration;
+use termtree::Tree;
+use crate::util::tree::node_label;
 
 use crate::output;
 
@@ -163,7 +165,7 @@ pub fn handle_hostscan(args: &ArgMatches) {
     }
 }
 
-fn print_option(target: &str, setting: &HostScanSetting, interface: &Interface) {
+/* fn print_option(target: &str, setting: &HostScanSetting, interface: &Interface) {
     let mut table = Table::new();
     table
         .load_preset(NOTHING)
@@ -228,9 +230,41 @@ fn print_option(target: &str, setting: &HostScanSetting, interface: &Interface) 
     }
     println!("[Target]");
     println!("{}", table);
+} */
+
+fn print_option(target: &str, setting: &HostScanSetting, interface: &Interface) {
+    println!();
+    let mut tree = Tree::new(node_label("HostScan Config", None, None));
+    let mut setting_tree = Tree::new(node_label("Settings", None, None));
+    setting_tree.push(node_label("Protocol", Some(setting.protocol.to_str()), None));
+    setting_tree.push(node_label("ScanType", Some(setting.scan_type.to_str()), None));
+    setting_tree.push(node_label("InterfaceName", Some(&interface.name), None));
+    setting_tree.push(node_label("Timeout", Some(&format!("{:?}", setting.timeout)), None));
+    setting_tree.push(node_label("WaitTime", Some(&format!("{:?}", setting.wait_time)), None));
+    setting_tree.push(node_label("SendRate", Some(&format!("{:?}", setting.send_rate)), None));
+    tree.push(setting_tree);
+    let mut target_tree = Tree::new(node_label("Target", None, None));
+    match Ipv4Net::from_str(&target) {
+        Ok(ipv4net) => {
+            target_tree.push(node_label("Network", Some(&ipv4net.to_string()), None));
+        }
+        Err(_) => {
+            match Ipv4Addr::from_str(&target) {
+                Ok(ip_addr) => {
+                    let net = Ipv4Net::new(ip_addr, 24).unwrap();
+                    target_tree.push(node_label("Network", Some(&net.to_string()), None));
+                }
+                Err(_) => {
+                    target_tree.push(node_label("List", Some(target), None));
+                }
+            }
+        },
+    }
+    tree.push(target_tree);
+    println!("{}", tree);
 }
 
-fn show_hostscan_result(hostscan_result: &HostScanResult) {
+/* fn show_hostscan_result(hostscan_result: &HostScanResult) {
     let oui_map: HashMap<String, String> = crate::db::get_oui_detail_map();
     let mut table = Table::new();
     table
@@ -268,4 +302,28 @@ fn show_hostscan_result(hostscan_result: &HostScanResult) {
     println!();
     println!("[Up Hosts]");
     println!("{}", table);
+} */
+
+fn show_hostscan_result(hostscan_result: &HostScanResult) {
+    println!();
+    let oui_map: HashMap<String, String> = crate::db::get_oui_detail_map();
+    let mut tree = Tree::new(node_label("Hosts", None, None));
+    for host in &hostscan_result.hosts {
+        let mut host_tree = Tree::new(node_label(&host.ip_addr.to_string(), None, None));
+        host_tree.push(node_label("Host Name", Some(&host.hostname), None));
+        host_tree.push(node_label("TTL", Some(&host.ttl.to_string()), None));
+        host_tree.push(node_label("OS Family", Some(&host.os_family), None));
+        if !crate::ip::is_global_addr(&host.ip_addr) {
+            let vendor_name = if host.mac_addr.address().len() > 16 {
+                let prefix8 = host.mac_addr.address()[0..8].to_uppercase();
+                oui_map.get(&prefix8).unwrap_or(&String::new()).to_string()
+            } else {
+                oui_map.get(&host.mac_addr.address()).unwrap_or(&String::new()).to_string()
+            };
+            host_tree.push(node_label("MAC Address", Some(&host.mac_addr.to_string()), None));
+            host_tree.push(node_label("Vendor Name", Some(&vendor_name), None));
+        }
+        tree.push(host_tree);
+    }
+    println!("{}", tree);
 }

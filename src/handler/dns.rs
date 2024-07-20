@@ -1,12 +1,14 @@
 use std::path::PathBuf;
 use std::{thread, time::Duration};
 use crate::db;
-use comfy_table::presets::NOTHING;
-use comfy_table::{Cell, CellAlignment, ContentArrangement, Table};
+// use comfy_table::presets::NOTHING;
+// use comfy_table::{Cell, CellAlignment, ContentArrangement, Table};
 use clap::ArgMatches;
 use indicatif::ProgressBar;
 use crate::dns::{result::DomainScanResult, scanner::DomainScanner};
 use tokio::runtime::Runtime;
+use termtree::Tree;
+use crate::util::tree::node_label;
 
 use crate::output;
 
@@ -44,14 +46,6 @@ pub fn handle_subdomain_scan(args: &ArgMatches) {
         },
         None => db::get_subdomain(),
     };
-    
-    // Display progress with indicatif
-    println!("[Progress]");
-    let bar = ProgressBar::new(word_list.len() as u64);
-    bar.enable_steady_tick(120);
-    bar.set_style(output::get_progress_style());
-    bar.set_position(0);
-    bar.set_message("SubdomainScan");
 
     let mut domain_scanner = match DomainScanner::new() {
         Ok(scanner) => scanner,
@@ -60,6 +54,16 @@ pub fn handle_subdomain_scan(args: &ArgMatches) {
     domain_scanner.set_base_domain(target);
     domain_scanner.word_list = word_list;
     domain_scanner.set_timeout(timeout);
+    print_option(&domain_scanner);
+
+    // Display progress with indicatif
+    println!("[Progress]");
+    let bar = ProgressBar::new(domain_scanner.word_list.len() as u64);
+    bar.enable_steady_tick(120);
+    bar.set_style(output::get_progress_style());
+    bar.set_position(0);
+    bar.set_message("SubdomainScan");
+
     let rx = domain_scanner.get_progress_receiver();
     let rt = Runtime::new().unwrap();
     // Run scan
@@ -93,7 +97,22 @@ pub fn handle_subdomain_scan(args: &ArgMatches) {
     }
 }
 
-fn show_domainscan_result(scan_result: &DomainScanResult) {
+fn print_option(setting: &DomainScanner) {
+    println!();
+    let mut tree = Tree::new(node_label("SubdomainScan Config", None, None));
+    let mut setting_tree = Tree::new(node_label("Settings", None, None));
+    setting_tree.push(node_label("Word-list", Some(&setting.word_list.len().to_string()), None));
+    setting_tree.push(node_label("Timeout", Some(&format!("{:?}", setting.timeout)), None));
+    setting_tree.push(node_label("Resolve timeout", Some(&format!("{:?}", setting.resolve_timeout)), None));
+    setting_tree.push(node_label("Concurrent limit", Some(&setting.concurrent_limit.to_string()), None));
+    tree.push(setting_tree);
+    let mut target_tree = Tree::new(node_label("Target", None, None));
+    target_tree.push(node_label("Domain Name", Some(&setting.base_domain), None));
+    tree.push(target_tree);
+    println!("{}", tree);
+}
+
+/* fn show_domainscan_result(scan_result: &DomainScanResult) {
     let mut table = Table::new();
     table
         .load_preset(NOTHING)
@@ -108,4 +127,21 @@ fn show_domainscan_result(scan_result: &DomainScanResult) {
         ]);
     }
     println!("{}", table);
+} */
+
+fn show_domainscan_result(scan_result: &DomainScanResult) {
+    println!();
+    let mut tree = Tree::new(node_label("Subdomains", None, None));
+    for domain in &scan_result.domains {
+        let mut domain_tree = Tree::new(node_label(&domain.domain_name, None, None));
+        for ip in &domain.ips {
+            if ip.is_ipv4() {
+                domain_tree.push(node_label("IPv4 Address", Some(&ip.to_string()), None));
+            } else {
+                domain_tree.push(node_label("IPv6 Address", Some(&ip.to_string()), None));
+            }
+        }
+        tree.push(domain_tree);
+    }
+    println!("{}", tree);
 }

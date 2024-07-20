@@ -42,7 +42,7 @@ impl Default for TraceSetting {
 
 impl TraceSetting {
     pub fn udp_trace(
-        interface: Interface,
+        interface: &Interface,
         dst_ip_addr: IpAddr
     ) -> Result<TraceSetting, String> {
         let use_tun = interface.is_tun();
