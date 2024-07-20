@@ -78,8 +78,8 @@ pub fn handle_portscan(args: &ArgMatches) {
         default_waittime = Duration::from_millis(200);
     }else{
         match crate::handler::ping::initial_ping(interface.index, target_ip_addr, target_host_name.clone()) {
-            Ok(ping_result) => {
-                default_waittime = ping_result;
+            Ok(rtt) => {
+                default_waittime = crate::util::setting::caluculate_wait_time(rtt);
             },
             Err(e) => {
                 output::log_with_time(&format!("{} You can disable this initial ping by --noping", e), "ERROR");

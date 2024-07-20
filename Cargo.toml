@@ -34,6 +34,7 @@ indicatif = "0.16"
 inquire = "0.6"
 comfy-table = "7.1"
 ipnet = "2.7"
+num_cpus = "1.16"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"

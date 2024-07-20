@@ -18,6 +18,7 @@ pub mod dns;
 pub mod fs;
 pub mod json;
 pub mod dep;
+pub mod util;
 // CLI
 pub mod app;
 pub mod handler;
