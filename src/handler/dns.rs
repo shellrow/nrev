@@ -99,7 +99,7 @@ fn print_option(setting: &DomainScanner) {
     println!();
     let mut tree = Tree::new(node_label("SubdomainScan Config", None, None));
     let mut setting_tree = Tree::new(node_label("Settings", None, None));
-    setting_tree.push(node_label("Word-list", Some(&setting.word_list.len().to_string()), None));
+    setting_tree.push(node_label("Words", Some(&setting.word_list.len().to_string()), None));
     setting_tree.push(node_label("Timeout", Some(&format!("{:?}", setting.timeout)), None));
     setting_tree.push(node_label("Resolve timeout", Some(&format!("{:?}", setting.resolve_timeout)), None));
     setting_tree.push(node_label("Concurrent limit", Some(&setting.concurrent_limit.to_string()), None));
@@ -117,9 +117,9 @@ fn show_domainscan_result(scan_result: &DomainScanResult) {
         let mut domain_tree = Tree::new(node_label(&domain.domain_name, None, None));
         for ip in &domain.ips {
             if ip.is_ipv4() {
-                domain_tree.push(node_label("IPv4 Address", Some(&ip.to_string()), None));
+                domain_tree.push(node_label("IPv4", Some(&ip.to_string()), None));
             } else {
-                domain_tree.push(node_label("IPv6 Address", Some(&ip.to_string()), None));
+                domain_tree.push(node_label("IPv6", Some(&ip.to_string()), None));
             }
         }
         tree.push(domain_tree);

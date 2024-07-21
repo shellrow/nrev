@@ -245,10 +245,8 @@ pub fn print_option(setting: &PortScanSetting, interface: &Interface) {
 
     let mut target_tree = Tree::new(node_label("Target", None, None));
     for target in &setting.targets {
-        if target.ip_addr.to_string() == target.hostname || target.hostname.is_empty() {
-            target_tree.push(node_label("IP Address", Some(&target.ip_addr.to_string()), None));
-        } else {
-            target_tree.push(node_label("IP Address", Some(&target.ip_addr.to_string()), None));
+        target_tree.push(node_label("IP Address", Some(&target.ip_addr.to_string()), None));
+        if target.ip_addr.to_string() != target.hostname && !target.hostname.is_empty() {
             target_tree.push(node_label("Host Name", Some(&target.hostname), None));
         }
         if target.ports.len() > 10 {
@@ -263,7 +261,7 @@ pub fn print_option(setting: &PortScanSetting, interface: &Interface) {
 
 pub fn show_portscan_result(host: &Host) {
     println!();
-    let mut tree = Tree::new(node_label("Result", None, None));
+    let mut tree = Tree::new(node_label("PortScan Result", None, None));
     let mut host_tree = Tree::new(node_label("Host Info", None, None));
     host_tree.push(node_label("IP Address", Some(&host.ip_addr.to_string()), None));
     host_tree.push(node_label("Host Name", Some(&host.hostname), None));

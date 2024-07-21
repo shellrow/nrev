@@ -149,7 +149,9 @@ fn print_option(setting: &TraceSetting, interface: &Interface) {
     // Target
     let mut target_tree = Tree::new(node_label("Target", None, None));
     target_tree.push(node_label("IP Address", Some(setting.dst_ip.to_string().as_str()), None));
-    target_tree.push(node_label("Host Name", Some(&setting.dst_hostname), None));
+    if setting.dst_ip.to_string() != setting.dst_hostname && !setting.dst_hostname.is_empty() {
+        target_tree.push(node_label("Host Name", Some(&setting.dst_hostname), None));
+    }
     target_tree.push(node_label("Port", Some(setting.dst_port.to_string().as_str()), None));
     tree.push(target_tree);
     println!("{}", tree);
