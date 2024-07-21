@@ -79,7 +79,10 @@ async fn probe_port(ip_addr:IpAddr, hostname: String, port: u16, payload_info: O
         None => String::new(),
     };
     let socket_addr: SocketAddr = SocketAddr::new(ip_addr, port);
-    let mut tcp_stream = async_tcp_connect_timeout(&socket_addr, timeout).await.unwrap();
+    let mut tcp_stream = match async_tcp_connect_timeout(&socket_addr, timeout).await {
+        Ok(tcp_stream) => tcp_stream,
+        Err(e) => return ServiceProbeResult::with_error(port, service_name, ServiceProbeError::ConnectionError(e.to_string()))
+    };
     match tcp_stream.write_with(|inner| inner.set_read_timeout(Some(timeout))).await {
         Ok(_) => {},
         Err(e) => return ServiceProbeResult::with_error(port, service_name, ServiceProbeError::ConnectionError(e.to_string()))
