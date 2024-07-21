@@ -1,6 +1,9 @@
-use std::time::Duration;
+use crate::{
+    probe::{ProbeResult, ProbeStatus},
+    protocol::Protocol,
+};
 use serde::{Deserialize, Serialize};
-use crate::{probe::{ProbeResult, ProbeStatus}, protocol::Protocol};
+use std::time::Duration;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct DeviceResolveResult {

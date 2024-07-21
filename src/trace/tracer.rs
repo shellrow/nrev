@@ -1,18 +1,18 @@
+use crate::host::{NodeType, PortStatus};
+use crate::packet::setting::PacketBuildSetting;
 use crate::ping::result::TracerouteResult;
 use crate::probe::{ProbeResult, ProbeStatus};
-use crate::host::{PortStatus, NodeType};
-use crate::packet::setting::PacketBuildSetting;
 use crate::protocol::Protocol;
-use std::net::IpAddr;
-use std::sync::mpsc::{channel, Receiver, Sender};
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
 use netdev::Interface;
 use nex::datalink::{RawReceiver, RawSender};
 use nex::net::mac::MacAddr;
 use nex::packet::frame::{Frame, ParseOption};
 use nex::packet::icmp::IcmpType;
 use nex::packet::icmpv6::Icmpv6Type;
+use std::net::IpAddr;
+use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
 use super::setting::TraceSetting;
 
@@ -118,13 +118,14 @@ pub fn udp_trace(
     let mut responses: Vec<ProbeResult> = Vec::new();
     let mut dst_reached: bool = false;
     for seq_ttl in 1..setting.hop_limit {
-        let packet_setting: PacketBuildSetting = PacketBuildSetting::from_trace_setting(setting, seq_ttl);
+        let packet_setting: PacketBuildSetting =
+            PacketBuildSetting::from_trace_setting(setting, seq_ttl);
         let udp_packet: Vec<u8> = crate::packet::udp::build_udp_packet(packet_setting.clone());
         //let udp_packet: Vec<u8> = crate::packet::udp::build_udp_packet(setting.clone(), Some(seq_ttl));
         let send_time = Instant::now();
         match tx.send(&udp_packet) {
             Some(_) => {}
-            None => {},
+            None => {}
         }
         loop {
             match rx.next() {

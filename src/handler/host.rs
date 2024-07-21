@@ -1,11 +1,12 @@
-use clap::ArgMatches;
-use indicatif::{ProgressBar, ProgressDrawTarget};
-use ipnet::Ipv4Net;
 use crate::host::Host;
 use crate::json::host::HostScanResult;
 use crate::scan::result::ScanResult;
 use crate::scan::scanner::HostScanner;
 use crate::scan::setting::{HostScanSetting, HostScanType};
+use crate::util::tree::node_label;
+use clap::ArgMatches;
+use indicatif::{ProgressBar, ProgressDrawTarget};
+use ipnet::Ipv4Net;
 use netdev::Interface;
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr};
@@ -14,7 +15,6 @@ use std::str::FromStr;
 use std::thread;
 use std::time::Duration;
 use termtree::Tree;
-use crate::util::tree::node_label;
 
 use crate::output;
 
@@ -56,9 +56,11 @@ pub fn handle_hostscan(args: &ArgMatches) {
         }
         Err(_) => {
             match Ipv4Addr::from_str(&target) {
-                Ok(ip_addr) => {
-                    Ipv4Net::new(ip_addr, 24).unwrap().hosts().map(|x| IpAddr::V4(x)).collect()
-                }
+                Ok(ip_addr) => Ipv4Net::new(ip_addr, 24)
+                    .unwrap()
+                    .hosts()
+                    .map(|x| IpAddr::V4(x))
+                    .collect(),
                 Err(_) => {
                     // Check if target is host-list file
                     match std::fs::read_to_string(&target) {
@@ -80,7 +82,7 @@ pub fn handle_hostscan(args: &ArgMatches) {
                     }
                 }
             }
-        },
+        }
     };
     // Add scan target
     let mut targets: Vec<Host> = Vec::new();
@@ -93,22 +95,22 @@ pub fn handle_hostscan(args: &ArgMatches) {
             Some(iface) => iface,
             None => return,
         }
-    }else{
+    } else {
         match netdev::get_default_interface() {
             Ok(iface) => iface,
             Err(_) => return,
         }
     };
     let mut scan_setting = HostScanSetting::default()
-    .set_if_index(interface.index)
-    .set_scan_type(scan_type)
-    .set_targets(targets)
-    .set_timeout(timeout)
-    .set_wait_time(wait_time)
-    .set_send_rate(send_rate);
+        .set_if_index(interface.index)
+        .set_scan_type(scan_type)
+        .set_targets(targets)
+        .set_timeout(timeout)
+        .set_wait_time(wait_time)
+        .set_send_rate(send_rate);
     // Print options
     print_option(&target, &scan_setting, &interface);
-    if !host_args.get_flag("random") {        
+    if !host_args.get_flag("random") {
         scan_setting.randomize_ports();
         scan_setting.randomize_hosts();
     }
@@ -140,16 +142,20 @@ pub fn handle_hostscan(args: &ArgMatches) {
     }
     hostscan_result.sort_ports();
     hostscan_result.sort_hosts();
-    let os_family_map: HashMap<IpAddr, String> = crate::db::get_fingerprint_map(&hostscan_result.fingerprints);
+    let os_family_map: HashMap<IpAddr, String> =
+        crate::db::get_fingerprint_map(&hostscan_result.fingerprints);
     for host in &mut hostscan_result.hosts {
-        host.os_family = os_family_map.get(&host.ip_addr).unwrap_or(&String::new()).to_string();
+        host.os_family = os_family_map
+            .get(&host.ip_addr)
+            .unwrap_or(&String::new())
+            .to_string();
     }
     let result: HostScanResult = HostScanResult::from_scan_result(&hostscan_result);
     // Print results
     if args.get_flag("json") {
         let json_result = serde_json::to_string_pretty(&result).unwrap();
         println!("{}", json_result);
-    }else {
+    } else {
         show_hostscan_result(&result);
     }
     output::log_with_time("Scan completed", "INFO");
@@ -157,14 +163,17 @@ pub fn handle_hostscan(args: &ArgMatches) {
         Some(file_path) => {
             match crate::fs::save_text(file_path, serde_json::to_string_pretty(&result).unwrap()) {
                 Ok(_) => {
-                    output::log_with_time(&format!("Saved to {}", file_path.to_string_lossy()), "INFO");
-                },
+                    output::log_with_time(
+                        &format!("Saved to {}", file_path.to_string_lossy()),
+                        "INFO",
+                    );
+                }
                 Err(e) => {
                     output::log_with_time(&format!("Failed to save: {}", e), "ERROR");
-                },
+                }
             }
-        },
-        None => {},
+        }
+        None => {}
     }
 }
 
@@ -175,27 +184,45 @@ fn print_option(target: &str, setting: &HostScanSetting, interface: &Interface) 
     println!();
     let mut tree = Tree::new(node_label("HostScan Config", None, None));
     let mut setting_tree = Tree::new(node_label("Settings", None, None));
-    setting_tree.push(node_label("Protocol", Some(setting.protocol.to_str()), None));
-    setting_tree.push(node_label("ScanType", Some(setting.scan_type.to_str()), None));
+    setting_tree.push(node_label(
+        "Protocol",
+        Some(setting.protocol.to_str()),
+        None,
+    ));
+    setting_tree.push(node_label(
+        "ScanType",
+        Some(setting.scan_type.to_str()),
+        None,
+    ));
     setting_tree.push(node_label("InterfaceName", Some(&interface.name), None));
-    setting_tree.push(node_label("Timeout", Some(&format!("{:?}", setting.timeout)), None));
-    setting_tree.push(node_label("WaitTime", Some(&format!("{:?}", setting.wait_time)), None));
-    setting_tree.push(node_label("SendRate", Some(&format!("{:?}", setting.send_rate)), None));
+    setting_tree.push(node_label(
+        "Timeout",
+        Some(&format!("{:?}", setting.timeout)),
+        None,
+    ));
+    setting_tree.push(node_label(
+        "WaitTime",
+        Some(&format!("{:?}", setting.wait_time)),
+        None,
+    ));
+    setting_tree.push(node_label(
+        "SendRate",
+        Some(&format!("{:?}", setting.send_rate)),
+        None,
+    ));
     tree.push(setting_tree);
     let mut target_tree = Tree::new(node_label("Target", None, None));
     match Ipv4Net::from_str(&target) {
         Ok(ipv4net) => {
             target_tree.push(node_label("Network", Some(&ipv4net.to_string()), None));
         }
-        Err(_) => {
-            match Ipv4Addr::from_str(&target) {
-                Ok(ip_addr) => {
-                    let net = Ipv4Net::new(ip_addr, 24).unwrap();
-                    target_tree.push(node_label("Network", Some(&net.to_string()), None));
-                }
-                Err(_) => {
-                    target_tree.push(node_label("List", Some(target), None));
-                }
+        Err(_) => match Ipv4Addr::from_str(&target) {
+            Ok(ip_addr) => {
+                let net = Ipv4Net::new(ip_addr, 24).unwrap();
+                target_tree.push(node_label("Network", Some(&net.to_string()), None));
+            }
+            Err(_) => {
+                target_tree.push(node_label("List", Some(target), None));
             }
         },
     }
@@ -220,9 +247,16 @@ fn show_hostscan_result(hostscan_result: &HostScanResult) {
                 let prefix8 = host.mac_addr.address()[0..8].to_uppercase();
                 oui_map.get(&prefix8).unwrap_or(&String::new()).to_string()
             } else {
-                oui_map.get(&host.mac_addr.address()).unwrap_or(&String::new()).to_string()
+                oui_map
+                    .get(&host.mac_addr.address())
+                    .unwrap_or(&String::new())
+                    .to_string()
             };
-            host_tree.push(node_label("MAC Address", Some(&host.mac_addr.to_string()), None));
+            host_tree.push(node_label(
+                "MAC Address",
+                Some(&host.mac_addr.to_string()),
+                None,
+            ));
             host_tree.push(node_label("Vendor Name", Some(&vendor_name), None));
         }
         hosts_tree.push(host_tree);

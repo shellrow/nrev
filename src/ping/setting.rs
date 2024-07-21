@@ -4,8 +4,8 @@ use std::{net::IpAddr, time::Duration};
 use netdev::Interface;
 use serde::{Deserialize, Serialize};
 
+use crate::config::{DEFAULT_HOP_LIMIT, DEFAULT_PING_COUNT};
 use crate::protocol::Protocol;
-use crate::config::{DEFAULT_PING_COUNT, DEFAULT_HOP_LIMIT};
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct PingSetting {

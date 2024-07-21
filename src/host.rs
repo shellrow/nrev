@@ -1,6 +1,6 @@
-use std::net::IpAddr;
 use netdev::mac::MacAddr;
 use serde::{Deserialize, Serialize};
+use std::net::IpAddr;
 
 use crate::dns;
 
@@ -70,7 +70,7 @@ pub struct Host {
     /// Vendor name
     pub vendor_name: String,
     /// OS Family
-    pub os_family: String, 
+    pub os_family: String,
     /// TTL
     pub ttl: u8,
 }

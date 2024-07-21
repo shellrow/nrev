@@ -4,8 +4,8 @@ use std::{net::IpAddr, time::Duration};
 use netdev::Interface;
 use serde::{Deserialize, Serialize};
 
-use crate::protocol::Protocol;
 use crate::config::{DEFAULT_BASE_TARGET_UDP_PORT, DEFAULT_HOP_LIMIT};
+use crate::protocol::Protocol;
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct TraceSetting {
@@ -41,10 +41,7 @@ impl Default for TraceSetting {
 }
 
 impl TraceSetting {
-    pub fn udp_trace(
-        interface: &Interface,
-        dst_ip_addr: IpAddr
-    ) -> Result<TraceSetting, String> {
+    pub fn udp_trace(interface: &Interface, dst_ip_addr: IpAddr) -> Result<TraceSetting, String> {
         let use_tun = interface.is_tun();
         let loopback = interface.is_loopback();
 

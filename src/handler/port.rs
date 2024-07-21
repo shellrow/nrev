@@ -1,10 +1,13 @@
-use clap::ArgMatches;
-use indicatif::{ProgressBar, ProgressDrawTarget};
 use crate::db::model::OsFamilyFingerprint;
 use crate::host::{Host, PortStatus};
 use crate::json::port::PortScanResult;
+use crate::output;
+use crate::scan::result::ScanResult;
 use crate::scan::scanner::{PortScanner, ServiceDetector};
 use crate::scan::setting::{PortScanSetting, PortScanType, ServiceProbeSetting};
+use crate::util::tree::node_label;
+use clap::ArgMatches;
+use indicatif::{ProgressBar, ProgressDrawTarget};
 use netdev::mac::MacAddr;
 use netdev::Interface;
 use std::collections::HashMap;
@@ -12,10 +15,7 @@ use std::net::IpAddr;
 use std::path::PathBuf;
 use std::thread;
 use std::time::Duration;
-use crate::scan::result::ScanResult;
 use termtree::Tree;
-use crate::util::tree::node_label;
-use crate::output;
 
 pub fn handle_portscan(args: &ArgMatches) {
     output::log_with_time("Initiating port scan...", "INFO");
@@ -35,27 +35,35 @@ pub fn handle_portscan(args: &ArgMatches) {
         target_host_name = crate::dns::lookup_ip_addr(&target_ip_addr).unwrap_or(target.clone());
     } else {
         target_host_name = target.clone();
-        target_ip_addr = match crate::dns::lookup_host_name(&target){
+        target_ip_addr = match crate::dns::lookup_host_name(&target) {
             Some(ip) => ip,
             None => return,
         };
     }
     if port_args.contains_id("ports") {
         // Use specific ports (delimiter: ',')
-        target_ports = port_args.get_many::<u16>("ports").unwrap_or_default().copied().collect();
-    }else if port_args.contains_id("range") {
+        target_ports = port_args
+            .get_many::<u16>("ports")
+            .unwrap_or_default()
+            .copied()
+            .collect();
+    } else if port_args.contains_id("range") {
         // Use specific range (delimiter: '-')
         // 0: start, 1: end
-        let range: Vec<u16> = port_args.get_many::<u16>("range").unwrap_or_default().copied().collect();
+        let range: Vec<u16> = port_args
+            .get_many::<u16>("range")
+            .unwrap_or_default()
+            .copied()
+            .collect();
         target_ports = (range[0]..=range[1]).collect();
-    }else if port_args.get_flag("wellknown") {
+    } else if port_args.get_flag("wellknown") {
         // Use well-known ports
         target_ports = crate::db::get_wellknown_ports();
-    }else{
+    } else {
         if port_args.get_flag("full") {
             // Use full ports (1-65535)
             target_ports = (1..=65535).collect();
-        }else{
+        } else {
             // Use default 1000 ports
             target_ports = crate::db::get_default_ports();
         }
@@ -65,7 +73,7 @@ pub fn handle_portscan(args: &ArgMatches) {
             Some(iface) => iface,
             None => return,
         }
-    }else{
+    } else {
         match netdev::get_default_interface() {
             Ok(iface) => iface,
             Err(_) => return,
@@ -75,13 +83,20 @@ pub fn handle_portscan(args: &ArgMatches) {
     let default_waittime: Duration;
     if port_args.get_flag("noping") {
         default_waittime = Duration::from_millis(200);
-    }else{
-        match crate::handler::ping::initial_ping(interface.index, target_ip_addr, target_host_name.clone()) {
+    } else {
+        match crate::handler::ping::initial_ping(
+            interface.index,
+            target_ip_addr,
+            target_host_name.clone(),
+        ) {
             Ok(rtt) => {
                 default_waittime = crate::util::setting::caluculate_wait_time(rtt);
-            },
+            }
             Err(e) => {
-                output::log_with_time(&format!("{} You can disable this initial ping by --noping", e), "ERROR");
+                output::log_with_time(
+                    &format!("{} You can disable this initial ping by --noping", e),
+                    "ERROR",
+                );
                 return;
             }
         }
@@ -105,7 +120,8 @@ pub fn handle_portscan(args: &ArgMatches) {
         Some(send_rate) => Duration::from_millis(*send_rate),
         None => Duration::from_millis(0),
     };
-    let target_host: Host = Host::new(target_ip_addr, target_host_name.clone()).with_ports(target_ports);
+    let target_host: Host =
+        Host::new(target_ip_addr, target_host_name.clone()).with_ports(target_ports);
     let mut result: PortScanResult = PortScanResult::new(target_ip_addr, target_host_name);
     let mut scan_setting = PortScanSetting::default()
         .set_if_index(interface.index)
@@ -116,7 +132,7 @@ pub fn handle_portscan(args: &ArgMatches) {
         .set_send_rate(send_rate);
     // Print options
     print_option(&scan_setting, &interface);
-    if !port_args.get_flag("random") {        
+    if !port_args.get_flag("random") {
         scan_setting.randomize_ports();
         scan_setting.randomize_hosts();
     }
@@ -142,7 +158,7 @@ pub fn handle_portscan(args: &ArgMatches) {
     }
     let mut portscan_result: ScanResult = handle.join().unwrap();
     bar.finish_with_message(format!("PortScan ({:?})", portscan_result.scan_time));
-    
+
     if portscan_result.hosts.len() == 0 {
         output::log_with_time("No results found", "INFO");
         return;
@@ -188,8 +204,11 @@ pub fn handle_portscan(args: &ArgMatches) {
     }
     // OS detection
     if result.host.get_open_port_numbers().len() > 0 {
-        if let Some(fingerprint) = portscan_result.get_syn_ack_fingerprint(result.host.ip_addr, result.host.get_open_port_numbers()[0]) {
-            let os_fingerprint: OsFamilyFingerprint = crate::db::verify_os_family_fingerprint(&fingerprint);
+        if let Some(fingerprint) = portscan_result
+            .get_syn_ack_fingerprint(result.host.ip_addr, result.host.get_open_port_numbers()[0])
+        {
+            let os_fingerprint: OsFamilyFingerprint =
+                crate::db::verify_os_family_fingerprint(&fingerprint);
             result.host.os_family = os_fingerprint.os_family;
         }
     }
@@ -202,7 +221,10 @@ pub fn handle_portscan(args: &ArgMatches) {
                     let prefix8 = h.mac_addr.address()[0..8].to_uppercase();
                     oui_map.get(&prefix8).unwrap_or(&String::new()).to_string()
                 } else {
-                    oui_map.get(&h.mac_addr.address()).unwrap_or(&String::new()).to_string()
+                    oui_map
+                        .get(&h.mac_addr.address())
+                        .unwrap_or(&String::new())
+                        .to_string()
                 };
                 result.host.mac_addr = h.mac_addr;
                 result.host.vendor_name = vendor_name;
@@ -218,24 +240,30 @@ pub fn handle_portscan(args: &ArgMatches) {
     if args.get_flag("json") {
         let json_result = serde_json::to_string_pretty(&result).unwrap();
         println!("{}", json_result);
-    }else {
+    } else {
         show_portscan_result(&result.host);
     }
-    
-    output::log_with_time(&format!("Total elapsed time {:?} ", result.total_scan_time), "INFO");
+
+    output::log_with_time(
+        &format!("Total elapsed time {:?} ", result.total_scan_time),
+        "INFO",
+    );
 
     match args.get_one::<PathBuf>("save") {
         Some(file_path) => {
             match crate::fs::save_text(file_path, serde_json::to_string_pretty(&result).unwrap()) {
                 Ok(_) => {
-                    output::log_with_time(&format!("Saved to {}", file_path.to_string_lossy()), "INFO");
-                },
+                    output::log_with_time(
+                        &format!("Saved to {}", file_path.to_string_lossy()),
+                        "INFO",
+                    );
+                }
                 Err(e) => {
                     output::log_with_time(&format!("Failed to save: {}", e), "ERROR");
-                },
+                }
             }
-        },
-        None => {},
+        }
+        None => {}
     }
 }
 
@@ -246,24 +274,56 @@ pub fn print_option(setting: &PortScanSetting, interface: &Interface) {
     println!();
     let mut tree = Tree::new(node_label("PortScan Config", None, None));
     let mut setting_tree = Tree::new(node_label("Settings", None, None));
-    setting_tree.push(node_label("Protocol", Some(setting.protocol.to_str()), None));
-    setting_tree.push(node_label("ScanType", Some(setting.scan_type.to_str()), None));
+    setting_tree.push(node_label(
+        "Protocol",
+        Some(setting.protocol.to_str()),
+        None,
+    ));
+    setting_tree.push(node_label(
+        "ScanType",
+        Some(setting.scan_type.to_str()),
+        None,
+    ));
     setting_tree.push(node_label("InterfaceName", Some(&interface.name), None));
-    setting_tree.push(node_label("Timeout", Some(format!("{:?}", setting.timeout).as_str()), None));
-    setting_tree.push(node_label("WaitTime", Some(format!("{:?}", setting.wait_time).as_str()), None));
-    setting_tree.push(node_label("SendRate", Some(format!("{:?}", setting.send_rate).as_str()), None));
+    setting_tree.push(node_label(
+        "Timeout",
+        Some(format!("{:?}", setting.timeout).as_str()),
+        None,
+    ));
+    setting_tree.push(node_label(
+        "WaitTime",
+        Some(format!("{:?}", setting.wait_time).as_str()),
+        None,
+    ));
+    setting_tree.push(node_label(
+        "SendRate",
+        Some(format!("{:?}", setting.send_rate).as_str()),
+        None,
+    ));
     tree.push(setting_tree);
 
     let mut target_tree = Tree::new(node_label("Target", None, None));
     for target in &setting.targets {
-        target_tree.push(node_label("IP Address", Some(&target.ip_addr.to_string()), None));
+        target_tree.push(node_label(
+            "IP Address",
+            Some(&target.ip_addr.to_string()),
+            None,
+        ));
         if target.ip_addr.to_string() != target.hostname && !target.hostname.is_empty() {
             target_tree.push(node_label("Host Name", Some(&target.hostname), None));
         }
         if target.ports.len() > 10 {
-            target_tree.push(node_label("Port", Some(format!("{} port(s)", target.ports.len()).as_str()), None));
+            target_tree.push(node_label(
+                "Port",
+                Some(format!("{} port(s)", target.ports.len()).as_str()),
+                None,
+            ));
         } else {
-            target_tree.push(node_label("Port", Some(format!("{:?}", target.get_ports()).as_str()), None));
+            target_tree.push(node_label(
+                "Port",
+                Some(format!("{:?}", target.get_ports()).as_str()),
+                None,
+            ));
         }
     }
     tree.push(target_tree);
@@ -274,17 +334,30 @@ pub fn show_portscan_result(host: &Host) {
     if !crate::app::is_quiet_mode() {
         println!();
     }
-    let target_addr: String = if host.ip_addr.to_string() != host.hostname && !host.hostname.is_empty() {
-        format!("{}({})", host.hostname, host.ip_addr)
-    } else {
-        host.ip_addr.to_string()
-    };
-    let mut tree = Tree::new(node_label(&format!("PortScan Result - {}", target_addr), None, None));
+    let target_addr: String =
+        if host.ip_addr.to_string() != host.hostname && !host.hostname.is_empty() {
+            format!("{}({})", host.hostname, host.ip_addr)
+        } else {
+            host.ip_addr.to_string()
+        };
+    let mut tree = Tree::new(node_label(
+        &format!("PortScan Result - {}", target_addr),
+        None,
+        None,
+    ));
     let mut host_tree = Tree::new(node_label("Host Info", None, None));
-    host_tree.push(node_label("IP Address", Some(&host.ip_addr.to_string()), None));
+    host_tree.push(node_label(
+        "IP Address",
+        Some(&host.ip_addr.to_string()),
+        None,
+    ));
     host_tree.push(node_label("Host Name", Some(&host.hostname), None));
     if host.mac_addr != MacAddr::zero() {
-        host_tree.push(node_label("MAC Address", Some(&host.mac_addr.to_string()), None));
+        host_tree.push(node_label(
+            "MAC Address",
+            Some(&host.mac_addr.to_string()),
+            None,
+        ));
     }
     if !host.vendor_name.is_empty() {
         host_tree.push(node_label("Vendor Name", Some(&host.vendor_name), None));
@@ -298,7 +371,11 @@ pub fn show_portscan_result(host: &Host) {
             let mut port_tree = Tree::new(node_label(&port.number.to_string(), None, None));
             port_tree.push(node_label("Status", Some(&port.status.name()), None));
             port_tree.push(node_label("Service Name", Some(&port.service_name), None));
-            port_tree.push(node_label("Service Detail", Some(&port.service_version), None));
+            port_tree.push(node_label(
+                "Service Detail",
+                Some(&port.service_version),
+                None,
+            ));
             port_info_tree.push(port_tree);
         }
     }

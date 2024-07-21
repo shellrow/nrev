@@ -16,7 +16,6 @@ use std::collections::HashMap;
 use std::str::FromStr;
 use std::thread;
 
-
 #[cfg(not(target_os = "windows"))]
 const DEFAULT_TIMEOUT: Duration = Duration::from_millis(200);
 #[cfg(not(target_os = "windows"))]

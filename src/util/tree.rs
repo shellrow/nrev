@@ -7,10 +7,10 @@ pub fn node_label(label: &str, value: Option<&str>, delimiter: Option<&str>) -> 
             };
             //Tree::new(format!("{}{} {}", label, delimiter, value))
             format!("{}{} {}", label, delimiter, value)
-        },
+        }
         None => {
             //Tree::new(label.to_string())
             label.to_string()
-        },
+        }
     }
 }
