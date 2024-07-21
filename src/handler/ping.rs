@@ -7,8 +7,6 @@ use crate::protocol::Protocol;
 use netdev::Interface;
 use std::str::FromStr;
 use std::thread;
-// use comfy_table::presets::NOTHING;
-// use comfy_table::{Cell, CellAlignment, ContentArrangement, Table};
 use crate::output;
 use termtree::Tree;
 use crate::util::tree::node_label;
@@ -337,40 +335,3 @@ fn show_ping_result(ping_result: &PingResult) {
 
     println!("{}", tree);
 }
-
-/* fn show_statistics(ping_result: &PingResult) {
-    let mut table = Table::new();
-    table
-        .load_preset(NOTHING)
-        .set_content_arrangement(ContentArrangement::Dynamic);
-    table.add_row(vec![
-        Cell::new("Transmitted").set_alignment(CellAlignment::Left),
-        Cell::new(ping_result.stat.transmitted_count).set_alignment(CellAlignment::Left),
-    ]);
-    table.add_row(vec![
-        Cell::new("Received").set_alignment(CellAlignment::Left),
-        Cell::new(ping_result.stat.received_count).set_alignment(CellAlignment::Left),
-    ]);
-    table.add_row(vec![
-        Cell::new("Loss").set_alignment(CellAlignment::Left),
-        Cell::new(format!("{}%",100.0
-        - (ping_result.stat.received_count as f64
-            / ping_result.stat.transmitted_count as f64)
-            * 100.0)).set_alignment(CellAlignment::Left),
-    ]);
-    table.add_row(vec![
-        Cell::new("Min").set_alignment(CellAlignment::Left),
-        Cell::new(format!("{:?}", ping_result.stat.min)).set_alignment(CellAlignment::Left),
-    ]);
-    table.add_row(vec![
-        Cell::new("Max").set_alignment(CellAlignment::Left),
-        Cell::new(format!("{:?}", ping_result.stat.max)).set_alignment(CellAlignment::Left),
-    ]);
-    table.add_row(vec![
-        Cell::new("Avg").set_alignment(CellAlignment::Left),
-        Cell::new(format!("{:?}", ping_result.stat.avg)).set_alignment(CellAlignment::Left),
-    ]);
-    println!();
-    println!("[Statistics]");
-    println!("{}", table);
-} */

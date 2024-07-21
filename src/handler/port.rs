@@ -7,8 +7,6 @@ use crate::scan::scanner::{PortScanner, ServiceDetector};
 use crate::scan::setting::{PortScanSetting, PortScanType, ServiceProbeSetting};
 use netdev::mac::MacAddr;
 use netdev::Interface;
-// use comfy_table::presets::NOTHING;
-// use comfy_table::{Cell, CellAlignment, ContentArrangement, Table};
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::path::PathBuf;
@@ -17,7 +15,6 @@ use std::time::Duration;
 use crate::scan::result::ScanResult;
 use termtree::Tree;
 use crate::util::tree::node_label;
-
 use crate::output;
 
 pub fn handle_portscan(args: &ArgMatches) {
@@ -234,74 +231,6 @@ pub fn handle_portscan(args: &ArgMatches) {
     }
 }
 
-/* pub fn print_option(setting: &PortScanSetting, interface: &Interface) {
-    let mut table = Table::new();
-    table
-        .load_preset(NOTHING)
-        .set_content_arrangement(ContentArrangement::Dynamic);
-    table.add_row(vec![
-        Cell::new("Protocol").set_alignment(CellAlignment::Left),
-        Cell::new(setting.protocol.to_str()).set_alignment(CellAlignment::Left),
-    ]);
-    table.add_row(vec![
-        Cell::new("ScanType").set_alignment(CellAlignment::Left),
-        Cell::new(setting.scan_type.to_str()).set_alignment(CellAlignment::Left),
-    ]);
-    table.add_row(vec![
-        Cell::new("InterfaceName").set_alignment(CellAlignment::Left),
-        Cell::new(&interface.name).set_alignment(CellAlignment::Left),
-    ]);
-    table.add_row(vec![
-        Cell::new("Timeout").set_alignment(CellAlignment::Left),
-        Cell::new(format!("{:?}", setting.timeout)).set_alignment(CellAlignment::Left),
-    ]);
-    table.add_row(vec![
-        Cell::new("WaitTime").set_alignment(CellAlignment::Left),
-        Cell::new(format!("{:?}", setting.wait_time)).set_alignment(CellAlignment::Left),
-    ]);
-    table.add_row(vec![
-        Cell::new("SendRate").set_alignment(CellAlignment::Left),
-        Cell::new(format!("{:?}", setting.send_rate)).set_alignment(CellAlignment::Left),
-    ]);
-    println!("[Options]");
-    println!("{}", table);
-
-    let mut table = Table::new();
-    table
-        .load_preset(NOTHING)
-        .set_content_arrangement(ContentArrangement::Dynamic);
-    for target in &setting.targets {
-        if target.ip_addr.to_string() == target.hostname || target.hostname.is_empty() {
-            table.add_row(vec![
-                Cell::new("IP Address").set_alignment(CellAlignment::Left),
-                Cell::new(target.ip_addr).set_alignment(CellAlignment::Left),
-            ]);
-        } else {
-            table.add_row(vec![
-                Cell::new("IP Address").set_alignment(CellAlignment::Left),
-                Cell::new(target.ip_addr).set_alignment(CellAlignment::Left),
-            ]);
-            table.add_row(vec![
-                Cell::new("Host Name").set_alignment(CellAlignment::Left),
-                Cell::new(&target.hostname).set_alignment(CellAlignment::Left),
-            ]);
-        }
-        if target.ports.len() > 10 {
-            table.add_row(vec![
-                Cell::new("Port").set_alignment(CellAlignment::Left),
-                Cell::new(format!("{} port(s)", target.ports.len())).set_alignment(CellAlignment::Left),
-            ]);
-        } else {
-            table.add_row(vec![
-                Cell::new("Port").set_alignment(CellAlignment::Left),
-                Cell::new(format!("{:?}", target.get_ports())).set_alignment(CellAlignment::Left),
-            ]);
-        }
-    }
-    println!("[Target]");
-    println!("{}", table);
-} */
-
 pub fn print_option(setting: &PortScanSetting, interface: &Interface) {
     println!();
     let mut tree = Tree::new(node_label("PortScan Config", None, None));
@@ -331,69 +260,6 @@ pub fn print_option(setting: &PortScanSetting, interface: &Interface) {
     tree.push(target_tree);
     println!("{}", tree);
 }
-
-/* pub fn show_portscan_result(host: &Host) {
-    let mut table = Table::new();
-    table
-        .load_preset(NOTHING)
-        .set_content_arrangement(ContentArrangement::Dynamic);
-    table.add_row(vec![
-        Cell::new("IP Address").set_alignment(CellAlignment::Left),
-        Cell::new(host.ip_addr.to_string()).set_alignment(CellAlignment::Left),
-    ]);
-    table.add_row(vec![
-        Cell::new("Host Name").set_alignment(CellAlignment::Left),
-        Cell::new(&host.hostname).set_alignment(CellAlignment::Left),
-    ]);
-    if host.mac_addr != MacAddr::zero() {
-        table.add_row(vec![
-            Cell::new("MAC Address").set_alignment(CellAlignment::Left),
-            Cell::new(host.mac_addr).set_alignment(CellAlignment::Left),
-        ]);
-    }
-    if !host.vendor_name.is_empty() {
-        table.add_row(vec![
-            Cell::new("Vendor Name").set_alignment(CellAlignment::Left),
-            Cell::new(&host.vendor_name).set_alignment(CellAlignment::Left),
-        ]);
-    }
-    if !host.os_family.is_empty() {
-        table.add_row(vec![
-            Cell::new("OS Family").set_alignment(CellAlignment::Left),
-            Cell::new(&host.os_family).set_alignment(CellAlignment::Left),
-        ]);
-    }
-    println!();
-    println!("[Host Info]");
-    println!("{}", table);
-    let mut table = Table::new();
-    table
-        .load_preset(NOTHING)
-        .set_content_arrangement(ContentArrangement::Dynamic)
-        .set_header(vec!["Number", "Status", "Service Name", "Service Version"]);
-    let port_count: usize = host.get_ports().len();
-    for port in &host.ports {
-        if port_count > 10 {
-            if port.status == PortStatus::Open {
-                table.add_row(vec![
-                    Cell::new(port.number).set_alignment(CellAlignment::Left),
-                    Cell::new(port.status.name()).set_alignment(CellAlignment::Left),
-                    Cell::new(&port.service_name).set_alignment(CellAlignment::Left),
-                    Cell::new(&port.service_version).set_alignment(CellAlignment::Left),
-                ]);
-            }
-        } else {
-            table.add_row(vec![
-                Cell::new(port.number).set_alignment(CellAlignment::Left),
-                Cell::new(port.status.name()).set_alignment(CellAlignment::Left),
-                Cell::new(&port.service_name).set_alignment(CellAlignment::Left),
-                Cell::new(&port.service_version).set_alignment(CellAlignment::Left),
-            ]);
-        }
-    }
-    println!("[Port Info]");
-    println!("{}", table);
-} */
 
 pub fn show_portscan_result(host: &Host) {
     println!();

@@ -32,7 +32,6 @@ rand = "0.8"
 clap = { version = "4.4", features = ["cargo"] }
 indicatif = "0.16"
 inquire = "0.6"
-comfy-table = "7.1"
 ipnet = "2.7"
 num_cpus = "1.16"
 termtree = "0.5"

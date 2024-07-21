@@ -7,8 +7,6 @@ use crate::scan::result::ScanResult;
 use crate::scan::scanner::HostScanner;
 use crate::scan::setting::{HostScanSetting, HostScanType};
 use netdev::Interface;
-//use comfy_table::presets::NOTHING;
-//use comfy_table::{Cell, CellAlignment, ContentArrangement, Table};
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::PathBuf;
@@ -165,73 +163,6 @@ pub fn handle_hostscan(args: &ArgMatches) {
     }
 }
 
-/* fn print_option(target: &str, setting: &HostScanSetting, interface: &Interface) {
-    let mut table = Table::new();
-    table
-        .load_preset(NOTHING)
-        .set_content_arrangement(ContentArrangement::Dynamic);
-    
-    table.add_row(vec![
-        Cell::new("Protocol").set_alignment(CellAlignment::Left),
-        Cell::new(setting.protocol.to_str()).set_alignment(CellAlignment::Left),
-    ]);
-    table.add_row(vec![
-        Cell::new("ScanType").set_alignment(CellAlignment::Left),
-        Cell::new(setting.scan_type.to_str()).set_alignment(CellAlignment::Left),
-    ]);
-    table.add_row(vec![
-        Cell::new("InterfaceName").set_alignment(CellAlignment::Left),
-        Cell::new(&interface.name).set_alignment(CellAlignment::Left),
-    ]);
-    table.add_row(vec![
-        Cell::new("Timeout").set_alignment(CellAlignment::Left),
-        Cell::new(format!("{:?}", setting.timeout)).set_alignment(CellAlignment::Left),
-    ]);
-    table.add_row(vec![
-        Cell::new("WaitTime").set_alignment(CellAlignment::Left),
-        Cell::new(format!("{:?}", setting.wait_time)).set_alignment(CellAlignment::Left),
-    ]);
-    table.add_row(vec![
-        Cell::new("SendRate").set_alignment(CellAlignment::Left),
-        Cell::new(format!("{:?}", setting.send_rate)).set_alignment(CellAlignment::Left),
-    ]);
-    println!("[Options]");
-    println!("{}", table);
-
-    let mut table = Table::new();
-    table
-        .load_preset(NOTHING)
-        .set_content_arrangement(ContentArrangement::Dynamic);
-    
-    match Ipv4Net::from_str(&target) {
-        Ok(ipv4net) => {
-            table.add_row(vec![
-                Cell::new("Network").set_alignment(CellAlignment::Left),
-                Cell::new(ipv4net.to_string()).set_alignment(CellAlignment::Left),
-            ]);
-        }
-        Err(_) => {
-            match Ipv4Addr::from_str(&target) {
-                Ok(ip_addr) => {
-                    let net = Ipv4Net::new(ip_addr, 24).unwrap();
-                    table.add_row(vec![
-                        Cell::new("Network").set_alignment(CellAlignment::Left),
-                        Cell::new(net.to_string()).set_alignment(CellAlignment::Left),
-                    ]);
-                }
-                Err(_) => {
-                    table.add_row(vec![
-                        Cell::new("List").set_alignment(CellAlignment::Left),
-                        Cell::new(target).set_alignment(CellAlignment::Left),
-                    ]);
-                }
-            }
-        },
-    }
-    println!("[Target]");
-    println!("{}", table);
-} */
-
 fn print_option(target: &str, setting: &HostScanSetting, interface: &Interface) {
     println!();
     let mut tree = Tree::new(node_label("HostScan Config", None, None));
@@ -263,46 +194,6 @@ fn print_option(target: &str, setting: &HostScanSetting, interface: &Interface) 
     tree.push(target_tree);
     println!("{}", tree);
 }
-
-/* fn show_hostscan_result(hostscan_result: &HostScanResult) {
-    let oui_map: HashMap<String, String> = crate::db::get_oui_detail_map();
-    let mut table = Table::new();
-    table
-        .load_preset(NOTHING)
-        .set_content_arrangement(ContentArrangement::Dynamic)
-        .set_header(vec!["IP Address", "Host Name", "TTL","OS Family", "MAC Address", "Vendor Name"]);
-    
-    for host in &hostscan_result.hosts {
-        if crate::ip::is_global_addr(&host.ip_addr) {
-            table.add_row(vec![
-                Cell::new(&host.ip_addr.to_string()).set_alignment(CellAlignment::Left),
-                Cell::new(&host.hostname).set_alignment(CellAlignment::Left),
-                Cell::new(&host.ttl).set_alignment(CellAlignment::Left),
-                Cell::new(&host.os_family).set_alignment(CellAlignment::Left),
-                Cell::new("-").set_alignment(CellAlignment::Left),
-                Cell::new("-").set_alignment(CellAlignment::Left),
-            ]);
-        }else{
-            let vendor_name = if host.mac_addr.address().len() > 16 {
-                let prefix8 = host.mac_addr.address()[0..8].to_uppercase();
-                oui_map.get(&prefix8).unwrap_or(&String::new()).to_string()
-            } else {
-                oui_map.get(&host.mac_addr.address()).unwrap_or(&String::new()).to_string()
-            };
-            table.add_row(vec![
-                Cell::new(&host.ip_addr.to_string()).set_alignment(CellAlignment::Left),
-                Cell::new(&host.hostname).set_alignment(CellAlignment::Left),
-                Cell::new(&host.ttl).set_alignment(CellAlignment::Left),
-                Cell::new(&host.os_family).set_alignment(CellAlignment::Left),
-                Cell::new(&host.mac_addr.to_string()).set_alignment(CellAlignment::Left),
-                Cell::new(vendor_name).set_alignment(CellAlignment::Left),
-            ]);
-        }
-    }
-    println!();
-    println!("[Up Hosts]");
-    println!("{}", table);
-} */
 
 fn show_hostscan_result(hostscan_result: &HostScanResult) {
     println!();

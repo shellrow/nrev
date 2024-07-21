@@ -1,8 +1,6 @@
 use std::path::PathBuf;
 use std::{thread, time::Duration};
 use crate::db;
-// use comfy_table::presets::NOTHING;
-// use comfy_table::{Cell, CellAlignment, ContentArrangement, Table};
 use clap::ArgMatches;
 use indicatif::ProgressBar;
 use crate::dns::{result::DomainScanResult, scanner::DomainScanner};
@@ -111,23 +109,6 @@ fn print_option(setting: &DomainScanner) {
     tree.push(target_tree);
     println!("{}", tree);
 }
-
-/* fn show_domainscan_result(scan_result: &DomainScanResult) {
-    let mut table = Table::new();
-    table
-        .load_preset(NOTHING)
-        .set_content_arrangement(ContentArrangement::Dynamic)
-        .set_header(vec!["Host Name", "IP Address"]);
-    println!();
-    println!("[Scan Result]");
-    for domain in &scan_result.domains {
-        table.add_row(vec![
-            Cell::new(&domain.domain_name).set_alignment(CellAlignment::Left),
-            Cell::new(format!("{:?}", &domain.ips)).set_alignment(CellAlignment::Left),
-        ]);
-    }
-    println!("{}", table);
-} */
 
 fn show_domainscan_result(scan_result: &DomainScanResult) {
     println!();

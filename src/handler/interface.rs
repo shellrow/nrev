@@ -3,8 +3,6 @@ use std::path::PathBuf;
 use clap::ArgMatches;
 use netdev::mac::MacAddr;
 use netdev::Interface;
-// use comfy_table::presets::NOTHING;
-// use comfy_table::{Cell, CellAlignment, ContentArrangement, Table};
 use termtree::Tree;
 use crate::util::tree::node_label;
 use crate::output;
@@ -61,58 +59,6 @@ pub fn show_interfaces(args: &ArgMatches) {
     }
 }
 
-/* pub fn show_interface_table(iface: &Interface) {
-    let mut table = Table::new();
-    table
-        .load_preset(NOTHING)
-        .set_content_arrangement(ContentArrangement::Dynamic);
-    table.add_row(vec![
-        Cell::new(&iface.index).set_alignment(CellAlignment::Left),
-        Cell::new("Name").set_alignment(CellAlignment::Left),
-        Cell::new(&iface.name).set_alignment(CellAlignment::Left),
-    ]);
-    table.add_row(vec![
-        Cell::new("").set_alignment(CellAlignment::Left),
-        Cell::new("MAC").set_alignment(CellAlignment::Left),
-        Cell::new(&iface.mac_addr.unwrap_or(MacAddr::zero())).set_alignment(CellAlignment::Left),
-    ]);
-    table.add_row(vec![
-        Cell::new("").set_alignment(CellAlignment::Left),
-        Cell::new("IPv4").set_alignment(CellAlignment::Left),
-        Cell::new(format!("{:?}",&iface.ipv4)).set_alignment(CellAlignment::Left),
-    ]);
-    table.add_row(vec![
-        Cell::new("").set_alignment(CellAlignment::Left),
-        Cell::new("IPv6").set_alignment(CellAlignment::Left),
-        Cell::new(format!("{:?}",&iface.ipv6)).set_alignment(CellAlignment::Left),
-    ]);
-    if let Some(gateway) = &iface.gateway {
-        table.add_row(vec![
-            Cell::new("").set_alignment(CellAlignment::Left),
-            Cell::new("Gateway").set_alignment(CellAlignment::Left),
-            Cell::new("").set_alignment(CellAlignment::Left),
-        ]);
-        table.add_row(vec![
-            Cell::new("").set_alignment(CellAlignment::Right),
-            Cell::new("IPv4").set_alignment(CellAlignment::Right),
-            Cell::new(format!("{:?}",&gateway.ipv4)).set_alignment(CellAlignment::Left),
-        ]);
-        table.add_row(vec![
-            Cell::new("").set_alignment(CellAlignment::Right),
-            Cell::new("IPv6").set_alignment(CellAlignment::Right),
-            Cell::new(format!("{:?}",&gateway.ipv6)).set_alignment(CellAlignment::Left),
-        ]);
-        table.add_row(vec![
-            Cell::new("").set_alignment(CellAlignment::Right),
-            Cell::new("MAC").set_alignment(CellAlignment::Right),
-            Cell::new(format!("{}",&gateway.mac_addr)).set_alignment(CellAlignment::Left),
-        ]);
-    };
-    println!();
-    println!("[Default Inteface]");
-    println!("{}", table);
-} */
-
 pub fn show_interface_tree(iface: &Interface) {
     let mut tree = Tree::new(node_label("Interface", None, None));
     tree.push(node_label("Index", Some(&iface.index.to_string()), None));
@@ -162,60 +108,6 @@ pub fn show_interface_tree(iface: &Interface) {
 
     println!("{}", tree);
 }
-
-/* pub fn show_interfaces_table(interfaces: &Vec<Interface>) {
-    let mut table = Table::new();
-    table
-        .load_preset(NOTHING)
-        .set_content_arrangement(ContentArrangement::Dynamic);
-    for iface in interfaces {
-        table.add_row(vec![
-            Cell::new(&iface.index).set_alignment(CellAlignment::Left),
-            Cell::new("Name").set_alignment(CellAlignment::Left),
-            Cell::new(&iface.name).set_alignment(CellAlignment::Left),
-        ]);
-        table.add_row(vec![
-            Cell::new("").set_alignment(CellAlignment::Left),
-            Cell::new("MAC").set_alignment(CellAlignment::Left),
-            Cell::new(&iface.mac_addr.unwrap_or(MacAddr::zero())).set_alignment(CellAlignment::Left),
-        ]);
-        table.add_row(vec![
-            Cell::new("").set_alignment(CellAlignment::Left),
-            Cell::new("IPv4").set_alignment(CellAlignment::Left),
-            Cell::new(format!("{:?}",&iface.ipv4)).set_alignment(CellAlignment::Left),
-        ]);
-        table.add_row(vec![
-            Cell::new("").set_alignment(CellAlignment::Left),
-            Cell::new("IPv6").set_alignment(CellAlignment::Left),
-            Cell::new(format!("{:?}",&iface.ipv6)).set_alignment(CellAlignment::Left),
-        ]);
-        if let Some(gateway) = &iface.gateway {
-            table.add_row(vec![
-                Cell::new("").set_alignment(CellAlignment::Left),
-                Cell::new("Gateway").set_alignment(CellAlignment::Left),
-                Cell::new("").set_alignment(CellAlignment::Left),
-            ]);
-            table.add_row(vec![
-                Cell::new("").set_alignment(CellAlignment::Right),
-                Cell::new("IPv4").set_alignment(CellAlignment::Right),
-                Cell::new(format!("{:?}",&gateway.ipv4)).set_alignment(CellAlignment::Left),
-            ]);
-            table.add_row(vec![
-                Cell::new("").set_alignment(CellAlignment::Right),
-                Cell::new("IPv6").set_alignment(CellAlignment::Right),
-                Cell::new(format!("{:?}",&gateway.ipv6)).set_alignment(CellAlignment::Left),
-            ]);
-            table.add_row(vec![
-                Cell::new("").set_alignment(CellAlignment::Right),
-                Cell::new("MAC").set_alignment(CellAlignment::Right),
-                Cell::new(format!("{}",&gateway.mac_addr)).set_alignment(CellAlignment::Left),
-            ]);
-        };
-    }
-    println!();
-    println!("[Intefaces]");
-    println!("{}", table);
-} */
 
 pub fn show_interfaces_tree(interfaces: &Vec<Interface>) {
     let mut tree = Tree::new(node_label("Interfaces", None, None));
