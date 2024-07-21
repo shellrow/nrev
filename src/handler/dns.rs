@@ -1,8 +1,9 @@
 use std::path::PathBuf;
 use std::{thread, time::Duration};
 use crate::db;
+use crate::dns::domain::Domain;
 use clap::ArgMatches;
-use indicatif::ProgressBar;
+use indicatif::{ProgressBar, ProgressDrawTarget};
 use crate::dns::{result::DomainScanResult, scanner::DomainScanner};
 use tokio::runtime::Runtime;
 use termtree::Tree;
@@ -20,6 +21,17 @@ pub fn handle_subdomain_scan(args: &ArgMatches) {
         Some(target) => target.to_owned(),
         None => return,
     };
+
+    let domain_ips: Vec<std::net::IpAddr> = crate::dns::lookup_host(&target);
+    if domain_ips.is_empty() {
+        output::log_with_time("Failed to resolve domain", "ERROR");
+        return;
+    }
+    let target_domain: Domain = crate::dns::domain::Domain {
+        domain_name: target,
+        ips: domain_ips,
+    };
+
     let timeout = match host_args.get_one::<u64>("timeout") {
         Some(timeout) => Duration::from_millis(*timeout),
         None => Duration::from_secs(30),
@@ -49,14 +61,20 @@ pub fn handle_subdomain_scan(args: &ArgMatches) {
         Ok(scanner) => scanner,
         Err(e) => panic!("Error creating scanner: {}", e),
     };
-    domain_scanner.set_base_domain(target);
+    domain_scanner.set_base_domain(target_domain.domain_name.clone());
     domain_scanner.word_list = word_list;
     domain_scanner.set_timeout(timeout);
+
     print_option(&domain_scanner);
 
     // Display progress with indicatif
-    println!("[Progress]");
+    if !crate::app::is_quiet_mode() {
+        println!("[Progress]");
+    }
     let bar = ProgressBar::new(domain_scanner.word_list.len() as u64);
+    if crate::app::is_quiet_mode() {
+        bar.set_draw_target(ProgressDrawTarget::hidden());
+    }
     bar.enable_steady_tick(120);
     bar.set_style(output::get_progress_style());
     bar.set_position(0);
@@ -77,7 +95,7 @@ pub fn handle_subdomain_scan(args: &ArgMatches) {
         let json_result = serde_json::to_string_pretty(&result).unwrap();
         println!("{}", json_result);
     }else {
-        show_domainscan_result(&result);
+        show_domainscan_result(&result, target_domain);
     }
     output::log_with_time(&format!("Scan completed in {:?}", result.scan_time), "INFO");
     match args.get_one::<PathBuf>("save") {
@@ -96,6 +114,9 @@ pub fn handle_subdomain_scan(args: &ArgMatches) {
 }
 
 fn print_option(setting: &DomainScanner) {
+    if crate::app::is_quiet_mode() {
+        return;
+    }
     println!();
     let mut tree = Tree::new(node_label("SubdomainScan Config", None, None));
     let mut setting_tree = Tree::new(node_label("Settings", None, None));
@@ -110,19 +131,40 @@ fn print_option(setting: &DomainScanner) {
     println!("{}", tree);
 }
 
-fn show_domainscan_result(scan_result: &DomainScanResult) {
-    println!();
-    let mut tree = Tree::new(node_label("Subdomains", None, None));
+fn show_domainscan_result(scan_result: &DomainScanResult, target_domain: Domain) {
+    if !crate::app::is_quiet_mode() {
+        println!();
+    }
+    let mut tree = Tree::new(node_label(&format!("SubdomainScan Result - {}", target_domain.domain_name), None, None));
+    let mut domain_tree = Tree::new(node_label(&target_domain.domain_name, None, None));
+    let mut ipv4_tree = Tree::new(node_label("IPv4 Addresses", None, None));
+    let mut ipv6_tree = Tree::new(node_label("IPv6 Addresses", None, None));
+    for ip in &target_domain.ips {
+        if ip.is_ipv4() {
+            ipv4_tree.push(node_label(&ip.to_string(), None, None));
+        } else {
+            ipv6_tree.push(node_label(&ip.to_string(), None, None));
+        }
+    }
+    domain_tree.push(ipv4_tree);
+    domain_tree.push(ipv6_tree);
+    let mut subdomains_tree = Tree::new(node_label("Subdomains", None, None));
     for domain in &scan_result.domains {
-        let mut domain_tree = Tree::new(node_label(&domain.domain_name, None, None));
+        let mut subdomain_tree = Tree::new(node_label(&domain.domain_name, None, None));
+        let mut ipv4_tree = Tree::new(node_label("IPv4 Addresses", None, None));
+        let mut ipv6_tree = Tree::new(node_label("IPv6 Addresses", None, None));
         for ip in &domain.ips {
             if ip.is_ipv4() {
-                domain_tree.push(node_label("IPv4", Some(&ip.to_string()), None));
+                ipv4_tree.push(node_label(&ip.to_string(), None, None));
             } else {
-                domain_tree.push(node_label("IPv6", Some(&ip.to_string()), None));
+                ipv6_tree.push(node_label(&ip.to_string(), None, None));
             }
         }
-        tree.push(domain_tree);
+        subdomain_tree.push(ipv4_tree);
+        subdomain_tree.push(ipv6_tree);
+        subdomains_tree.push(subdomain_tree);
     }
+    domain_tree.push(subdomains_tree);
+    tree.push(domain_tree);
     println!("{}", tree);
 }

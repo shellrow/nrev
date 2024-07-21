@@ -156,7 +156,7 @@ pub fn handle_ping(args: &ArgMatches) {
                     socket_addr.ip()
                 },
                 Err(_) => {
-                    match crate::dns::lookup_host_name(target.clone()) {
+                    match crate::dns::lookup_host_name(&target) {
                         Some(ip_addr) => {
                             ip_addr
                         },
@@ -201,6 +201,12 @@ pub fn handle_ping(args: &ArgMatches) {
     setting.receive_timeout = wait_time;
     setting.probe_timeout = timeout;
     setting.send_rate = send_rate;
+
+    let target_addr: String = if setting.dst_ip.to_string() != setting.dst_hostname && !setting.dst_hostname.is_empty() {
+        format!("{}({})", setting.dst_hostname, setting.dst_ip)
+    } else {
+        setting.dst_ip.to_string()
+    };
 
     print_option(&setting, &interface);
     
@@ -248,7 +254,7 @@ pub fn handle_ping(args: &ArgMatches) {
                         let json_result = serde_json::to_string_pretty(&ping_result).unwrap();
                         println!("{}", json_result);
                     }else {
-                        show_ping_result(&ping_result);
+                        show_ping_result(&ping_result, target_addr);
                     }
                     match args.get_one::<PathBuf>("save") {
                         Some(file_path) => {
@@ -274,6 +280,9 @@ pub fn handle_ping(args: &ArgMatches) {
 }
 
 fn print_option(setting: &PingSetting, interface: &Interface) {
+    if crate::app::is_quiet_mode() {
+        return;
+    }
     println!();
     // Options
     let mut tree = Tree::new(node_label("Ping Config", None, None));
@@ -299,19 +308,16 @@ fn print_option(setting: &PingSetting, interface: &Interface) {
     println!("{}", tree);
 }
 
-fn show_ping_result(ping_result: &PingResult) {
-    println!();
-    let mut tree = Tree::new(node_label("Ping Result", None, None));
+fn show_ping_result(ping_result: &PingResult, target_addr: String) {
+    if !crate::app::is_quiet_mode() {
+        println!();
+    }
+    let mut tree = Tree::new(node_label(&format!("Ping Result - {}", target_addr), None, None));
     // Responses
     let mut responses_tree = Tree::new(node_label("Responses", None, None));
     for response in &ping_result.stat.responses {
-        let source: String = if response.ip_addr.to_string() != response.host_name && !response.host_name.is_empty() {
-            format!("{}({})", response.host_name, response.ip_addr)
-        } else {
-            response.ip_addr.to_string()
-        };
         let mut response_tree = Tree::new(node_label("Sequence", Some(response.seq.to_string().as_str()), None));
-        response_tree.push(node_label("Source", Some(&source), None));
+        response_tree.push(node_label("IP Address", Some(&response.ip_addr.to_string()), None));
         response_tree.push(node_label("Protocol", Some(format!("{:?}", response.protocol).as_str()), None));
         response_tree.push(node_label("Received Bytes", Some(response.received_packet_size.to_string().as_str()), None));
         response_tree.push(node_label("HOP", Some(response.hop.to_string().as_str()), None));

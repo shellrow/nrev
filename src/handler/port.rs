@@ -1,5 +1,5 @@
 use clap::ArgMatches;
-use indicatif::ProgressBar;
+use indicatif::{ProgressBar, ProgressDrawTarget};
 use crate::db::model::OsFamilyFingerprint;
 use crate::host::{Host, PortStatus};
 use crate::json::port::PortScanResult;
@@ -35,7 +35,7 @@ pub fn handle_portscan(args: &ArgMatches) {
         target_host_name = crate::dns::lookup_ip_addr(&target_ip_addr).unwrap_or(target.clone());
     } else {
         target_host_name = target.clone();
-        target_ip_addr = match crate::dns::lookup_host_name(target.clone()){
+        target_ip_addr = match crate::dns::lookup_host_name(&target){
             Some(ip) => ip,
             None => return,
         };
@@ -120,9 +120,14 @@ pub fn handle_portscan(args: &ArgMatches) {
         scan_setting.randomize_ports();
         scan_setting.randomize_hosts();
     }
-    println!("[Progress]");
+    if !crate::app::is_quiet_mode() {
+        println!("[Progress]");
+    }
     // Display progress with indicatif
     let bar = ProgressBar::new(scan_setting.targets[0].ports.len() as u64);
+    if crate::app::is_quiet_mode() {
+        bar.set_draw_target(ProgressDrawTarget::hidden());
+    }
     //bar.enable_steady_tick(120);
     bar.set_style(output::get_progress_style());
     bar.set_position(0);
@@ -158,6 +163,9 @@ pub fn handle_portscan(args: &ArgMatches) {
     let service_detector = ServiceDetector::new(probe_setting);
     let service_rx = service_detector.get_progress_receiver();
     let bar = ProgressBar::new(portscan_result.hosts[0].get_open_port_numbers().len() as u64);
+    if crate::app::is_quiet_mode() {
+        bar.set_draw_target(ProgressDrawTarget::hidden());
+    }
     bar.enable_steady_tick(120);
     bar.set_style(output::get_progress_style());
     bar.set_position(0);
@@ -232,6 +240,9 @@ pub fn handle_portscan(args: &ArgMatches) {
 }
 
 pub fn print_option(setting: &PortScanSetting, interface: &Interface) {
+    if crate::app::is_quiet_mode() {
+        return;
+    }
     println!();
     let mut tree = Tree::new(node_label("PortScan Config", None, None));
     let mut setting_tree = Tree::new(node_label("Settings", None, None));
@@ -260,8 +271,15 @@ pub fn print_option(setting: &PortScanSetting, interface: &Interface) {
 }
 
 pub fn show_portscan_result(host: &Host) {
-    println!();
-    let mut tree = Tree::new(node_label("PortScan Result", None, None));
+    if !crate::app::is_quiet_mode() {
+        println!();
+    }
+    let target_addr: String = if host.ip_addr.to_string() != host.hostname && !host.hostname.is_empty() {
+        format!("{}({})", host.hostname, host.ip_addr)
+    } else {
+        host.ip_addr.to_string()
+    };
+    let mut tree = Tree::new(node_label(&format!("PortScan Result - {}", target_addr), None, None));
     let mut host_tree = Tree::new(node_label("Host Info", None, None));
     host_tree.push(node_label("IP Address", Some(&host.ip_addr.to_string()), None));
     host_tree.push(node_label("Host Name", Some(&host.hostname), None));

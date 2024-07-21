@@ -54,7 +54,7 @@ pub fn handle_traceroute(args: &ArgMatches) {
                     socket_addr.ip()
                 },
                 Err(_) => {
-                    match crate::dns::lookup_host_name(target.clone()) {
+                    match crate::dns::lookup_host_name(&target) {
                         Some(ip_addr) => {
                             ip_addr
                         },
@@ -86,7 +86,15 @@ pub fn handle_traceroute(args: &ArgMatches) {
     setting.receive_timeout = wait_time;
     setting.probe_timeout = timeout;
     setting.send_rate = send_rate;
+
+    let target_addr: String = if setting.dst_ip.to_string() != setting.dst_hostname && !setting.dst_hostname.is_empty() {
+        format!("{}({})", setting.dst_hostname, setting.dst_ip)
+    } else {
+        setting.dst_ip.to_string()
+    };
+
     print_option(&setting, &interface);
+    
     let tracer: Tracer = Tracer::new(setting).unwrap();
     let rx = tracer.get_progress_receiver();
     let handle = thread::spawn(move || tracer.trace());
@@ -111,7 +119,7 @@ pub fn handle_traceroute(args: &ArgMatches) {
                     let json_result = serde_json::to_string_pretty(&trace_result).unwrap();
                     println!("{}", json_result);
                 }else{
-                    show_trace_result(&trace_result);
+                    show_trace_result(&trace_result, target_addr);
                 }
                 output::log_with_time(&format!("Traceroute completed in: {:?}", trace_result.elapsed_time), "INFO");
                 match args.get_one::<PathBuf>("save") {
@@ -135,6 +143,9 @@ pub fn handle_traceroute(args: &ArgMatches) {
 }
 
 fn print_option(setting: &TraceSetting, interface: &Interface) {
+    if crate::app::is_quiet_mode() {
+        return;
+    }
     println!();
     // Options
     let mut tree = Tree::new(node_label("Traceroute Config", None, None));
@@ -157,22 +168,19 @@ fn print_option(setting: &TraceSetting, interface: &Interface) {
     println!("{}", tree);
 }
 
-fn show_trace_result(trace_result: &TracerouteResult) {
-    println!();
-    let mut tree = Tree::new(node_label("Traceroute Result", None, None));
+fn show_trace_result(trace_result: &TracerouteResult, target_addr: String) {
+    if !crate::app::is_quiet_mode() {
+        println!();
+    }
+    let mut tree = Tree::new(node_label(&format!("Traceroute Result - {}", target_addr), None, None));
     // Responses
     let mut responses_tree = Tree::new(node_label("Responses", None, None));
     for response in &trace_result.nodes {
         match response.probe_status.kind {
             ProbeStatusKind::Done => {
-                let source: String = if response.ip_addr.to_string() != response.host_name && !response.host_name.is_empty() {
-                    format!("{}({})", response.host_name, response.ip_addr)
-                } else {
-                    response.ip_addr.to_string()
-                };
                 let mut response_tree = Tree::new(node_label("Sequence", Some(response.seq.to_string().as_str()), None));
                 response_tree.push(node_label("Status", Some(&response.probe_status.kind.name()), None));
-                response_tree.push(node_label("Source", Some(&source), None));
+                response_tree.push(node_label("IP Address", Some(&response.ip_addr.to_string()), None));
                 response_tree.push(node_label("Protocol", Some(format!("{:?}", response.protocol).as_str()), None));
                 response_tree.push(node_label("Received Bytes", Some(response.received_packet_size.to_string().as_str()), None));
                 response_tree.push(node_label("HOP", Some(response.hop.to_string().as_str()), None));

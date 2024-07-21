@@ -37,6 +37,13 @@ fn main() {
         std::process::exit(0);
     }
     let arg_matches: ArgMatches = parse_args();
+    match app::set_quiet_mode(arg_matches.get_flag("quiet")) {
+        Ok(_) => {},
+        Err(e) => {
+            println!("Failed to set quiet mode.{}", e);
+            std::process::exit(1);
+        }
+    }
     let subcommand_name = arg_matches.subcommand_name().unwrap_or("");
     let app_command = AppCommands::from_str(subcommand_name);
     app::show_banner_with_starttime();
@@ -75,11 +82,11 @@ fn main() {
                     if crate::host::is_valid_target(target_host) {
                         handler::default_probe(target_host, &arg_matches);
                     } else {
-                        app::show_app_desc();
+                        app::show_error_with_help(&format!("Invalid target: {}", target_host));
                     }
                 },
                 None => {
-                    app::show_app_desc();
+                    app::show_error_with_help("No target specified");
                 },
             }
         }
@@ -131,6 +138,12 @@ fn parse_args() -> ArgMatches {
             .long("save")
             .value_name("file_path")
             .value_parser(value_parser!(PathBuf))
+        )
+        .arg(Arg::new("quiet")
+            .help("Quiet mode. Suppress output. Only show final results.")
+            .short('q')
+            .long("quiet")
+            .num_args(0)
         )
         .subcommand(Command::new("port")
             .about("Scan port. nrev port --help for more information")

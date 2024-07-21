@@ -1,5 +1,5 @@
 use clap::ArgMatches;
-use indicatif::ProgressBar;
+use indicatif::{ProgressBar, ProgressDrawTarget};
 use ipnet::Ipv4Net;
 use crate::host::Host;
 use crate::json::host::HostScanResult;
@@ -112,9 +112,14 @@ pub fn handle_hostscan(args: &ArgMatches) {
         scan_setting.randomize_ports();
         scan_setting.randomize_hosts();
     }
-    println!("[Progress]");
+    if !crate::app::is_quiet_mode() {
+        println!("[Progress]");
+    }
     // Display progress with indicatif
     let bar = ProgressBar::new(scan_setting.targets.len() as u64);
+    if crate::app::is_quiet_mode() {
+        bar.set_draw_target(ProgressDrawTarget::hidden());
+    }
     //bar.enable_steady_tick(120);
     bar.set_style(output::get_progress_style());
     bar.set_position(0);
@@ -164,6 +169,9 @@ pub fn handle_hostscan(args: &ArgMatches) {
 }
 
 fn print_option(target: &str, setting: &HostScanSetting, interface: &Interface) {
+    if crate::app::is_quiet_mode() {
+        return;
+    }
     println!();
     let mut tree = Tree::new(node_label("HostScan Config", None, None));
     let mut setting_tree = Tree::new(node_label("Settings", None, None));
@@ -196,7 +204,9 @@ fn print_option(target: &str, setting: &HostScanSetting, interface: &Interface) 
 }
 
 fn show_hostscan_result(hostscan_result: &HostScanResult) {
-    println!();
+    if !crate::app::is_quiet_mode() {
+        println!();
+    }
     let oui_map: HashMap<String, String> = crate::db::get_oui_detail_map();
     let mut tree = Tree::new(node_label("HostScan Result", None, None));
     let mut hosts_tree = Tree::new(node_label("Hosts", None, None));

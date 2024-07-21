@@ -352,7 +352,7 @@ impl ServiceProbeSetting {
         self.hostname = hostname;
         if self.ip_addr == IpAddr::V4(Ipv4Addr::LOCALHOST) || self.ip_addr == IpAddr::V4(Ipv4Addr::UNSPECIFIED)
         || self.ip_addr == IpAddr::V6(std::net::Ipv6Addr::LOCALHOST) || self.ip_addr == IpAddr::V6(std::net::Ipv6Addr::UNSPECIFIED) {
-            if let Some(ip_addr) = crate::dns::lookup_host_name(self.hostname.clone()) {
+            if let Some(ip_addr) = crate::dns::lookup_host_name(&self.hostname) {
                 self.ip_addr = ip_addr;
             }
         }

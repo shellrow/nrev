@@ -101,7 +101,7 @@ pub fn handle_neighbor_discovery(args: &ArgMatches) {
                     let json_result = serde_json::to_string_pretty(&r).unwrap();
                     println!("{}", json_result);
                 }else{
-                    show_ping_result(&r);
+                    show_resolve_result(&r);
                 }
                 match args.get_one::<PathBuf>("save") {
                     Some(file_path) => {
@@ -133,6 +133,9 @@ pub fn handle_neighbor_discovery(args: &ArgMatches) {
 }
 
 fn print_option(setting: &AddressResolveSetting, interface: &Interface) {
+    if crate::app::is_quiet_mode() {
+        return;
+    }
     println!();
     // Options
     let mut tree = Tree::new(node_label("NeighborResolve Config", None, None));
@@ -151,8 +154,10 @@ fn print_option(setting: &AddressResolveSetting, interface: &Interface) {
     println!("{}", tree);
 }
 
-fn show_ping_result(resolve_result: &DeviceResolveResult) {
-    println!();
+fn show_resolve_result(resolve_result: &DeviceResolveResult) {
+    if !crate::app::is_quiet_mode() {
+        println!();
+    }
     let mut tree = Tree::new(node_label("NeighborResolve Result", None, None));
     // Responses
     let mut responses_tree = Tree::new(node_label("Responses", None, None));
