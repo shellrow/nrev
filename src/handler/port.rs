@@ -298,7 +298,7 @@ pub fn show_portscan_result(host: &Host) {
             let mut port_tree = Tree::new(node_label(&port.number.to_string(), None, None));
             port_tree.push(node_label("Status", Some(&port.status.name()), None));
             port_tree.push(node_label("Service Name", Some(&port.service_name), None));
-            port_tree.push(node_label("Service Version", Some(&port.service_version), None));
+            port_tree.push(node_label("Service Detail", Some(&port.service_version), None));
             port_info_tree.push(port_tree);
         }
     }
