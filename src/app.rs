@@ -4,7 +4,7 @@ use crate::sys;
 
 // APP information
 pub const CRATE_BIN_NAME: &str = "nrev";
-pub const CRATE_UPDATE_DATE: &str = "2024-07-18";
+pub const CRATE_UPDATE_DATE: &str = "2024-07-21";
 pub const CRATE_REPOSITORY: &str = "https://github.com/shellrow/nrev";
 
 /// Global Mutex lock guard for quiet mode
