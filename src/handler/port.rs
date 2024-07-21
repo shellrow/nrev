@@ -1,5 +1,5 @@
 use clap::ArgMatches;
-use indicatif::ProgressBar;
+use indicatif::{ProgressBar, ProgressDrawTarget};
 use crate::db::model::OsFamilyFingerprint;
 use crate::host::{Host, PortStatus};
 use crate::json::port::PortScanResult;
@@ -7,15 +7,14 @@ use crate::scan::scanner::{PortScanner, ServiceDetector};
 use crate::scan::setting::{PortScanSetting, PortScanType, ServiceProbeSetting};
 use netdev::mac::MacAddr;
 use netdev::Interface;
-use comfy_table::presets::NOTHING;
-use comfy_table::{Cell, CellAlignment, ContentArrangement, Table};
 use std::collections::HashMap;
 use std::net::IpAddr;
 use std::path::PathBuf;
 use std::thread;
 use std::time::Duration;
 use crate::scan::result::ScanResult;
-
+use termtree::Tree;
+use crate::util::tree::node_label;
 use crate::output;
 
 pub fn handle_portscan(args: &ArgMatches) {
@@ -36,7 +35,7 @@ pub fn handle_portscan(args: &ArgMatches) {
         target_host_name = crate::dns::lookup_ip_addr(&target_ip_addr).unwrap_or(target.clone());
     } else {
         target_host_name = target.clone();
-        target_ip_addr = match crate::dns::lookup_host_name(target.clone()){
+        target_ip_addr = match crate::dns::lookup_host_name(&target){
             Some(ip) => ip,
             None => return,
         };
@@ -78,8 +77,8 @@ pub fn handle_portscan(args: &ArgMatches) {
         default_waittime = Duration::from_millis(200);
     }else{
         match crate::handler::ping::initial_ping(interface.index, target_ip_addr, target_host_name.clone()) {
-            Ok(ping_result) => {
-                default_waittime = ping_result;
+            Ok(rtt) => {
+                default_waittime = crate::util::setting::caluculate_wait_time(rtt);
             },
             Err(e) => {
                 output::log_with_time(&format!("{} You can disable this initial ping by --noping", e), "ERROR");
@@ -121,9 +120,14 @@ pub fn handle_portscan(args: &ArgMatches) {
         scan_setting.randomize_ports();
         scan_setting.randomize_hosts();
     }
-    println!("[Progress]");
+    if !crate::app::is_quiet_mode() {
+        println!("[Progress]");
+    }
     // Display progress with indicatif
     let bar = ProgressBar::new(scan_setting.targets[0].ports.len() as u64);
+    if crate::app::is_quiet_mode() {
+        bar.set_draw_target(ProgressDrawTarget::hidden());
+    }
     //bar.enable_steady_tick(120);
     bar.set_style(output::get_progress_style());
     bar.set_position(0);
@@ -159,6 +163,9 @@ pub fn handle_portscan(args: &ArgMatches) {
     let service_detector = ServiceDetector::new(probe_setting);
     let service_rx = service_detector.get_progress_receiver();
     let bar = ProgressBar::new(portscan_result.hosts[0].get_open_port_numbers().len() as u64);
+    if crate::app::is_quiet_mode() {
+        bar.set_draw_target(ProgressDrawTarget::hidden());
+    }
     bar.enable_steady_tick(120);
     bar.set_style(output::get_progress_style());
     bar.set_position(0);
@@ -233,132 +240,69 @@ pub fn handle_portscan(args: &ArgMatches) {
 }
 
 pub fn print_option(setting: &PortScanSetting, interface: &Interface) {
-    let mut table = Table::new();
-    table
-        .load_preset(NOTHING)
-        .set_content_arrangement(ContentArrangement::Dynamic);
-    table.add_row(vec![
-        Cell::new("Protocol").set_alignment(CellAlignment::Left),
-        Cell::new(setting.protocol.to_str()).set_alignment(CellAlignment::Left),
-    ]);
-    table.add_row(vec![
-        Cell::new("ScanType").set_alignment(CellAlignment::Left),
-        Cell::new(setting.scan_type.to_str()).set_alignment(CellAlignment::Left),
-    ]);
-    table.add_row(vec![
-        Cell::new("InterfaceName").set_alignment(CellAlignment::Left),
-        Cell::new(&interface.name).set_alignment(CellAlignment::Left),
-    ]);
-    table.add_row(vec![
-        Cell::new("Timeout").set_alignment(CellAlignment::Left),
-        Cell::new(format!("{:?}", setting.timeout)).set_alignment(CellAlignment::Left),
-    ]);
-    table.add_row(vec![
-        Cell::new("WaitTime").set_alignment(CellAlignment::Left),
-        Cell::new(format!("{:?}", setting.wait_time)).set_alignment(CellAlignment::Left),
-    ]);
-    table.add_row(vec![
-        Cell::new("SendRate").set_alignment(CellAlignment::Left),
-        Cell::new(format!("{:?}", setting.send_rate)).set_alignment(CellAlignment::Left),
-    ]);
-    println!("[Options]");
-    println!("{}", table);
+    if crate::app::is_quiet_mode() {
+        return;
+    }
+    println!();
+    let mut tree = Tree::new(node_label("PortScan Config", None, None));
+    let mut setting_tree = Tree::new(node_label("Settings", None, None));
+    setting_tree.push(node_label("Protocol", Some(setting.protocol.to_str()), None));
+    setting_tree.push(node_label("ScanType", Some(setting.scan_type.to_str()), None));
+    setting_tree.push(node_label("InterfaceName", Some(&interface.name), None));
+    setting_tree.push(node_label("Timeout", Some(format!("{:?}", setting.timeout).as_str()), None));
+    setting_tree.push(node_label("WaitTime", Some(format!("{:?}", setting.wait_time).as_str()), None));
+    setting_tree.push(node_label("SendRate", Some(format!("{:?}", setting.send_rate).as_str()), None));
+    tree.push(setting_tree);
 
-    let mut table = Table::new();
-    table
-        .load_preset(NOTHING)
-        .set_content_arrangement(ContentArrangement::Dynamic);
+    let mut target_tree = Tree::new(node_label("Target", None, None));
     for target in &setting.targets {
-        if target.ip_addr.to_string() == target.hostname || target.hostname.is_empty() {
-            table.add_row(vec![
-                Cell::new("IP Address").set_alignment(CellAlignment::Left),
-                Cell::new(target.ip_addr).set_alignment(CellAlignment::Left),
-            ]);
-        } else {
-            table.add_row(vec![
-                Cell::new("IP Address").set_alignment(CellAlignment::Left),
-                Cell::new(target.ip_addr).set_alignment(CellAlignment::Left),
-            ]);
-            table.add_row(vec![
-                Cell::new("Host Name").set_alignment(CellAlignment::Left),
-                Cell::new(&target.hostname).set_alignment(CellAlignment::Left),
-            ]);
+        target_tree.push(node_label("IP Address", Some(&target.ip_addr.to_string()), None));
+        if target.ip_addr.to_string() != target.hostname && !target.hostname.is_empty() {
+            target_tree.push(node_label("Host Name", Some(&target.hostname), None));
         }
         if target.ports.len() > 10 {
-            table.add_row(vec![
-                Cell::new("Port").set_alignment(CellAlignment::Left),
-                Cell::new(format!("{} port(s)", target.ports.len())).set_alignment(CellAlignment::Left),
-            ]);
+            target_tree.push(node_label("Port", Some(format!("{} port(s)", target.ports.len()).as_str()), None));
         } else {
-            table.add_row(vec![
-                Cell::new("Port").set_alignment(CellAlignment::Left),
-                Cell::new(format!("{:?}", target.get_ports())).set_alignment(CellAlignment::Left),
-            ]);
+            target_tree.push(node_label("Port", Some(format!("{:?}", target.get_ports()).as_str()), None));
         }
     }
-    println!("[Target]");
-    println!("{}", table);
+    tree.push(target_tree);
+    println!("{}", tree);
 }
 
 pub fn show_portscan_result(host: &Host) {
-    let mut table = Table::new();
-    table
-        .load_preset(NOTHING)
-        .set_content_arrangement(ContentArrangement::Dynamic);
-    table.add_row(vec![
-        Cell::new("IP Address").set_alignment(CellAlignment::Left),
-        Cell::new(host.ip_addr.to_string()).set_alignment(CellAlignment::Left),
-    ]);
-    table.add_row(vec![
-        Cell::new("Host Name").set_alignment(CellAlignment::Left),
-        Cell::new(&host.hostname).set_alignment(CellAlignment::Left),
-    ]);
+    if !crate::app::is_quiet_mode() {
+        println!();
+    }
+    let target_addr: String = if host.ip_addr.to_string() != host.hostname && !host.hostname.is_empty() {
+        format!("{}({})", host.hostname, host.ip_addr)
+    } else {
+        host.ip_addr.to_string()
+    };
+    let mut tree = Tree::new(node_label(&format!("PortScan Result - {}", target_addr), None, None));
+    let mut host_tree = Tree::new(node_label("Host Info", None, None));
+    host_tree.push(node_label("IP Address", Some(&host.ip_addr.to_string()), None));
+    host_tree.push(node_label("Host Name", Some(&host.hostname), None));
     if host.mac_addr != MacAddr::zero() {
-        table.add_row(vec![
-            Cell::new("MAC Address").set_alignment(CellAlignment::Left),
-            Cell::new(host.mac_addr).set_alignment(CellAlignment::Left),
-        ]);
+        host_tree.push(node_label("MAC Address", Some(&host.mac_addr.to_string()), None));
     }
     if !host.vendor_name.is_empty() {
-        table.add_row(vec![
-            Cell::new("Vendor Name").set_alignment(CellAlignment::Left),
-            Cell::new(&host.vendor_name).set_alignment(CellAlignment::Left),
-        ]);
+        host_tree.push(node_label("Vendor Name", Some(&host.vendor_name), None));
     }
     if !host.os_family.is_empty() {
-        table.add_row(vec![
-            Cell::new("OS Family").set_alignment(CellAlignment::Left),
-            Cell::new(&host.os_family).set_alignment(CellAlignment::Left),
-        ]);
+        host_tree.push(node_label("OS Family", Some(&host.os_family), None));
     }
-    println!();
-    println!("[Host Info]");
-    println!("{}", table);
-    let mut table = Table::new();
-    table
-        .load_preset(NOTHING)
-        .set_content_arrangement(ContentArrangement::Dynamic)
-        .set_header(vec!["Number", "Status", "Service Name", "Service Version"]);
-    let port_count: usize = host.get_ports().len();
+    let mut port_info_tree = Tree::new(node_label("Port Info", None, None));
     for port in &host.ports {
-        if port_count > 10 {
-            if port.status == PortStatus::Open {
-                table.add_row(vec![
-                    Cell::new(port.number).set_alignment(CellAlignment::Left),
-                    Cell::new(port.status.name()).set_alignment(CellAlignment::Left),
-                    Cell::new(&port.service_name).set_alignment(CellAlignment::Left),
-                    Cell::new(&port.service_version).set_alignment(CellAlignment::Left),
-                ]);
-            }
-        } else {
-            table.add_row(vec![
-                Cell::new(port.number).set_alignment(CellAlignment::Left),
-                Cell::new(port.status.name()).set_alignment(CellAlignment::Left),
-                Cell::new(&port.service_name).set_alignment(CellAlignment::Left),
-                Cell::new(&port.service_version).set_alignment(CellAlignment::Left),
-            ]);
+        if port.status == PortStatus::Open {
+            let mut port_tree = Tree::new(node_label(&port.number.to_string(), None, None));
+            port_tree.push(node_label("Status", Some(&port.status.name()), None));
+            port_tree.push(node_label("Service Name", Some(&port.service_name), None));
+            port_tree.push(node_label("Service Detail", Some(&port.service_version), None));
+            port_info_tree.push(port_tree);
         }
     }
-    println!("[Port Info]");
-    println!("{}", table);
+    host_tree.push(port_info_tree);
+    tree.push(host_tree);
+    println!("{}", tree);
 }

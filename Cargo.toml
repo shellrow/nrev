@@ -1,6 +1,6 @@
 [package]
 name = "nrev"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 authors = ["shellrow <shellrow@fortnium.com>"]
 description = "Simple and Fast Network Revealer/Mapper."
@@ -32,8 +32,9 @@ rand = "0.8"
 clap = { version = "4.4", features = ["cargo"] }
 indicatif = "0.16"
 inquire = "0.6"
-comfy-table = "7.1"
 ipnet = "2.7"
+num_cpus = "1.16"
+termtree = "0.5"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"

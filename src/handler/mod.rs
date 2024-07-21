@@ -31,7 +31,7 @@ pub fn default_probe(target_host: &str, args: &ArgMatches) {
         target_host_name = crate::dns::lookup_ip_addr(&target_ip_addr).unwrap_or(target_host.to_string());
     } else {
         target_host_name = target_host.to_string();
-        target_ip_addr = match crate::dns::lookup_host_name(target_host.to_string()){
+        target_ip_addr = match crate::dns::lookup_host_name(target_host){
             Some(ip) => ip,
             None => return,
         };

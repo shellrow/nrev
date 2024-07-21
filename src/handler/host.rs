@@ -1,5 +1,5 @@
 use clap::ArgMatches;
-use indicatif::ProgressBar;
+use indicatif::{ProgressBar, ProgressDrawTarget};
 use ipnet::Ipv4Net;
 use crate::host::Host;
 use crate::json::host::HostScanResult;
@@ -7,14 +7,14 @@ use crate::scan::result::ScanResult;
 use crate::scan::scanner::HostScanner;
 use crate::scan::setting::{HostScanSetting, HostScanType};
 use netdev::Interface;
-use comfy_table::presets::NOTHING;
-use comfy_table::{Cell, CellAlignment, ContentArrangement, Table};
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::PathBuf;
 use std::str::FromStr;
 use std::thread;
 use std::time::Duration;
+use termtree::Tree;
+use crate::util::tree::node_label;
 
 use crate::output;
 
@@ -112,9 +112,14 @@ pub fn handle_hostscan(args: &ArgMatches) {
         scan_setting.randomize_ports();
         scan_setting.randomize_hosts();
     }
-    println!("[Progress]");
+    if !crate::app::is_quiet_mode() {
+        println!("[Progress]");
+    }
     // Display progress with indicatif
     let bar = ProgressBar::new(scan_setting.targets.len() as u64);
+    if crate::app::is_quiet_mode() {
+        bar.set_draw_target(ProgressDrawTarget::hidden());
+    }
     //bar.enable_steady_tick(120);
     bar.set_style(output::get_progress_style());
     bar.set_position(0);
@@ -164,108 +169,64 @@ pub fn handle_hostscan(args: &ArgMatches) {
 }
 
 fn print_option(target: &str, setting: &HostScanSetting, interface: &Interface) {
-    let mut table = Table::new();
-    table
-        .load_preset(NOTHING)
-        .set_content_arrangement(ContentArrangement::Dynamic);
-    
-    table.add_row(vec![
-        Cell::new("Protocol").set_alignment(CellAlignment::Left),
-        Cell::new(setting.protocol.to_str()).set_alignment(CellAlignment::Left),
-    ]);
-    table.add_row(vec![
-        Cell::new("ScanType").set_alignment(CellAlignment::Left),
-        Cell::new(setting.scan_type.to_str()).set_alignment(CellAlignment::Left),
-    ]);
-    table.add_row(vec![
-        Cell::new("InterfaceName").set_alignment(CellAlignment::Left),
-        Cell::new(&interface.name).set_alignment(CellAlignment::Left),
-    ]);
-    table.add_row(vec![
-        Cell::new("Timeout").set_alignment(CellAlignment::Left),
-        Cell::new(format!("{:?}", setting.timeout)).set_alignment(CellAlignment::Left),
-    ]);
-    table.add_row(vec![
-        Cell::new("WaitTime").set_alignment(CellAlignment::Left),
-        Cell::new(format!("{:?}", setting.wait_time)).set_alignment(CellAlignment::Left),
-    ]);
-    table.add_row(vec![
-        Cell::new("SendRate").set_alignment(CellAlignment::Left),
-        Cell::new(format!("{:?}", setting.send_rate)).set_alignment(CellAlignment::Left),
-    ]);
-    println!("[Options]");
-    println!("{}", table);
-
-    let mut table = Table::new();
-    table
-        .load_preset(NOTHING)
-        .set_content_arrangement(ContentArrangement::Dynamic);
-    
+    if crate::app::is_quiet_mode() {
+        return;
+    }
+    println!();
+    let mut tree = Tree::new(node_label("HostScan Config", None, None));
+    let mut setting_tree = Tree::new(node_label("Settings", None, None));
+    setting_tree.push(node_label("Protocol", Some(setting.protocol.to_str()), None));
+    setting_tree.push(node_label("ScanType", Some(setting.scan_type.to_str()), None));
+    setting_tree.push(node_label("InterfaceName", Some(&interface.name), None));
+    setting_tree.push(node_label("Timeout", Some(&format!("{:?}", setting.timeout)), None));
+    setting_tree.push(node_label("WaitTime", Some(&format!("{:?}", setting.wait_time)), None));
+    setting_tree.push(node_label("SendRate", Some(&format!("{:?}", setting.send_rate)), None));
+    tree.push(setting_tree);
+    let mut target_tree = Tree::new(node_label("Target", None, None));
     match Ipv4Net::from_str(&target) {
         Ok(ipv4net) => {
-            table.add_row(vec![
-                Cell::new("Network").set_alignment(CellAlignment::Left),
-                Cell::new(ipv4net.to_string()).set_alignment(CellAlignment::Left),
-            ]);
+            target_tree.push(node_label("Network", Some(&ipv4net.to_string()), None));
         }
         Err(_) => {
             match Ipv4Addr::from_str(&target) {
                 Ok(ip_addr) => {
                     let net = Ipv4Net::new(ip_addr, 24).unwrap();
-                    table.add_row(vec![
-                        Cell::new("Network").set_alignment(CellAlignment::Left),
-                        Cell::new(net.to_string()).set_alignment(CellAlignment::Left),
-                    ]);
+                    target_tree.push(node_label("Network", Some(&net.to_string()), None));
                 }
                 Err(_) => {
-                    table.add_row(vec![
-                        Cell::new("List").set_alignment(CellAlignment::Left),
-                        Cell::new(target).set_alignment(CellAlignment::Left),
-                    ]);
+                    target_tree.push(node_label("List", Some(target), None));
                 }
             }
         },
     }
-    println!("[Target]");
-    println!("{}", table);
+    tree.push(target_tree);
+    println!("{}", tree);
 }
 
 fn show_hostscan_result(hostscan_result: &HostScanResult) {
+    if !crate::app::is_quiet_mode() {
+        println!();
+    }
     let oui_map: HashMap<String, String> = crate::db::get_oui_detail_map();
-    let mut table = Table::new();
-    table
-        .load_preset(NOTHING)
-        .set_content_arrangement(ContentArrangement::Dynamic)
-        .set_header(vec!["IP Address", "Host Name", "TTL","OS Family", "MAC Address", "Vendor Name"]);
-    
+    let mut tree = Tree::new(node_label("HostScan Result", None, None));
+    let mut hosts_tree = Tree::new(node_label("Hosts", None, None));
     for host in &hostscan_result.hosts {
-        if crate::ip::is_global_addr(&host.ip_addr) {
-            table.add_row(vec![
-                Cell::new(&host.ip_addr.to_string()).set_alignment(CellAlignment::Left),
-                Cell::new(&host.hostname).set_alignment(CellAlignment::Left),
-                Cell::new(&host.ttl).set_alignment(CellAlignment::Left),
-                Cell::new(&host.os_family).set_alignment(CellAlignment::Left),
-                Cell::new("-").set_alignment(CellAlignment::Left),
-                Cell::new("-").set_alignment(CellAlignment::Left),
-            ]);
-        }else{
+        let mut host_tree = Tree::new(node_label(&host.ip_addr.to_string(), None, None));
+        host_tree.push(node_label("Host Name", Some(&host.hostname), None));
+        host_tree.push(node_label("TTL", Some(&host.ttl.to_string()), None));
+        host_tree.push(node_label("OS Family", Some(&host.os_family), None));
+        if !crate::ip::is_global_addr(&host.ip_addr) {
             let vendor_name = if host.mac_addr.address().len() > 16 {
                 let prefix8 = host.mac_addr.address()[0..8].to_uppercase();
                 oui_map.get(&prefix8).unwrap_or(&String::new()).to_string()
             } else {
                 oui_map.get(&host.mac_addr.address()).unwrap_or(&String::new()).to_string()
             };
-            table.add_row(vec![
-                Cell::new(&host.ip_addr.to_string()).set_alignment(CellAlignment::Left),
-                Cell::new(&host.hostname).set_alignment(CellAlignment::Left),
-                Cell::new(&host.ttl).set_alignment(CellAlignment::Left),
-                Cell::new(&host.os_family).set_alignment(CellAlignment::Left),
-                Cell::new(&host.mac_addr.to_string()).set_alignment(CellAlignment::Left),
-                Cell::new(vendor_name).set_alignment(CellAlignment::Left),
-            ]);
+            host_tree.push(node_label("MAC Address", Some(&host.mac_addr.to_string()), None));
+            host_tree.push(node_label("Vendor Name", Some(&vendor_name), None));
         }
+        hosts_tree.push(host_tree);
     }
-    println!();
-    println!("[Up Hosts]");
-    println!("{}", table);
+    tree.push(hosts_tree);
+    println!("{}", tree);
 }

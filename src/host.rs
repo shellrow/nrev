@@ -153,7 +153,7 @@ pub fn is_valid_ip_addr(target: &str) -> bool {
 
 // Check if the target is a valid hostname
 pub fn is_valid_hostname(target: &str) -> bool {
-    dns::lookup_host_name(target.to_string()).is_some()
+    dns::lookup_host_name(target).is_some()
 }
 
 // Check if the target is valid
