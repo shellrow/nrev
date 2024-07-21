@@ -1,5 +1,6 @@
 use clap::ArgMatches;
 use crate::neighbor::resolver::DeviceResolver;
+use crate::neighbor::result::DeviceResolveResult;
 use crate::neighbor::setting::AddressResolveSetting;
 use std::net::IpAddr;
 use std::path::PathBuf;
@@ -7,6 +8,9 @@ use std::str::FromStr;
 use std::thread;
 use std::time::Duration;
 use crate::output;
+use netdev::Interface;
+use termtree::Tree;
+use crate::util::tree::node_label;
 
 pub fn handle_neighbor_discovery(args: &ArgMatches) {
     let nei_args = match args.subcommand_matches("nei") {
@@ -63,15 +67,16 @@ pub fn handle_neighbor_discovery(args: &ArgMatches) {
     };
     let mut setting: AddressResolveSetting = match dst_ip {
         IpAddr::V4(ipv4) => {
-            AddressResolveSetting::arp(interface, ipv4, count).unwrap()
+            AddressResolveSetting::arp(&interface, ipv4, count).unwrap()
         },
         IpAddr::V6(ipv6) => {
-            AddressResolveSetting::ndp(interface, ipv6, count).unwrap()
+            AddressResolveSetting::ndp(&interface, ipv6, count).unwrap()
         }
     };
     setting.probe_timeout = timeout;
     setting.receive_timeout = wait_time;
     setting.send_rate = send_rate;
+    print_option(&setting, &interface);
     let resolver: DeviceResolver = DeviceResolver::new(setting).unwrap();
     let rx = resolver.get_progress_receiver();
     let handle = thread::spawn(move || resolver.resolve());
@@ -95,6 +100,8 @@ pub fn handle_neighbor_discovery(args: &ArgMatches) {
                 if args.get_flag("json") {
                     let json_result = serde_json::to_string_pretty(&r).unwrap();
                     println!("{}", json_result);
+                }else{
+                    show_ping_result(&r);
                 }
                 match args.get_one::<PathBuf>("save") {
                     Some(file_path) => {
@@ -123,4 +130,48 @@ pub fn handle_neighbor_discovery(args: &ArgMatches) {
             output::log_with_time(&format!("Resolve Failed: {:?}", e), "ERROR");
         }
     }
+}
+
+fn print_option(setting: &AddressResolveSetting, interface: &Interface) {
+    println!();
+    // Options
+    let mut tree = Tree::new(node_label("NeighborResolve Config", None, None));
+    let mut setting_tree = Tree::new(node_label("Settings", None, None));
+    setting_tree.push(node_label("Interface", Some(interface.name.as_str()), None));
+    setting_tree.push(node_label("Protocol", Some(format!("{:?}", setting.protocol).as_str()), None));
+    setting_tree.push(node_label("Count", Some(setting.count.to_string().as_str()), None));
+    setting_tree.push(node_label("Timeout", Some(format!("{:?}", setting.probe_timeout).as_str()), None));
+    setting_tree.push(node_label("Wait Time", Some(format!("{:?}", setting.receive_timeout).as_str()), None));
+    setting_tree.push(node_label("Send Rate", Some(format!("{:?}", setting.send_rate).as_str()), None));
+    tree.push(setting_tree);
+    // Target
+    let mut target_tree = Tree::new(node_label("Target", None, None));
+    target_tree.push(node_label("IP Address", Some(setting.dst_ip.to_string().as_str()), None));
+    tree.push(target_tree);
+    println!("{}", tree);
+}
+
+fn show_ping_result(resolve_result: &DeviceResolveResult) {
+    println!();
+    let mut tree = Tree::new(node_label("NeighborResolve Result", None, None));
+    // Responses
+    let mut responses_tree = Tree::new(node_label("Responses", None, None));
+    for response in &resolve_result.results {
+        let source_ip_addr: String = if response.ip_addr.to_string() != response.host_name && !response.host_name.is_empty() {
+            format!("{}({})", response.host_name, response.ip_addr)
+        } else {
+            response.ip_addr.to_string()
+        };
+        let mut response_tree = Tree::new(node_label("Sequence", Some(response.seq.to_string().as_str()), None));
+        response_tree.push(node_label("MAC Address", Some(&response.mac_addr.address()), None));
+        response_tree.push(node_label("IP Address", Some(&source_ip_addr), None));
+        response_tree.push(node_label("Protocol", Some(format!("{:?}", response.protocol).as_str()), None));
+        response_tree.push(node_label("Received Bytes", Some(response.received_packet_size.to_string().as_str()), None));
+        response_tree.push(node_label("RTT", Some(format!("{:?}", response.rtt).as_str()), None));
+        
+        responses_tree.push(response_tree);
+    }
+    tree.push(responses_tree);
+
+    println!("{}", tree);
 }

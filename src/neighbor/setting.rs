@@ -37,7 +37,7 @@ impl Default for AddressResolveSetting {
 
 impl AddressResolveSetting {
     pub fn arp(
-        interface: Interface,
+        interface: &Interface,
         dst_ipv4_addr: Ipv4Addr,
         count: u32,
     ) -> Result<AddressResolveSetting, String> {
@@ -62,7 +62,7 @@ impl AddressResolveSetting {
         Ok(setting)
     }
     pub fn ndp(
-        interface: Interface,
+        interface: &Interface,
         dst_ipv6_addr: Ipv6Addr,
         count: u32,
     ) -> Result<AddressResolveSetting, String> {
