@@ -1,8 +1,8 @@
+use crate::protocol::Protocol;
 use netdev::Interface;
 use serde::{Deserialize, Serialize};
 use std::net::{Ipv4Addr, Ipv6Addr};
 use std::{net::IpAddr, time::Duration};
-use crate::protocol::Protocol;
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct AddressResolveSetting {

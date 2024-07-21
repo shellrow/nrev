@@ -12,7 +12,7 @@ pub fn caluculate_wait_time(rtt: Duration) -> Duration {
     let num_threads = num_cpus::get();
 
     let factor = if num_cores <= 2 || num_threads <= 4 {
-        // If the number of cores is less than or equal to 2 
+        // If the number of cores is less than or equal to 2
         // or the number of threads is less than or equal to 4
         // , increase the factor
         DEFAULT_WAIT_TIME_FACTOR * 2.0

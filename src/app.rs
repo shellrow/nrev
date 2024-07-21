@@ -1,6 +1,6 @@
-use std::sync::{Mutex, OnceLock};
-use clap::{crate_name, crate_version, crate_description};
 use crate::sys;
+use clap::{crate_description, crate_name, crate_version};
+use std::sync::{Mutex, OnceLock};
 
 // APP information
 pub const CRATE_BIN_NAME: &str = "nrev";
@@ -13,11 +13,9 @@ pub static QUIET_MODE: OnceLock<Mutex<bool>> = OnceLock::new();
 /// Check if quiet mode is enabled
 pub fn is_quiet_mode() -> bool {
     match QUIET_MODE.get() {
-        Some(mutex) => {
-            match mutex.try_lock() {
-                Ok(guard) => *guard,
-                Err(_) => false,
-            }
+        Some(mutex) => match mutex.try_lock() {
+            Ok(guard) => *guard,
+            Err(_) => false,
         },
         None => false,
     }
@@ -29,7 +27,7 @@ pub fn set_quiet_mode(enabled: bool) -> Result<(), String> {
         Ok(mut guard) => {
             *guard = enabled;
             Ok(())
-        },
+        }
         Err(_) => Err("Failed to lock mutex".to_string()),
     }
 }
@@ -58,7 +56,7 @@ impl AppCommands {
             "interfaces" => Some(AppCommands::Interfaces),
             "interface" => Some(AppCommands::Interface),
             "check" => Some(AppCommands::CheckDependencies),
-            _ => None
+            _ => None,
         }
     }
 }

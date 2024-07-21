@@ -28,7 +28,8 @@ pub fn get_vm_oui_map() -> HashMap<String, String> {
 
 pub fn get_tcp_map() -> HashMap<u16, String> {
     let mut tcp_map: HashMap<u16, String> = HashMap::new();
-    let ds_tcp_service: Vec<model::TcpService> = bincode::deserialize(config::TCP_SERVICE_BIN).unwrap_or(vec![]);
+    let ds_tcp_service: Vec<model::TcpService> =
+        bincode::deserialize(config::TCP_SERVICE_BIN).unwrap_or(vec![]);
     for port in ds_tcp_service {
         tcp_map.insert(port.port, port.service_name);
     }
@@ -41,7 +42,8 @@ pub fn get_default_ports() -> Vec<u16> {
 }
 
 pub fn get_wellknown_ports() -> Vec<u16> {
-    let wellknown_ports: Vec<u16> = bincode::deserialize(config::WELLKNOWN_PORTS_BIN).unwrap_or(vec![]);
+    let wellknown_ports: Vec<u16> =
+        bincode::deserialize(config::WELLKNOWN_PORTS_BIN).unwrap_or(vec![]);
     wellknown_ports
 }
 
@@ -75,7 +77,8 @@ pub fn get_subdomain() -> Vec<String> {
 }
 
 pub fn get_os_family_fingerprints() -> Vec<model::OsFamilyFingerprint> {
-    let ds_os_fingerprints: Vec<model::OsFamilyFingerprint> = bincode::deserialize(config::OS_FAMILY_FINGERPRINT_BIN).unwrap_or(vec![]);
+    let ds_os_fingerprints: Vec<model::OsFamilyFingerprint> =
+        bincode::deserialize(config::OS_FAMILY_FINGERPRINT_BIN).unwrap_or(vec![]);
     ds_os_fingerprints
 }
 
@@ -85,7 +88,9 @@ pub fn get_os_family_list() -> Vec<String> {
 }
 
 pub fn is_vm_fingerprint(fingerprint: &model::OsFingerprint) -> bool {
-    if fingerprint.os_family == "Player".to_string() && fingerprint.device_type == "specialized".to_string() {
+    if fingerprint.os_family == "Player".to_string()
+        && fingerprint.device_type == "specialized".to_string()
+    {
         return true;
     }
     false
@@ -239,7 +244,11 @@ pub fn verify_os_family_fingerprint(fingerprint: &PacketFrame) -> model::OsFamil
     };
 }
 
-pub fn get_os_family(fingerprint: &PacketFrame, os_family_list: &Vec<String>, os_family_fingerprints: &Vec<model::OsFamilyFingerprint>) -> model::OsFamilyFingerprint {
+pub fn get_os_family(
+    fingerprint: &PacketFrame,
+    os_family_list: &Vec<String>,
+    os_family_fingerprints: &Vec<model::OsFamilyFingerprint>,
+) -> model::OsFamilyFingerprint {
     let in_vm: bool = if let Some(ether_header) = &fingerprint.ethernet_header {
         in_vm_network(ether_header.clone())
     } else {
@@ -383,7 +392,7 @@ pub fn get_fingerprint_map(fingerprints: &Vec<PacketFrame>) -> HashMap<IpAddr, S
         let os_fingerprint = get_os_family(&f, &os_family_list, &os_family_fingerprints);
         if let Some(ipv4_header) = &f.ipv4_header {
             fingerprint_map.insert(IpAddr::V4(ipv4_header.source), os_fingerprint.os_family);
-        }else{
+        } else {
             if let Some(ipv6_header) = &f.ipv6_header {
                 fingerprint_map.insert(IpAddr::V6(ipv6_header.source), os_fingerprint.os_family);
             }

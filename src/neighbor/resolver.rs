@@ -1,19 +1,19 @@
-use std::net::IpAddr;
-use std::sync::mpsc::{channel, Receiver, Sender};
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant};
 use netdev::interface::Interface;
 use nex::datalink::{RawReceiver, RawSender};
 use nex::packet::arp::ArpOperation;
 use nex::packet::frame::{Frame, ParseOption};
 use nex::packet::icmpv6::Icmpv6Type;
+use std::net::IpAddr;
+use std::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
 
+use super::result::DeviceResolveResult;
+use super::setting::AddressResolveSetting;
 use crate::host::NodeType;
 use crate::packet::setting::PacketBuildSetting;
 use crate::probe::{ProbeResult, ProbeStatus};
 use crate::protocol::Protocol;
-use super::result::DeviceResolveResult;
-use super::setting::AddressResolveSetting;
 
 /// Device Resolver structure.
 ///
@@ -116,13 +116,14 @@ pub(crate) fn run_arp(
     result.start_time = crate::sys::time::get_sysdate();
     let start_time = Instant::now();
     let mut responses: Vec<ProbeResult> = Vec::new();
-    let packet_setting: PacketBuildSetting = PacketBuildSetting::from_address_resolve_settomg(setting);
+    let packet_setting: PacketBuildSetting =
+        PacketBuildSetting::from_address_resolve_settomg(setting);
     let arp_packet: Vec<u8> = crate::packet::arp::build_arp_packet(packet_setting.clone());
     for seq in 1..setting.count + 1 {
         let send_time = Instant::now();
         match tx.send(&arp_packet) {
             Some(_) => {}
-            None => {},
+            None => {}
         }
         loop {
             match rx.next() {
@@ -135,7 +136,10 @@ pub(crate) fn run_arp(
                         if let Some(_ethernet_header) = &datalink_layer.ethernet {
                             // ARP
                             if let Some(arp_header) = &datalink_layer.arp {
-                                if IpAddr::V4(arp_header.sender_proto_addr) != setting.dst_ip || IpAddr::V4(arp_header.target_proto_addr) != packet_setting.src_ip {
+                                if IpAddr::V4(arp_header.sender_proto_addr) != setting.dst_ip
+                                    || IpAddr::V4(arp_header.target_proto_addr)
+                                        != packet_setting.src_ip
+                                {
                                     continue;
                                 }
                                 if arp_header.operation == ArpOperation::Reply {
@@ -239,13 +243,14 @@ pub(crate) fn run_ndp(
     result.start_time = crate::sys::time::get_sysdate();
     let start_time = Instant::now();
     let mut responses: Vec<ProbeResult> = Vec::new();
-    let packet_setting: PacketBuildSetting = PacketBuildSetting::from_address_resolve_settomg(setting);
+    let packet_setting: PacketBuildSetting =
+        PacketBuildSetting::from_address_resolve_settomg(setting);
     let ndp_packet: Vec<u8> = crate::packet::ndp::build_ndp_packet(packet_setting.clone());
     for seq in 1..setting.count + 1 {
         let send_time = Instant::now();
         match tx.send(&ndp_packet) {
             Some(_) => {}
-            None => {},
+            None => {}
         }
         loop {
             match rx.next() {
@@ -259,7 +264,10 @@ pub(crate) fn run_ndp(
                             if let Some(ip_layer) = &frame.ip {
                                 // IPv6
                                 if let Some(ipv6_header) = &ip_layer.ipv6 {
-                                    if IpAddr::V6(ipv6_header.source) != setting.dst_ip || IpAddr::V6(ipv6_header.destination) != packet_setting.src_ip {
+                                    if IpAddr::V6(ipv6_header.source) != setting.dst_ip
+                                        || IpAddr::V6(ipv6_header.destination)
+                                            != packet_setting.src_ip
+                                    {
                                         continue;
                                     }
                                     // ICMPv6

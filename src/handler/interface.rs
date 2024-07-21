@@ -1,11 +1,11 @@
 use std::path::PathBuf;
 
+use crate::output;
+use crate::util::tree::node_label;
 use clap::ArgMatches;
 use netdev::mac::MacAddr;
 use netdev::Interface;
 use termtree::Tree;
-use crate::util::tree::node_label;
-use crate::output;
 
 pub fn show_default_interface(args: &ArgMatches) {
     let iface: Interface = match netdev::get_default_interface() {
@@ -18,21 +18,24 @@ pub fn show_default_interface(args: &ArgMatches) {
     if args.get_flag("json") {
         let json_result = serde_json::to_string_pretty(&iface).unwrap();
         println!("{}", json_result);
-    }else {
+    } else {
         show_interface_tree(&iface);
     }
     match args.get_one::<PathBuf>("save") {
         Some(file_path) => {
             match crate::fs::save_text(file_path, serde_json::to_string_pretty(&iface).unwrap()) {
                 Ok(_) => {
-                    output::log_with_time(&format!("Saved to {}", file_path.to_string_lossy()), "INFO");
-                },
+                    output::log_with_time(
+                        &format!("Saved to {}", file_path.to_string_lossy()),
+                        "INFO",
+                    );
+                }
                 Err(e) => {
                     output::log_with_time(&format!("Failed to save: {}", e), "ERROR");
-                },
+                }
             }
-        },
-        None => {},
+        }
+        None => {}
     }
 }
 
@@ -41,21 +44,27 @@ pub fn show_interfaces(args: &ArgMatches) {
     if args.get_flag("json") {
         let json_result = serde_json::to_string_pretty(&interfaces).unwrap();
         println!("{}", json_result);
-    }else {
+    } else {
         show_interfaces_tree(&interfaces);
     }
     match args.get_one::<PathBuf>("save") {
         Some(file_path) => {
-            match crate::fs::save_text(file_path, serde_json::to_string_pretty(&interfaces).unwrap()) {
+            match crate::fs::save_text(
+                file_path,
+                serde_json::to_string_pretty(&interfaces).unwrap(),
+            ) {
                 Ok(_) => {
-                    output::log_with_time(&format!("Saved to {}", file_path.to_string_lossy()), "INFO");
-                },
+                    output::log_with_time(
+                        &format!("Saved to {}", file_path.to_string_lossy()),
+                        "INFO",
+                    );
+                }
                 Err(e) => {
                     output::log_with_time(&format!("Failed to save: {}", e), "ERROR");
-                },
+                }
             }
-        },
-        None => {},
+        }
+        None => {}
     }
 }
 
@@ -70,7 +79,11 @@ pub fn show_interface_tree(iface: &Interface) {
         tree.push(node_label("Description", Some(desc), None));
     }
     tree.push(node_label("Type", Some(&iface.if_type.name()), None));
-    tree.push(node_label("MAC", Some(&iface.mac_addr.unwrap_or(MacAddr::zero()).to_string()), None));
+    tree.push(node_label(
+        "MAC",
+        Some(&iface.mac_addr.unwrap_or(MacAddr::zero()).to_string()),
+        None,
+    ));
     let mut ipv4_tree = Tree::new(node_label("IPv4 Addresses", None, None));
     for ipv4 in &iface.ipv4 {
         ipv4_tree.push(node_label(&ipv4.addr.to_string(), None, None));
@@ -122,7 +135,11 @@ pub fn show_interfaces_tree(interfaces: &Vec<Interface>) {
             iface_tree.push(node_label("Description", Some(desc), None));
         }
         iface_tree.push(node_label("Type", Some(&iface.if_type.name()), None));
-        iface_tree.push(node_label("MAC", Some(&iface.mac_addr.unwrap_or(MacAddr::zero()).to_string()), None));
+        iface_tree.push(node_label(
+            "MAC",
+            Some(&iface.mac_addr.unwrap_or(MacAddr::zero()).to_string()),
+            None,
+        ));
         let mut ipv4_tree = Tree::new(node_label("IPv4 Addresses", None, None));
         for ipv4 in &iface.ipv4 {
             ipv4_tree.push(node_label(&ipv4.addr.to_string(), None, None));
