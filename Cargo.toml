@@ -13,31 +13,33 @@ categories = ["network-programming"]
 license = "MIT"
 
 [dependencies]
+anyhow = { version = "1" }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-netdev = { version = "0.30", features = ["serde"] }
-nex = { version = "0.18", features = ["serde"] }
-nex-socket = { version = "0.18", features = ["tls"] }
-privilege = "0.3"
-async-io = "2.3"
-futures-lite = "2.3"
+netdev = { version = "0.34", features = ["serde"] }
+nex = { version = "0.19.1", features = ["serde"] }
 futures = {version = "0.3", features = ["executor", "thread-pool"]}
+rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
+rustls-native-certs = "0.7"
+rustls-pemfile = "2.1"
+rustls-pki-types = "1.8"
 tokio = { version = "1" }
+tokio-rustls = { version = "0.26", default-features = false, features = ["ring"]} 
 hickory-resolver = { version = "0.24" }
 chrono = { version = "0.4", features = ["serde"] }
-uuid = { version = "1.3", features = ["v4","v5","fast-rng","macro-diagnostics"] }
+uuid = { version = "1.16", features = ["v4","v5","fast-rng","macro-diagnostics"] }
 bincode = "1.3"
 phf = { version = "0.11", features = ["macros"] }
 rand = "0.8"
-clap = { version = "4.4", features = ["cargo"] }
-indicatif = "0.16"
-inquire = "0.6"
-ipnet = "2.7"
+clap = { version = "4.5", features = ["cargo"] }
+indicatif = "0.17"
+inquire = "0.7"
+ipnet = "2.11"
 num_cpus = "1.16"
 termtree = "0.5"
 
 [target.'cfg(windows)'.dependencies]
-winreg = "0.52"
+winreg = "0.55"
 
 # The profile that 'cargo dist' will build with
 [profile.dist]
