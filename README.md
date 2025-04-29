@@ -32,12 +32,6 @@ curl --proto '=https' --tlsv1.2 -LsSf https://github.com/shellrow/nrev/releases/
 irm https://github.com/shellrow/nrev/releases/latest/download/nrev-installer.ps1 | iex
 ```
 
-### Install prebuilt binaries via Homebrew
-
-```sh
-brew install shellrow/tap-nrev/nrev
-```
-
 ### From Releases
 You can download archives of precompiled binaries from the [releases](https://github.com/shellrow/nrev/releases) .
 
