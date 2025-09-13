@@ -1,22 +1,38 @@
-pub const DEFAULT_LOCAL_TCP_PORT: u16 = 44322;
-pub const DEFAULT_LOCAL_UDP_PORT: u16 = 53445;
-pub const DEFAULT_BASE_TARGET_UDP_PORT: u16 = 33435;
-pub const DEFAULT_HOP_LIMIT: u8 = 64;
-pub const DEFAULT_PING_COUNT: u32 = 4;
-pub const DEFAULT_HOSTS_CONCURRENCY: usize = 50;
-pub const DEFAULT_PORTS_CONCURRENCY: usize = 100;
-pub const PCAP_WAIT_TIME_MILLIS: u64 = 10;
+use std::path::PathBuf;
 
-// Database
-pub const DEFAULT_PORTS_BIN: &[u8] = include_bytes!("../../resources/ndb-default-ports.bin");
-pub const HTTP_PORTS_BIN: &[u8] = include_bytes!("../../resources/ndb-http-ports.bin");
-pub const HTTPS_PORTS_BIN: &[u8] = include_bytes!("../../resources/ndb-https-ports.bin");
-pub const OS_FAMILY_FINGERPRINT_BIN: &[u8] =
-    include_bytes!("../../resources/ndb-os-family-fingerprint.bin");
-pub const OS_TTL_BIN: &[u8] = include_bytes!("../../resources/ndb-os-ttl.bin");
-pub const OS_FAMILY_BIN: &[u8] = include_bytes!("../../resources/ndb-os-family.bin");
-pub const OUI_BIN: &[u8] = include_bytes!("../../resources/ndb-oui.bin");
-pub const OUI_VM_BIN: &[u8] = include_bytes!("../../resources/ndb-oui-vm.bin");
-pub const SUBDOMAIN_BIN: &[u8] = include_bytes!("../../resources/ndb-subdomain.bin");
-pub const TCP_SERVICE_BIN: &[u8] = include_bytes!("../../resources/ndb-tcp-service.bin");
-pub const WELLKNOWN_PORTS_BIN: &[u8] = include_bytes!("../../resources/ndb-wellknown-ports.bin");
+pub mod db;
+pub mod default;
+
+/// User configuration directory name
+pub const USER_CONFIG_DIR_NAME: &str = ".nrev";
+
+/// Get user configuration directory path, create it if not exists
+pub fn get_config_dir_path() -> Option<PathBuf> {
+    match home::home_dir() {
+        Some(mut path) => {
+            path.push(USER_CONFIG_DIR_NAME);
+            if !path.exists() {
+                match std::fs::create_dir_all(&path) {
+                    Ok(_) => {}
+                    Err(e) => {
+                        tracing::error!("Failed to create config dir: {:?}", e);
+                        return None;
+                    }
+                }
+            }
+            Some(path)
+        }
+        None => None,
+    }
+}
+
+/// Get user configuration file path
+pub fn get_user_file_path(file_name: &str) -> Option<PathBuf> {
+    match get_config_dir_path() {
+        Some(mut path) => {
+            path.push(file_name);
+            Some(path)
+        }
+        None => None,
+    }
+}

@@ -1,100 +1,174 @@
-use crate::packet::setting::PacketBuildSetting;
-use nex::packet::ethernet::EtherType;
-use nex::packet::ip::IpNextLevelProtocol;
-use nex::util::packet_builder::{
-    builder::PacketBuilder, ethernet::EthernetPacketBuilder, ipv4::Ipv4PacketBuilder,
-    ipv6::Ipv6PacketBuilder, udp::UdpPacketBuilder,
+use bytes::Bytes;
+use netdev::{Interface, MacAddr};
+use nex::packet::builder::{
+    ethernet::EthernetPacketBuilder, ipv4::Ipv4PacketBuilder, ipv6::Ipv6PacketBuilder,
+    udp::UdpPacketBuilder,
 };
-use std::net::{IpAddr, SocketAddr};
+use nex::packet::ethernet::EtherType;
+use nex::packet::ip::IpNextProtocol;
+use nex::packet::ipv4::Ipv4Flags;
+use nex::packet::packet::Packet;
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+
+use crate::config::default::DEFAULT_LOCAL_UDP_PORT;
+use crate::trace::TraceSetting;
 
 /// Build UDP packet
-pub fn build_udp_packet(setting: PacketBuildSetting) -> Vec<u8> {
-    let mut packet_builder = PacketBuilder::new();
+pub fn build_udp_packet(interface: &Interface, dst_ip: IpAddr, dst_port: u16, is_ip_packet: bool) -> Vec<u8> {
+    let src_mac = interface.mac_addr.unwrap_or(MacAddr::zero());
+    let dst_mac = match &interface.gateway {
+        Some(gateway) => gateway.mac_addr,
+        None => MacAddr::zero(),
+    };
+    let src_ipv4 = crate::interface::get_interface_ipv4(interface).unwrap_or(Ipv4Addr::UNSPECIFIED);
+    let src_global_ipv6 =
+        crate::interface::get_interface_global_ipv6(interface).unwrap_or(Ipv6Addr::UNSPECIFIED);
+    let src_local_ipv6 =
+        crate::interface::get_interface_local_ipv6(interface).unwrap_or(Ipv6Addr::UNSPECIFIED);
 
-    // Ethernet Header
-    let ethernet_packet_builder = EthernetPacketBuilder {
-        src_mac: setting.src_mac,
-        dst_mac: setting.dst_mac,
-        ether_type: match setting.dst_ip {
-            IpAddr::V4(_) => EtherType::Ipv4,
-            IpAddr::V6(_) => EtherType::Ipv6,
+    let src_ip: IpAddr = match dst_ip {
+        IpAddr::V4(_) => {
+            IpAddr::V4(src_ipv4)
+        },
+        IpAddr::V6(_) => {
+            if nex::net::ip::is_global_ip(&dst_ip) {
+                IpAddr::V6(src_global_ipv6)
+            } else {
+                IpAddr::V6(src_local_ipv6)
+            }
         },
     };
-    packet_builder.set_ethernet(ethernet_packet_builder);
 
-    // IP Header
-    match setting.dst_ip {
-        IpAddr::V4(dst_ipv4) => match setting.src_ip {
-            IpAddr::V4(src_ipv4) => {
-                let mut ipv4_packet_builder =
-                    Ipv4PacketBuilder::new(src_ipv4, dst_ipv4, IpNextLevelProtocol::Udp);
-                ipv4_packet_builder.ttl = Some(setting.hop_limit);
-                packet_builder.set_ipv4(ipv4_packet_builder);
-            }
-            IpAddr::V6(_) => {}
-        },
-        IpAddr::V6(dst_ipv6) => match setting.src_ip {
-            IpAddr::V4(_) => {}
-            IpAddr::V6(src_ipv4) => {
-                let mut ipv6_packet_builder =
-                    Ipv6PacketBuilder::new(src_ipv4, dst_ipv6, IpNextLevelProtocol::Udp);
-                ipv6_packet_builder.hop_limit = Some(setting.hop_limit);
-                packet_builder.set_ipv6(ipv6_packet_builder);
-            }
-        },
-    }
-    // UDP Header
-    match setting.dst_ip {
-        IpAddr::V4(dst_ipv4) => match setting.src_ip {
-            IpAddr::V4(src_ipv4) => {
-                let udp_packet_builder = UdpPacketBuilder::new(
-                    SocketAddr::new(IpAddr::V4(src_ipv4), setting.src_port),
-                    SocketAddr::new(IpAddr::V4(dst_ipv4), setting.dst_port),
-                );
-                packet_builder.set_udp(udp_packet_builder);
-            }
-            IpAddr::V6(_) => {}
-        },
-        IpAddr::V6(dst_ipv6) => match setting.src_ip {
-            IpAddr::V4(_) => {}
-            IpAddr::V6(src_ipv6) => {
-                let udp_packet_builder = UdpPacketBuilder::new(
-                    SocketAddr::new(IpAddr::V6(src_ipv6), setting.src_port),
-                    SocketAddr::new(IpAddr::V6(dst_ipv6), setting.dst_port),
-                );
-                packet_builder.set_udp(udp_packet_builder);
-            }
-        },
-    }
-    if setting.ip_packet {
-        packet_builder.ip_packet()
+    let udp_packet = UdpPacketBuilder::new(src_ip, dst_ip)
+        .source(DEFAULT_LOCAL_UDP_PORT)
+        .destination(dst_port)
+        .build();
+
+    let ip_packet: Bytes = match (src_ip, dst_ip) {
+        (IpAddr::V4(src), IpAddr::V4(dst)) => Ipv4PacketBuilder::new()
+            .source(src)
+            .destination(dst)
+            .protocol(IpNextProtocol::Udp)
+            .flags(Ipv4Flags::DontFragment)
+            .payload(udp_packet.to_bytes())
+            .build()
+            .to_bytes(),
+        (IpAddr::V6(src), IpAddr::V6(dst)) => Ipv6PacketBuilder::new()
+            .source(src)
+            .destination(dst)
+            .next_header(IpNextProtocol::Udp)
+            .payload(udp_packet.to_bytes())
+            .build()
+            .to_bytes(),
+        _ => panic!("Source and destination IP version mismatch"),
+    };
+
+    let ethernet_packet = EthernetPacketBuilder::new()
+        .source(if is_ip_packet {
+            MacAddr::zero()
+        } else {
+            src_mac
+        })
+        .destination(if is_ip_packet {
+            MacAddr::zero()
+        } else {
+            dst_mac
+        })
+        .ethertype(match dst_ip {
+            IpAddr::V4(_) => EtherType::Ipv4,
+            IpAddr::V6(_) => EtherType::Ipv6,
+        })
+        .payload(ip_packet)
+        .build();
+
+    let packet: Bytes = if is_ip_packet {
+        ethernet_packet.ip_packet().unwrap()
     } else {
-        packet_builder.packet()
-    }
+        ethernet_packet.to_bytes()
+    };
+
+    packet.to_vec()
 }
 
-pub fn build_ip_next_udp_packet(setting: PacketBuildSetting) -> Vec<u8> {
-    // UDP Header
-    match setting.dst_ip {
-        IpAddr::V4(dst_ipv4) => match setting.src_ip {
-            IpAddr::V4(src_ipv4) => {
-                let udp_packet_builder = UdpPacketBuilder::new(
-                    SocketAddr::new(IpAddr::V4(src_ipv4), setting.src_port),
-                    SocketAddr::new(IpAddr::V4(dst_ipv4), setting.dst_port),
-                );
-                udp_packet_builder.build()
-            }
-            IpAddr::V6(_) => Vec::new(),
+/// Build UDP packet for traceroute with specific TTL
+pub fn build_udp_trace_packet(interface: &Interface, trace_setting: &TraceSetting, seq_ttl: u8) -> Vec<u8> {
+    let src_mac = interface.mac_addr.unwrap_or(MacAddr::zero());
+    let dst_mac = match &interface.gateway {
+        Some(gateway) => gateway.mac_addr,
+        None => MacAddr::zero(),
+    };
+    let src_ipv4 = crate::interface::get_interface_ipv4(interface).unwrap_or(Ipv4Addr::UNSPECIFIED);
+    let src_global_ipv6 =
+        crate::interface::get_interface_global_ipv6(interface).unwrap_or(Ipv6Addr::UNSPECIFIED);
+    let src_local_ipv6 =
+        crate::interface::get_interface_local_ipv6(interface).unwrap_or(Ipv6Addr::UNSPECIFIED);
+
+    let src_ip: IpAddr = match trace_setting.dst_ip {
+        IpAddr::V4(_) => {
+            IpAddr::V4(src_ipv4)
         },
-        IpAddr::V6(dst_ipv6) => match setting.src_ip {
-            IpAddr::V4(_) => Vec::new(),
-            IpAddr::V6(src_ipv6) => {
-                let udp_packet_builder = UdpPacketBuilder::new(
-                    SocketAddr::new(IpAddr::V6(src_ipv6), setting.src_port),
-                    SocketAddr::new(IpAddr::V6(dst_ipv6), setting.dst_port),
-                );
-                udp_packet_builder.build()
+        IpAddr::V6(_) => {
+            if nex::net::ip::is_global_ip(&trace_setting.dst_ip) {
+                IpAddr::V6(src_global_ipv6)
+            } else {
+                IpAddr::V6(src_local_ipv6)
             }
         },
-    }
+    };
+
+    let dst_port = trace_setting.dst_port.unwrap_or(DEFAULT_LOCAL_UDP_PORT);
+
+    let is_ip_packet = interface.is_tun() || interface.is_loopback();
+
+    let udp_packet = UdpPacketBuilder::new(src_ip, trace_setting.dst_ip)
+        .source(DEFAULT_LOCAL_UDP_PORT)
+        .destination(dst_port)
+        .build();
+
+    let ip_packet: Bytes = match (src_ip, trace_setting.dst_ip) {
+        (IpAddr::V4(src), IpAddr::V4(dst)) => Ipv4PacketBuilder::new()
+            .source(src)
+            .destination(dst)
+            .protocol(IpNextProtocol::Udp)
+            .flags(Ipv4Flags::DontFragment)
+            .ttl(seq_ttl)
+            .payload(udp_packet.to_bytes())
+            .build()
+            .to_bytes(),
+        (IpAddr::V6(src), IpAddr::V6(dst)) => Ipv6PacketBuilder::new()
+            .source(src)
+            .destination(dst)
+            .next_header(IpNextProtocol::Udp)
+            .hop_limit(seq_ttl)
+            .payload(udp_packet.to_bytes())
+            .build()
+            .to_bytes(),
+        _ => panic!("Source and destination IP version mismatch"),
+    };
+
+    let ethernet_packet = EthernetPacketBuilder::new()
+        .source(if is_ip_packet {
+            MacAddr::zero()
+        } else {
+            src_mac
+        })
+        .destination(if is_ip_packet {
+            MacAddr::zero()
+        } else {
+            dst_mac
+        })
+        .ethertype(match trace_setting.dst_ip {
+            IpAddr::V4(_) => EtherType::Ipv4,
+            IpAddr::V6(_) => EtherType::Ipv6,
+        })
+        .payload(ip_packet)
+        .build();
+
+    let packet: Bytes = if is_ip_packet {
+        ethernet_packet.ip_packet().unwrap()
+    } else {
+        ethernet_packet.to_bytes()
+    };
+
+    packet.to_vec()
 }
