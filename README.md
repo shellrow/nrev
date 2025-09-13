@@ -2,8 +2,8 @@
 [crates-url]: https://crates.io/crates/nrev
 
 # nrev [![Crates.io][crates-badge]][crates-url]
-Simple and Fast Network Revealer/Mapper. Written in Rust.  
-Designed to be used in network mapping, probe, and security tests.
+Cross-platform Network Mapper.  
+Designed to be used in network scan, mapping and probes.
 
 ## Features
 - Port Scan
@@ -12,7 +12,6 @@ Designed to be used in network mapping, probe, and security tests.
 - Traceroute
 - Neighbor Discovery
 - Subdomain scan
-- Show Network Interfaces
 
 ## Supported platforms
 - Linux
@@ -47,64 +46,60 @@ cargo binstall nrev
 ```
 
 ## Basic Usage
-### Default Port Scan 
-To scan the default 1000 ports on a target, simply specify the target
+### Port Scan Example
+To scan the default 1000 ports on a target, simply specify the target (-s for service detection, -o for OS detection)
 ```
-nrev --target scanme.nmap.org
+nrev port yourcorpone.com -s -o
+nrev port 192.168.1.10 -s -o
 ```
 
-Sub-commands and Options
+### Sub-commands and Options
 ```
-Usage: nrev [OPTIONS] [COMMAND]
+Usage: nrev [OPTIONS] <COMMAND>
 
 Commands:
-  port        Scan port. nrev port --help for more information
-  host        Scan host in specified network or host-list. nrev host --help for more information
-  ping        Ping to specified host. nrev ping --help for more information
-  trace       Traceroute to specified host. nrev trace --help for more information
-  subdomain   Find subdomains. nrev subdomain --help for more information
-  nei         Resolve IP address to MAC address
-  interfaces  Show network interfaces
-  interface   Show default network interface
-  check       Check dependencies (Windows only)
-  help        Print this message or the help of the given subcommand(s)
+  port       Scan ports on the target(s) (TCP/QUIC)
+  host       Discover alive hosts (ICMP/UDP/TCP etc.)
+  ping       Simple ping (ICMP/UDP/TCP)
+  trace      Traceroute (UDP)
+  nei        Neighbor discovery (ARP/NDP)
+  domain     Subdomain enumeration
+  interface  Show network interface(s)
+  help       Print this message or the help of the given subcommand(s)
 
 Options:
-  -t, --target <target>             Specify the target host. IP address or Hostname
-  -i, --interface <interface_name>  Specify the network interface
-      --noping                      Disable initial ping
-  -F, --full                        Scan all ports (1-65535)
-  -j, --json                        Displays results in JSON format.
-  -o, --save <file_path>            Save scan result in JSON format - Example: -o result.json
-  -h, --help                        Print help
-  -V, --version                     Print version
+      --log-level <LOG_LEVEL>  Global log level [default: info] [possible values: error, warn, info, debug, trace]
+      --log-file               Log to file (in addition to stdout)
+      --log-file-path <FILE>   Log file path (default: ~/.nrev/logs/nrev.log)
+      --quiet                  Suppress all log output (only errors are shown)
+  -o, --output <FILE>          Save output to file (JSON format)
+      --no-stdout              Suppress stdout console output (only save to file if -o is set)
+  -h, --help                   Print help
+  -V, --version                Print version
 ```
+
+See `nrev <sub-command> -h` for more detail.
 
 ## Examples
 ### Port scan
-Scan default 1000 ports
+Scan default 1000 ports and enable service and OS detection for open ports
 ```
-nrev port scanme.nmap.org
+nrev port yourcorpone.com -s -o
 ```
 
 Specify the ports
 ```
-nrev port scanme.nmap.org --ports 22,80,443,5000,8080
+nrev port yourcorpone.com --ports 22,80,443,5000,8080
 ```
 
 Specify the range
 ```
-nrev port scanme.nmap.org --range 20-100
-```
-
-Scan well-known ports
-```
-nrev port scanme.nmap.org --wellknown
+nrev port yourcorpone.com --ports 20-100
 ```
 
 #### Settings
-By default, nrev determines the waiting time until packet reception (before concluding the scan task) based on the results of the initial PING.  
-The initial PING is executed in the order of ICMP Ping, UDP Ping, TCP Ping (on port 80), and if successful, proceeds to the next scan task.  
+By default, nrev determines the connection timeout or waiting time until packet reception (before concluding the scan task) based on the results of the initial PING.  
+The initial PING is executed in the order of ICMP Ping, UDP Ping, TCP Ping, and if successful, proceeds to the next scan task.  
 If all PING attempts fail, nrev exits before executing the scan. This step can be skipped by setting the `--noping` flag.  
 For other settings, please refer to `nrev port -h` for details.
 
@@ -113,45 +108,46 @@ ICMP Host scan
 ```
 nrev host 192.168.1.0/24
 ```
+
 ```
-nrev host <path-to-host-list>
+nrev host /path/to/list/hostlist.txt
 ```
 
 TCP Host scan
 ```
-nrev host 192.168.1.0/24 -P TCP --port 80
+nrev host 192.168.1.0/24 --proto tcp --ports 80
 ```
 
 ### Ping 
 Default ICMP Ping
 ```
-nrev ping 1.1.1.1
+nrev ping 1.1.1.1 -c 4
 ```
 
 UDP Ping
 ```
-nrev ping 1.1.1.1 -P UDP
+nrev ping 1.1.1.1 --proto udp
 ```
 
 TCP Ping
 ```
-nrev ping 1.1.1.1:443 -P TCP
+nrev ping 1.1.1.1 --proto tcp --port 80
 ```
 
 ### Traceroute
-TCP Ping
+UDP Trace
 ```
 nrev trace 8.8.8.8
 ```
 
 You can specify the interval in milliseconds for faster trace.
 ```
-nrev trace 8.8.8.8 --rate 500
+nrev trace 8.8.8.8 --interval-ms 500
 ```
 
 ### Subdomain scan
 ```
-nrev subdomain google.com
+nrev subdomain yourcorpone.com --wordlist /path/to/wordlist/top-1000.txt
 ```
 
 ### Neighbor (ARP/NDP)
@@ -161,7 +157,7 @@ nrev nei 192.168.1.1
 
 ### Specify the network interface
 ```
-nrev -i tun0 port 10.10.11.14
+nrev port 10.10.11.14 --interface tun0
 ```
 
 ## Privileges
