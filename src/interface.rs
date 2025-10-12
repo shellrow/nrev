@@ -1,5 +1,5 @@
-use netdev::interface::Interface;
-use netdev::mac::MacAddr;
+use netdev::Interface;
+use netdev::MacAddr;
 use std::{
     collections::{HashMap, HashSet},
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
