@@ -1,6 +1,6 @@
 [package]
 name = "nrev"
-version = "0.5.0"
+version = "0.5.1"
 edition = "2024"
 authors = ["shellrow <shellrow@foctal.com>"]
 description = "Cross-platform Network Mapper"
@@ -19,7 +19,7 @@ tracing-subscriber = { version = "0.3", features = ["time", "chrono"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 bytes = "1"
-netdev = { version = "0.37", features = ["serde"] }
+netdev = { version = "0.38", features = ["serde"] }
 nex = { version = "0.23", features = ["serde"] }
 futures = {version = "0.3", features = ["executor", "thread-pool"]}
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
