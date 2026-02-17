@@ -14,7 +14,12 @@ use crate::config::default::DEFAULT_LOCAL_UDP_PORT;
 use crate::trace::TraceSetting;
 
 /// Build UDP packet
-pub fn build_udp_packet(interface: &Interface, dst_ip: IpAddr, dst_port: u16, is_ip_packet: bool) -> Vec<u8> {
+pub fn build_udp_packet(
+    interface: &Interface,
+    dst_ip: IpAddr,
+    dst_port: u16,
+    is_ip_packet: bool,
+) -> Vec<u8> {
     let src_mac = interface.mac_addr.unwrap_or(MacAddr::zero());
     let dst_mac = match &interface.gateway {
         Some(gateway) => gateway.mac_addr,
@@ -27,16 +32,14 @@ pub fn build_udp_packet(interface: &Interface, dst_ip: IpAddr, dst_port: u16, is
         crate::interface::get_interface_local_ipv6(interface).unwrap_or(Ipv6Addr::UNSPECIFIED);
 
     let src_ip: IpAddr = match dst_ip {
-        IpAddr::V4(_) => {
-            IpAddr::V4(src_ipv4)
-        },
+        IpAddr::V4(_) => IpAddr::V4(src_ipv4),
         IpAddr::V6(_) => {
             if nex::net::ip::is_global_ip(&dst_ip) {
                 IpAddr::V6(src_global_ipv6)
             } else {
                 IpAddr::V6(src_local_ipv6)
             }
-        },
+        }
     };
 
     let udp_packet = UdpPacketBuilder::new(src_ip, dst_ip)
@@ -91,7 +94,11 @@ pub fn build_udp_packet(interface: &Interface, dst_ip: IpAddr, dst_port: u16, is
 }
 
 /// Build UDP packet for traceroute with specific TTL
-pub fn build_udp_trace_packet(interface: &Interface, trace_setting: &TraceSetting, seq_ttl: u8) -> Vec<u8> {
+pub fn build_udp_trace_packet(
+    interface: &Interface,
+    trace_setting: &TraceSetting,
+    seq_ttl: u8,
+) -> Vec<u8> {
     let src_mac = interface.mac_addr.unwrap_or(MacAddr::zero());
     let dst_mac = match &interface.gateway {
         Some(gateway) => gateway.mac_addr,
@@ -104,16 +111,14 @@ pub fn build_udp_trace_packet(interface: &Interface, trace_setting: &TraceSettin
         crate::interface::get_interface_local_ipv6(interface).unwrap_or(Ipv6Addr::UNSPECIFIED);
 
     let src_ip: IpAddr = match trace_setting.dst_ip {
-        IpAddr::V4(_) => {
-            IpAddr::V4(src_ipv4)
-        },
+        IpAddr::V4(_) => IpAddr::V4(src_ipv4),
         IpAddr::V6(_) => {
             if nex::net::ip::is_global_ip(&trace_setting.dst_ip) {
                 IpAddr::V6(src_global_ipv6)
             } else {
                 IpAddr::V6(src_local_ipv6)
             }
-        },
+        }
     };
 
     let dst_port = trace_setting.dst_port.unwrap_or(DEFAULT_LOCAL_UDP_PORT);

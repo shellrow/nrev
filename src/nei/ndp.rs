@@ -1,17 +1,24 @@
+use crate::nei::NeighborDiscoveryResult;
 use anyhow::Result;
+use futures::future::poll_fn;
+use futures::stream::StreamExt;
 use netdev::Interface;
+use nex::datalink::async_io::{AsyncChannel, async_channel};
 use nex::packet::{
     frame::{Frame, ParseOption},
     icmpv6::Icmpv6Type,
 };
-use std::{net::{IpAddr, Ipv6Addr}, time::{Duration, Instant}};
-use futures::stream::StreamExt;
-use futures::future::poll_fn;
-use nex::datalink::async_io::{async_channel, AsyncChannel};
-use crate::nei::NeighborDiscoveryResult;
+use std::{
+    net::{IpAddr, Ipv6Addr},
+    time::{Duration, Instant},
+};
 
 /// Send an NDP (Neighbor Discovery Protocol) request to the specified IPv6 address on the given interface and wait for a reply.
-pub async fn send_ndp(ipv6_addr: Ipv6Addr, iface: &Interface, recv_timeout: Duration) -> Result<NeighborDiscoveryResult> {
+pub async fn send_ndp(
+    ipv6_addr: Ipv6Addr,
+    iface: &Interface,
+    recv_timeout: Duration,
+) -> Result<NeighborDiscoveryResult> {
     let src_ip = iface
         .ipv6
         .iter()
@@ -33,18 +40,16 @@ pub async fn send_ndp(ipv6_addr: Ipv6Addr, iface: &Interface, recv_timeout: Dura
         promiscuous: false,
     };
 
-    let AsyncChannel::Ethernet(mut tx, mut rx) = async_channel(&iface, config)?
-    else {
+    let AsyncChannel::Ethernet(mut tx, mut rx) = async_channel(&iface, config)? else {
         unreachable!();
     };
 
     let arp_packet = crate::packet::ndp::build_ndp_packet(iface, next_hop);
 
     let start_time = Instant::now();
-    
+
     match poll_fn(|cx| tx.poll_send(cx, &arp_packet)).await {
-        Ok(_) => {
-        },
+        Ok(_) => {}
         Err(e) => eprintln!("Failed to send packet: {}", e),
     }
 
@@ -81,7 +86,6 @@ pub async fn send_ndp(ipv6_addr: Ipv6Addr, iface: &Interface, recv_timeout: Dura
                                                     if_index: iface.index,
                                                 };
                                                 return Ok(ndp_result);
-                                                
                                             } else {
                                                 eprintln!(
                                                     "Received NDP reply from unexpected source: {}",
@@ -100,11 +104,11 @@ pub async fn send_ndp(ipv6_addr: Ipv6Addr, iface: &Interface, recv_timeout: Dura
             Ok(Some(Err(e))) => {
                 tracing::error!("Failed to receive packet: {}", e);
                 anyhow::bail!("Failed to receive packet: {}", e);
-            },
+            }
             Ok(None) => {
                 tracing::error!("Channel closed");
                 anyhow::bail!("Channel closed");
-            },
+            }
             Err(_) => {
                 tracing::error!("Request timeout");
                 anyhow::bail!("Request timeout");

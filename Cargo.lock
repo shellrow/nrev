@@ -1359,7 +1359,7 @@ dependencies = [
  "nex",
  "num_cpus",
  "quinn",
- "rand 0.8.5",
+ "rand 0.9.2",
  "regex",
  "rustls",
  "rustls-native-certs 0.7.3",

@@ -29,16 +29,14 @@ pub fn build_icmp_packet(interface: &Interface, dst_ip: IpAddr, is_ip_packet: bo
         crate::interface::get_interface_local_ipv6(interface).unwrap_or(Ipv6Addr::UNSPECIFIED);
 
     let src_ip: IpAddr = match dst_ip {
-        IpAddr::V4(_) => {
-            IpAddr::V4(src_ipv4)
-        },
+        IpAddr::V4(_) => IpAddr::V4(src_ipv4),
         IpAddr::V6(_) => {
             if nex::net::ip::is_global_ip(&dst_ip) {
                 IpAddr::V6(src_global_ipv6)
             } else {
                 IpAddr::V6(src_local_ipv6)
             }
-        },
+        }
     };
 
     let icmp_packet: Bytes = match (src_ip, dst_ip) {

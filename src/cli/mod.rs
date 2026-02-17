@@ -1,12 +1,16 @@
-pub mod port;
 pub mod host;
 pub mod ping;
+pub mod port;
 
 use std::path::PathBuf;
 
-use clap::{command, value_parser, ArgAction, Args, Parser, Subcommand, ValueEnum};
+use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum, value_parser};
 
-use crate::{config::default::{DEFAULT_BASE_TARGET_UDP_PORT, DEFAULT_PORTS_CONCURRENCY}, endpoint::TransportProtocol, protocol::Protocol};
+use crate::{
+    config::default::{DEFAULT_BASE_TARGET_UDP_PORT, DEFAULT_PORTS_CONCURRENCY},
+    endpoint::TransportProtocol,
+    protocol::Protocol,
+};
 
 /// nrev - Fast Network Mapper
 #[derive(Parser, Debug)]
@@ -91,11 +95,45 @@ pub enum Command {
 
 /// Port scan methods. Default: Connect
 #[derive(Copy, Clone, Debug, ValueEnum, Eq, PartialEq)]
-pub enum PortScanMethod { Connect, Syn }
+pub enum PortScanMethod {
+    Connect,
+    Syn,
+}
+
+/// Port scan transport.
+#[derive(Copy, Clone, Debug, ValueEnum, Eq, PartialEq)]
+pub enum PortScanTransport {
+    Tcp,
+    Udp,
+    Quic,
+}
+
+impl PortScanTransport {
+    /// Convert to TransportProtocol.
+    pub fn to_transport(self) -> TransportProtocol {
+        match self {
+            PortScanTransport::Tcp => TransportProtocol::Tcp,
+            PortScanTransport::Udp => TransportProtocol::Udp,
+            PortScanTransport::Quic => TransportProtocol::Quic,
+        }
+    }
+    /// Convert to lowercase name.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            PortScanTransport::Tcp => "tcp",
+            PortScanTransport::Udp => "udp",
+            PortScanTransport::Quic => "quic",
+        }
+    }
+}
 
 /// Host scan protocols. Default: ICMP
 #[derive(Copy, Clone, Debug, ValueEnum, Eq, PartialEq)]
-pub enum HostScanProto { Icmp, Udp, Tcp }
+pub enum HostScanProto {
+    Icmp,
+    Udp,
+    Tcp,
+}
 
 impl HostScanProto {
     /// Convert to TransportProtocol (if applicable)
@@ -118,7 +156,9 @@ impl HostScanProto {
 
 /// Traceroute protocol (currently only UDP is supported)
 #[derive(Copy, Clone, Debug, ValueEnum, Eq, PartialEq)]
-pub enum TraceProto { Udp }
+pub enum TraceProto {
+    Udp,
+}
 
 impl TraceProto {
     /// Convert to &str
@@ -146,9 +186,9 @@ pub struct PortScanArgs {
     #[arg(short, long, default_value = "top-1000")]
     pub ports: String,
 
-    /// Transport to scan (now tcp only; udp/quic later)
-    #[arg(long, default_value = "tcp", value_parser = ["tcp","udp","quic"])]
-    pub proto: String,
+    /// Transport to scan
+    #[arg(long, value_enum, default_value_t = PortScanTransport::Tcp)]
+    pub proto: PortScanTransport,
 
     /// Scanning method (default: connect)
     #[arg(long, value_enum, default_value_t = PortScanMethod::Connect)]
@@ -183,7 +223,7 @@ pub struct PortScanArgs {
     #[arg(long, value_parser = value_parser!(u64).range(1..=10_000))]
     pub connect_timeout_ms: Option<u64>,
 
-    /// Read timeout in ms (auto-adapted by RTT)
+    /// Service probe timeout in ms (used with --service-detect)
     #[arg(long, value_parser = value_parser!(u64).range(1..=10_000))]
     pub read_timeout_ms: Option<u64>,
 
@@ -272,7 +312,6 @@ pub struct PingArgs {
     pub interface: Option<String>,
 }
 
-
 /// Traceroute arguments
 #[derive(Args, Debug)]
 pub struct TraceArgs {
@@ -313,7 +352,7 @@ pub struct NeighborArgs {
     pub target: String,
 
     /// Network interface name to bind
-    #[arg(short='i', long)]
+    #[arg(short = 'i', long)]
     pub interface: Option<String>,
 
     /// Timeout waiting for replies (ms)

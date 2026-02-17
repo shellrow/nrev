@@ -1,8 +1,8 @@
-use anyhow::{Result, Context};
-use std::{net::IpAddr, path::Path};
+use crate::endpoint::Host;
+use anyhow::{Context, Result};
 use ipnet::IpNet;
 use std::fs;
-use crate::endpoint::Host;
+use std::{net::IpAddr, path::Path};
 
 /// Resolve one target specification line (CIDR / IP / hostname)
 async fn expand_one_target(t: &str) -> Result<Vec<Host>> {
@@ -24,7 +24,10 @@ async fn expand_one_target(t: &str) -> Result<Vec<Host>> {
     }
 
     // Hostname
-    let ips = resolver.lookup_ip(t).await.with_context(|| format!("resolve {t}"))?;
+    let ips = resolver
+        .lookup_ip(t)
+        .await
+        .with_context(|| format!("resolve {t}"))?;
     for ip in ips {
         out.push(Host::with_hostname(ip, t.to_string()));
     }
@@ -42,7 +45,9 @@ async fn expand_file(path: &Path) -> Result<Vec<Host>> {
 
     for line in text.lines() {
         let s = line.trim();
-        if s.is_empty() || s.starts_with('#') { continue; } // Skip empty lines/comments
+        if s.is_empty() || s.starts_with('#') {
+            continue;
+        } // Skip empty lines/comments
         nested_inputs.push(s.to_string());
     }
 
@@ -61,7 +66,9 @@ pub async fn parse_target_hosts(inputs: &[String]) -> Result<Vec<Host>> {
 
     for raw in inputs {
         let s = raw.trim();
-        if s.is_empty() { continue; }
+        if s.is_empty() {
+            continue;
+        }
 
         // 1. Check if it's a file (with '@' hint or existing file path)
         let (is_file_hint, path_str) = if let Some(stripped) = s.strip_prefix('@') {

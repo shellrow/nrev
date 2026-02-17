@@ -1,4 +1,5 @@
-use std::net::IpAddr;
+use crate::interface;
+use futures::stream::StreamExt;
 use nex::datalink::async_io::AsyncRawReceiver;
 use nex::net::interface::Interface;
 use nex::packet::frame::Frame;
@@ -6,11 +7,10 @@ use nex::packet::frame::ParseOption;
 use nex::packet::{ethernet::EtherType, ip::IpNextProtocol};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
+use std::net::IpAddr;
 use std::time::Duration;
 use std::time::Instant;
-use futures::stream::StreamExt;
 use tokio::sync::oneshot;
-use crate::interface;
 
 /// Packet capture options
 #[derive(Serialize, Deserialize, Debug, Clone)]

@@ -1,5 +1,5 @@
-use ndb_oui::OuiDb;
 use anyhow::Result;
+use ndb_oui::OuiDb;
 use std::sync::OnceLock;
 
 pub static OUI_DB: OnceLock<OuiDb> = OnceLock::new();

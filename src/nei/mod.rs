@@ -1,9 +1,12 @@
 pub mod arp;
 pub mod ndp;
 
-use serde::{Deserialize, Serialize};
 use netdev::MacAddr;
-use std::{net::{IpAddr, Ipv4Addr}, time::Duration};
+use serde::{Deserialize, Serialize};
+use std::{
+    net::{IpAddr, Ipv4Addr},
+    time::Duration,
+};
 
 use crate::protocol::Protocol;
 

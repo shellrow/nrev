@@ -18,7 +18,7 @@ pub fn build_tcp_syn_packet(
     interface: &Interface,
     dst_ip: IpAddr,
     dst_port: u16,
-    is_ip_packet: bool
+    is_ip_packet: bool,
 ) -> Vec<u8> {
     let src_mac = interface.mac_addr.unwrap_or(MacAddr::zero());
     let dst_mac = match &interface.gateway {
@@ -32,16 +32,14 @@ pub fn build_tcp_syn_packet(
         crate::interface::get_interface_local_ipv6(interface).unwrap_or(Ipv6Addr::UNSPECIFIED);
 
     let src_ip: IpAddr = match dst_ip {
-        IpAddr::V4(_) => {
-            IpAddr::V4(src_ipv4)
-        },
+        IpAddr::V4(_) => IpAddr::V4(src_ipv4),
         IpAddr::V6(_) => {
             if nex::net::ip::is_global_ip(&dst_ip) {
                 IpAddr::V6(src_global_ipv6)
             } else {
                 IpAddr::V6(src_local_ipv6)
             }
-        },
+        }
     };
 
     // Packet builder for TCP SYN

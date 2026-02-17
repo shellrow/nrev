@@ -1,16 +1,16 @@
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
+use crate::capture::pcap::PacketCaptureOptions;
+use crate::endpoint::{EndpointResult, OsGuess};
+use crate::{output::ScanResult, scan::ProbeSetting};
+use anyhow::Result;
 use futures::future::poll_fn;
 use netdev::{Interface, MacAddr};
-use nex::datalink::async_io::{async_channel, AsyncChannel, AsyncRawSender};
+use nex::datalink::async_io::{AsyncChannel, AsyncRawSender, async_channel};
 use nex::packet::frame::Frame;
 use nex::packet::ip::IpNextProtocol;
 use tracing_indicatif::span_ext::IndicatifSpanExt;
-use anyhow::Result;
-use crate::{output::ScanResult, scan::ProbeSetting};
-use crate::capture::pcap::PacketCaptureOptions;
-use crate::endpoint::{EndpointResult, OsGuess};
 
 /// Send ICMP Echo Request packets to the specified target endpoints
 pub async fn send_hostscan_packets(
@@ -33,7 +33,7 @@ pub async fn send_hostscan_packets(
                 if !scan_setting.send_rate.is_zero() {
                     tokio::time::sleep(scan_setting.send_rate).await;
                 }
-            },
+            }
             Err(e) => eprintln!("Failed to send packet: {}", e),
         }
         header_span.pb_inc(1);
@@ -59,8 +59,7 @@ pub async fn run_host_scan(setting: ProbeSetting) -> Result<ScanResult> {
         promiscuous: false,
     };
 
-    let AsyncChannel::Ethernet(mut tx, mut rx) = async_channel(&interface, config)?
-    else {
+    let AsyncChannel::Ethernet(mut tx, mut rx) = async_channel(&interface, config)? else {
         unreachable!();
     };
 
@@ -86,18 +85,11 @@ pub async fn run_host_scan(setting: ProbeSetting) -> Result<ScanResult> {
     capture_options.ip_protocols.insert(IpNextProtocol::Icmp);
     capture_options.ip_protocols.insert(IpNextProtocol::Icmpv6);
 
-
     let (ready_tx, ready_rx) = tokio::sync::oneshot::channel();
     let (stop_tx, mut stop_rx) = tokio::sync::oneshot::channel();
 
     let capture_handle: tokio::task::JoinHandle<_> = tokio::spawn(async move {
-        crate::capture::pcap::start_capture(
-            &mut rx,
-            capture_options,
-            ready_tx,
-            &mut stop_rx,
-        )
-        .await
+        crate::capture::pcap::start_capture(&mut rx, capture_options, ready_tx, &mut stop_rx).await
     });
 
     // Wait for listener to start
@@ -154,7 +146,7 @@ fn parse_hostscan_result(
                 if if_ipv4_set.contains(&ipv4_packet.source) {
                     mac_addr = iface.mac_addr.unwrap_or(MacAddr::zero());
                     ttl = crate::util::ip::initial_ttl(ipv4_packet.ttl);
-                }else{
+                } else {
                     ttl = ipv4_packet.ttl;
                 }
                 ip_addr = IpAddr::V4(ipv4_packet.source);
@@ -162,7 +154,7 @@ fn parse_hostscan_result(
                 if if_ipv6_set.contains(&ipv6_packet.source) {
                     mac_addr = iface.mac_addr.unwrap_or(MacAddr::zero());
                     ttl = crate::util::ip::initial_ttl(ipv6_packet.hop_limit);
-                }else {
+                } else {
                     ttl = ipv6_packet.hop_limit;
                 }
                 ip_addr = IpAddr::V6(ipv6_packet.source);
@@ -184,21 +176,18 @@ fn parse_hostscan_result(
             vendor_name_opt = None;
         }
 
-        endpoint_map
-            .entry(ip_addr)
-            .or_insert(EndpointResult {
-                ip: ip_addr,
-                hostname: dns_map.get(&ip_addr).cloned(),
-                ports: BTreeMap::new(),
-                mac_addr: Some(mac_addr),
-                vendor_name: vendor_name_opt,
-                os: OsGuess::default().with_ttl_observed(ttl),
-                tags: Vec::new(),
-                cpes: Vec::new(),
-            });
+        endpoint_map.entry(ip_addr).or_insert(EndpointResult {
+            ip: ip_addr,
+            hostname: dns_map.get(&ip_addr).cloned(),
+            ports: BTreeMap::new(),
+            mac_addr: Some(mac_addr),
+            vendor_name: vendor_name_opt,
+            os: OsGuess::default().with_ttl_observed(ttl),
+            tags: Vec::new(),
+            cpes: Vec::new(),
+        });
 
         result.fingerprints.push(p.clone());
-
     }
     for (_ip, endpoint) in endpoint_map {
         result.endpoints.push(endpoint);
