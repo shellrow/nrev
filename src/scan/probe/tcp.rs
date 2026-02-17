@@ -135,7 +135,7 @@ pub async fn send_portscan_packets(
     tx: &mut Box<dyn AsyncRawSender>,
     interface: &Interface,
     scan_setting: &ProbeSetting,
-) {
+) -> Result<()> {
     let mut sent: usize = 0;
     for target in &scan_setting.target_endpoints {
         let header_span = tracing::info_span!("tcp_syn_scan");
@@ -147,7 +147,7 @@ pub async fn send_portscan_packets(
 
         for port in &target.ports {
             let packet =
-                crate::packet::tcp::build_tcp_syn_packet(&interface, target.ip, port.number, false);
+                crate::packet::tcp::build_tcp_syn_packet(interface, target.ip, port.number, false)?;
 
             // Send a packet using poll_fn.
             match poll_fn(|cx| tx.poll_send(cx, &packet)).await {
@@ -163,6 +163,7 @@ pub async fn send_portscan_packets(
         }
         drop(header_span);
     }
+    Ok(())
 }
 
 /// Send TCP SYN packets for host scanning.
@@ -170,7 +171,7 @@ pub async fn send_hostscan_packets(
     tx: &mut Box<dyn AsyncRawSender>,
     interface: &Interface,
     scan_setting: &ProbeSetting,
-) {
+) -> Result<()> {
     let header_span = tracing::info_span!("tcp_syn_host_scan");
     header_span.pb_set_style(&crate::output::progress::get_progress_style());
     header_span.pb_set_message("HostScan");
@@ -181,7 +182,7 @@ pub async fn send_hostscan_packets(
     for target in &scan_setting.target_endpoints {
         for port in &target.ports {
             let packet =
-                crate::packet::tcp::build_tcp_syn_packet(&interface, target.ip, port.number, false);
+                crate::packet::tcp::build_tcp_syn_packet(interface, target.ip, port.number, false)?;
 
             // Send a packet using poll_fn.
             match poll_fn(|cx| tx.poll_send(cx, &packet)).await {
@@ -196,6 +197,7 @@ pub async fn send_hostscan_packets(
         header_span.pb_inc(1);
     }
     drop(header_span);
+    Ok(())
 }
 
 /// Run a TCP SYN scan based on the provided probe settings.
@@ -255,7 +257,7 @@ pub async fn run_syn_scan(setting: ProbeSetting) -> Result<ScanResult> {
     let _ = ready_rx;
     let start_time = std::time::Instant::now();
     // Send probe packets
-    send_portscan_packets(&mut tx, &interface, &setting).await;
+    send_portscan_packets(&mut tx, &interface, &setting).await?;
     tokio::time::sleep(setting.wait_time).await;
     // Stop pcap
     let _ = stop_tx.send(());
@@ -335,7 +337,7 @@ pub async fn run_host_scan(setting: ProbeSetting) -> Result<ScanResult> {
     let _ = ready_rx;
     let start_time = std::time::Instant::now();
     // Send probe packets
-    send_hostscan_packets(&mut tx, &interface, &setting).await;
+    send_hostscan_packets(&mut tx, &interface, &setting).await?;
     tokio::time::sleep(setting.wait_time).await;
     // Stop pcap
     let _ = stop_tx.send(());

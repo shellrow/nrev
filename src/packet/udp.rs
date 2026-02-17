@@ -1,3 +1,4 @@
+use anyhow::Result;
 use bytes::Bytes;
 use netdev::{Interface, MacAddr};
 use nex::packet::builder::{
@@ -19,7 +20,7 @@ pub fn build_udp_packet(
     dst_ip: IpAddr,
     dst_port: u16,
     is_ip_packet: bool,
-) -> Vec<u8> {
+) -> Result<Vec<u8>> {
     let src_mac = interface.mac_addr.unwrap_or(MacAddr::zero());
     let dst_mac = match &interface.gateway {
         Some(gateway) => gateway.mac_addr,
@@ -63,7 +64,7 @@ pub fn build_udp_packet(
             .payload(udp_packet.to_bytes())
             .build()
             .to_bytes(),
-        _ => panic!("Source and destination IP version mismatch"),
+        _ => anyhow::bail!("source and destination IP version mismatch"),
     };
 
     let ethernet_packet = EthernetPacketBuilder::new()
@@ -85,12 +86,14 @@ pub fn build_udp_packet(
         .build();
 
     let packet: Bytes = if is_ip_packet {
-        ethernet_packet.ip_packet().unwrap()
+        ethernet_packet
+            .ip_packet()
+            .ok_or_else(|| anyhow::anyhow!("failed to extract IP packet payload"))?
     } else {
         ethernet_packet.to_bytes()
     };
 
-    packet.to_vec()
+    Ok(packet.to_vec())
 }
 
 /// Build UDP packet for traceroute with specific TTL
@@ -98,7 +101,7 @@ pub fn build_udp_trace_packet(
     interface: &Interface,
     trace_setting: &TraceSetting,
     seq_ttl: u8,
-) -> Vec<u8> {
+) -> Result<Vec<u8>> {
     let src_mac = interface.mac_addr.unwrap_or(MacAddr::zero());
     let dst_mac = match &interface.gateway {
         Some(gateway) => gateway.mac_addr,
@@ -148,7 +151,7 @@ pub fn build_udp_trace_packet(
             .payload(udp_packet.to_bytes())
             .build()
             .to_bytes(),
-        _ => panic!("Source and destination IP version mismatch"),
+        _ => anyhow::bail!("source and destination IP version mismatch"),
     };
 
     let ethernet_packet = EthernetPacketBuilder::new()
@@ -170,10 +173,12 @@ pub fn build_udp_trace_packet(
         .build();
 
     let packet: Bytes = if is_ip_packet {
-        ethernet_packet.ip_packet().unwrap()
+        ethernet_packet
+            .ip_packet()
+            .ok_or_else(|| anyhow::anyhow!("failed to extract IP packet payload"))?
     } else {
         ethernet_packet.to_bytes()
     };
 
-    packet.to_vec()
+    Ok(packet.to_vec())
 }

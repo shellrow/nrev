@@ -65,12 +65,12 @@ pub async fn run_tcp_ping(setting: &PingSetting) -> Result<PingResult> {
 
     let start_time = Instant::now();
     let tcp_packet =
-        crate::packet::tcp::build_tcp_syn_packet(&interface, setting.dst_ip, dst_port, false);
+        crate::packet::tcp::build_tcp_syn_packet(&interface, setting.dst_ip, dst_port, false)?;
     for seq in 1..setting.count + 1 {
         let send_time = Instant::now();
         match poll_fn(|cx| tx.poll_send(cx, &tcp_packet)).await {
             Ok(_) => {}
-            Err(e) => eprintln!("Failed to send packet: {}", e),
+            Err(e) => tracing::error!("Failed to send packet: {}", e),
         }
         loop {
             match tokio::time::timeout(setting.receive_timeout, rx.next()).await {
@@ -78,10 +78,7 @@ pub async fn run_tcp_ping(setting: &PingSetting) -> Result<PingResult> {
                     let rtt = send_time.elapsed();
                     let frame = match Frame::from_buf(&packet, parse_option.clone()) {
                         Some(frame) => frame,
-                        None => {
-                            eprintln!("Failed to parse packet: {:?}", packet);
-                            continue;
-                        }
+                        None => continue,
                     };
                     let mut mac_addr: MacAddr = MacAddr::zero();
                     if let Some(datalink_layer) = &frame.datalink {

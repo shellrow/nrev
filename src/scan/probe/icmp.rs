@@ -17,7 +17,7 @@ pub async fn send_hostscan_packets(
     tx: &mut Box<dyn AsyncRawSender>,
     interface: &Interface,
     scan_setting: &ProbeSetting,
-) {
+) -> Result<()> {
     let header_span = tracing::info_span!("icmp_host_scan");
     header_span.pb_set_style(&crate::output::progress::get_progress_style());
     header_span.pb_set_message("HostScan");
@@ -26,7 +26,7 @@ pub async fn send_hostscan_packets(
     header_span.pb_start();
 
     for target in &scan_setting.target_endpoints {
-        let packet = crate::packet::icmp::build_icmp_packet(&interface, target.ip, false);
+        let packet = crate::packet::icmp::build_icmp_packet(interface, target.ip, false)?;
         // Send a packet using poll_fn.
         match poll_fn(|cx| tx.poll_send(cx, &packet)).await {
             Ok(_) => {
@@ -39,6 +39,7 @@ pub async fn send_hostscan_packets(
         header_span.pb_inc(1);
     }
     drop(header_span);
+    Ok(())
 }
 
 /// Run host scan using ICMP Echo Request packets and return the results.
@@ -96,7 +97,7 @@ pub async fn run_host_scan(setting: ProbeSetting) -> Result<ScanResult> {
     let _ = ready_rx;
     let start_time = std::time::Instant::now();
     // Send probe packets
-    send_hostscan_packets(&mut tx, &interface, &setting).await;
+    send_hostscan_packets(&mut tx, &interface, &setting).await?;
     tokio::time::sleep(setting.wait_time).await;
     // Stop pcap
     let _ = stop_tx.send(());

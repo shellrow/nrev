@@ -54,8 +54,12 @@ pub async fn run_os_probe(setting: ProbeSetting) -> Result<OsProbeResult> {
 
         let mut detected: bool = false;
         for port in &target.ports {
-            let packet =
-                crate::packet::tcp::build_tcp_syn_packet(&interface, target.ip, port.number, false);
+            let packet = crate::packet::tcp::build_tcp_syn_packet(
+                &interface,
+                target.ip,
+                port.number,
+                false,
+            )?;
 
             // Send a packet using poll_fn.
             match poll_fn(|cx| tx.poll_send(cx, &packet)).await {

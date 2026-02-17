@@ -60,11 +60,11 @@ pub async fn run_udp_trace(setting: &TraceSetting) -> Result<TraceResult> {
     let mut dst_reached: bool = false;
     let start_time = Instant::now();
     for seq_ttl in 1..setting.hop_limit {
-        let udp_packet = crate::packet::udp::build_udp_trace_packet(&interface, &setting, seq_ttl);
+        let udp_packet = crate::packet::udp::build_udp_trace_packet(&interface, setting, seq_ttl)?;
         let send_time = Instant::now();
         match poll_fn(|cx| tx.poll_send(cx, &udp_packet)).await {
             Ok(_) => {}
-            Err(e) => eprintln!("Failed to send packet: {}", e),
+            Err(e) => tracing::error!("Failed to send packet: {}", e),
         }
         loop {
             match tokio::time::timeout(setting.receive_timeout, rx.next()).await {
@@ -72,10 +72,7 @@ pub async fn run_udp_trace(setting: &TraceSetting) -> Result<TraceResult> {
                     let rtt = send_time.elapsed();
                     let frame = match Frame::from_buf(&packet, parse_option.clone()) {
                         Some(frame) => frame,
-                        None => {
-                            eprintln!("Failed to parse packet: {:?}", packet);
-                            continue;
-                        }
+                        None => continue,
                     };
                     let mut mac_addr: MacAddr = MacAddr::zero();
                     if let Some(datalink_layer) = &frame.datalink {

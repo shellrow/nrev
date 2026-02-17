@@ -1,3 +1,4 @@
+use anyhow::Result;
 use netdev::Interface;
 use nex::net::mac::MacAddr;
 use nex::packet::builder::ethernet::EthernetPacketBuilder;
@@ -22,7 +23,7 @@ fn ipv6_multicast_mac(ipv6: &Ipv6Addr) -> MacAddr {
 }
 
 /// Build NDP packet
-pub fn build_ndp_packet(interface: &Interface, dst_ip: IpAddr) -> Vec<u8> {
+pub fn build_ndp_packet(interface: &Interface, dst_ip: IpAddr) -> Result<Vec<u8>> {
     let src_mac = interface.mac_addr.unwrap_or(MacAddr::zero());
     let src_ipv4 = crate::interface::get_interface_ipv4(interface).unwrap_or(Ipv4Addr::UNSPECIFIED);
     let src_global_ipv6 =
@@ -44,7 +45,7 @@ pub fn build_ndp_packet(interface: &Interface, dst_ip: IpAddr) -> Vec<u8> {
     //let ndp_payload_len = (NDP_SOL_PACKET_LEN + NDP_OPT_PACKET_LEN + MAC_ADDR_LEN) as u16;
     match (src_ip, dst_ip) {
         (IpAddr::V4(_), IpAddr::V4(_)) => {
-            panic!("NDP is not used with IPv4 addresses");
+            anyhow::bail!("NDP is not used with IPv4 addresses");
         }
         (IpAddr::V6(src), IpAddr::V6(dst)) => {
             let ipv6 = Ipv6PacketBuilder::new()
@@ -64,8 +65,8 @@ pub fn build_ndp_packet(interface: &Interface, dst_ip: IpAddr) -> Vec<u8> {
                 .payload(ipv6.payload(ndp.build().to_bytes()).build().to_bytes());
 
             let packet = ethernet.build().to_bytes();
-            packet.to_vec()
+            Ok(packet.to_vec())
         }
-        _ => panic!("Source and destination IP versions must match"),
+        _ => anyhow::bail!("source and destination IP versions must match"),
     }
 }

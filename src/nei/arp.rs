@@ -38,19 +38,21 @@ pub async fn send_arp(
         unreachable!();
     };
 
-    let arp_packet = crate::packet::arp::build_arp_packet(iface, next_hop);
+    let arp_packet = crate::packet::arp::build_arp_packet(iface, next_hop)?;
 
     let start_time = Instant::now();
 
     match poll_fn(|cx| tx.poll_send(cx, &arp_packet)).await {
         Ok(_) => {}
-        Err(e) => eprintln!("Failed to send packet: {}", e),
+        Err(e) => tracing::error!("Failed to send packet: {}", e),
     }
 
     loop {
         match tokio::time::timeout(recv_timeout, rx.next()).await {
             Ok(Some(Ok(packet))) => {
-                let frame = Frame::from_buf(&packet, ParseOption::default()).unwrap();
+                let Some(frame) = Frame::from_buf(&packet, ParseOption::default()) else {
+                    continue;
+                };
                 match &frame.datalink {
                     Some(dlink) => {
                         if let Some(arp) = &dlink.arp {

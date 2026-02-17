@@ -44,13 +44,13 @@ pub async fn send_ndp(
         unreachable!();
     };
 
-    let arp_packet = crate::packet::ndp::build_ndp_packet(iface, next_hop);
+    let ndp_packet = crate::packet::ndp::build_ndp_packet(iface, next_hop)?;
 
     let start_time = Instant::now();
 
-    match poll_fn(|cx| tx.poll_send(cx, &arp_packet)).await {
+    match poll_fn(|cx| tx.poll_send(cx, &ndp_packet)).await {
         Ok(_) => {}
-        Err(e) => eprintln!("Failed to send packet: {}", e),
+        Err(e) => tracing::error!("Failed to send packet: {}", e),
     }
 
     loop {
@@ -87,7 +87,7 @@ pub async fn send_ndp(
                                                 };
                                                 return Ok(ndp_result);
                                             } else {
-                                                eprintln!(
+                                                tracing::debug!(
                                                     "Received NDP reply from unexpected source: {}",
                                                     ipv6_hdr.source
                                                 );

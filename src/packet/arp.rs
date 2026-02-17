@@ -1,3 +1,4 @@
+use anyhow::Result;
 use netdev::Interface;
 use nex::net::mac::MacAddr;
 use nex::packet::builder::arp::ArpPacketBuilder;
@@ -7,7 +8,7 @@ use nex::packet::packet::Packet;
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
 
 /// Build ARP packet
-pub fn build_arp_packet(interface: &Interface, dst_ip: IpAddr) -> Vec<u8> {
+pub fn build_arp_packet(interface: &Interface, dst_ip: IpAddr) -> Result<Vec<u8>> {
     let src_mac = interface.mac_addr.unwrap_or(MacAddr::zero());
     let src_ipv4 = crate::interface::get_interface_ipv4(interface).unwrap_or(Ipv4Addr::UNSPECIFIED);
     let src_global_ipv6 =
@@ -41,16 +42,15 @@ pub fn build_arp_packet(interface: &Interface, dst_ip: IpAddr) -> Vec<u8> {
 
                     let packet = eth_builder.payload(arp_builder.build().to_bytes()).build();
 
-                    return packet.to_bytes().to_vec();
+                    return Ok(packet.to_bytes().to_vec());
                 }
                 IpAddr::V6(_) => {
-                    // ARP is not used with IPv6, return empty vector
-                    return Vec::new();
+                    anyhow::bail!("ARP is not used with IPv6");
                 }
             }
         }
         IpAddr::V6(_) => {
-            return Vec::new(); // ARP is not used with IPv6
+            anyhow::bail!("ARP is not used with IPv6");
         }
     }
 }
