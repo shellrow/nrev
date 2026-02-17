@@ -34,7 +34,7 @@ pub async fn send_hostscan_packets(
                     tokio::time::sleep(scan_setting.send_rate).await;
                 }
             }
-            Err(e) => eprintln!("Failed to send packet: {}", e),
+            Err(e) => tracing::error!("Failed to send packet: {}", e),
         }
         header_span.pb_inc(1);
     }
@@ -94,14 +94,16 @@ pub async fn run_host_scan(setting: ProbeSetting) -> Result<ScanResult> {
     });
 
     // Wait for listener to start
-    let _ = ready_rx;
+    let _ = ready_rx.await;
     let start_time = std::time::Instant::now();
     // Send probe packets
     send_hostscan_packets(&mut tx, &interface, &setting).await?;
     tokio::time::sleep(setting.wait_time).await;
     // Stop pcap
     let _ = stop_tx.send(());
-    let frames = capture_handle.await.unwrap();
+    let frames = capture_handle
+        .await
+        .map_err(|e| anyhow::anyhow!("capture task join error: {}", e))?;
     let dns_map = setting.get_dns_map();
     let mut result = parse_hostscan_result(frames, &interface, &dns_map);
     result.scan_time = start_time.elapsed();

@@ -73,16 +73,15 @@ pub async fn run_os_probe(setting: ProbeSetting) -> Result<OsProbeResult> {
                     Ok(Some(Ok(packet))) => {
                         let frame = match Frame::from_buf(&packet, parse_option.clone()) {
                             Some(frame) => frame,
-                            None => {
-                                eprintln!("Failed to parse packet: {:?}", packet);
-                                continue;
-                            }
+                            None => continue,
                         };
-                        if frame.ip.is_none() || frame.transport.is_none() {
+                        let Some(ip) = &frame.ip else {
                             continue;
-                        }
+                        };
+                        let Some(transport) = &frame.transport else {
+                            continue;
+                        };
                         let ttl: u8;
-                        let ip = frame.ip.as_ref().unwrap();
                         if let Some(ipv4) = &ip.ipv4 {
                             if ipv4.source != target.ip {
                                 continue;
@@ -96,24 +95,17 @@ pub async fn run_os_probe(setting: ProbeSetting) -> Result<OsProbeResult> {
                         } else {
                             continue;
                         }
-                        if let Some(transport) = &frame.transport {
-                            if let Some(tcp) = &transport.tcp {
-                                if tcp.destination != DEFAULT_LOCAL_TCP_PORT {
-                                    continue;
-                                }
-                                if tcp.options.len() == 0 {
-                                    continue;
-                                }
-                            } else {
+                        if let Some(tcp) = &transport.tcp {
+                            if tcp.destination != DEFAULT_LOCAL_TCP_PORT {
+                                continue;
+                            }
+                            if tcp.options.is_empty() {
                                 continue;
                             }
                         } else {
                             continue;
                         }
-                        tracing::debug!(
-                            "Matching frame...: {:?}",
-                            frame.transport.as_ref().unwrap().tcp
-                        );
+                        tracing::debug!("Matching frame...: {:?}", transport.tcp);
                         match crate::os::match_tcpip_signatures(&frame) {
                             Some(os_match) => {
                                 let port_result = PortResult {

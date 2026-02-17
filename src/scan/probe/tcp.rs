@@ -53,17 +53,24 @@ pub async fn try_connect_ports(
         move |socket_addr| {
             let ch_tx = ch_tx.clone();
             async move {
-                let cfg = if socket_addr.is_ipv4() {
-                    TcpConfig::v4_stream()
-                } else {
-                    TcpConfig::v6_stream()
-                };
-                let socket = AsyncTcpSocket::from_config(&cfg).unwrap();
                 let mut port_result = PortResult {
                     port: Port::new(socket_addr.port(), TransportProtocol::Tcp),
                     state: PortState::Closed,
                     service: ServiceInfo::default(),
                     rtt_ms: None,
+                };
+                let cfg = if socket_addr.is_ipv4() {
+                    TcpConfig::v4_stream()
+                } else {
+                    TcpConfig::v6_stream()
+                };
+                let socket = match AsyncTcpSocket::from_config(&cfg) {
+                    Ok(socket) => socket,
+                    Err(e) => {
+                        tracing::error!("failed to create TCP socket: {}", e);
+                        let _ = ch_tx.send(port_result);
+                        return;
+                    }
                 };
                 match socket.connect_timeout(socket_addr, timeout).await {
                     Ok(mut stream) => {
@@ -157,7 +164,7 @@ pub async fn send_portscan_packets(
                     }
                     sent += 1;
                 }
-                Err(e) => eprintln!("Failed to send packet: {}", e),
+                Err(e) => tracing::error!("Failed to send packet: {}", e),
             }
             header_span.pb_inc(1);
         }
@@ -191,7 +198,7 @@ pub async fn send_hostscan_packets(
                         tokio::time::sleep(scan_setting.send_rate).await;
                     }
                 }
-                Err(e) => eprintln!("Failed to send packet: {}", e),
+                Err(e) => tracing::error!("Failed to send packet: {}", e),
             }
         }
         header_span.pb_inc(1);
@@ -254,14 +261,16 @@ pub async fn run_syn_scan(setting: ProbeSetting) -> Result<ScanResult> {
     });
 
     // Wait for listener to start
-    let _ = ready_rx;
+    let _ = ready_rx.await;
     let start_time = std::time::Instant::now();
     // Send probe packets
     send_portscan_packets(&mut tx, &interface, &setting).await?;
     tokio::time::sleep(setting.wait_time).await;
     // Stop pcap
     let _ = stop_tx.send(());
-    let frames = capture_handle.await.unwrap();
+    let frames = capture_handle
+        .await
+        .map_err(|e| anyhow::anyhow!("capture task join error: {}", e))?;
     let dns_map = setting.get_dns_map();
     let mut result = parse_portscan_result(frames, &interface, &dns_map);
     result.scan_time = start_time.elapsed();
@@ -334,14 +343,16 @@ pub async fn run_host_scan(setting: ProbeSetting) -> Result<ScanResult> {
     });
 
     // Wait for listener to start
-    let _ = ready_rx;
+    let _ = ready_rx.await;
     let start_time = std::time::Instant::now();
     // Send probe packets
     send_hostscan_packets(&mut tx, &interface, &setting).await?;
     tokio::time::sleep(setting.wait_time).await;
     // Stop pcap
     let _ = stop_tx.send(());
-    let frames = capture_handle.await.unwrap();
+    let frames = capture_handle
+        .await
+        .map_err(|e| anyhow::anyhow!("capture task join error: {}", e))?;
     let dns_map = setting.get_dns_map();
     let mut result = parse_hostscan_result(frames, &interface, &dns_map);
     result.scan_time = start_time.elapsed();
