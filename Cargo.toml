@@ -19,8 +19,8 @@ tracing-subscriber = { version = "0.3", features = ["time", "chrono"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 bytes = "1"
-netdev = { version = "0.38", features = ["serde"] }
-nex = { version = "0.23", features = ["serde"] }
+netdev = { version = "0.40", features = ["serde"] }
+nex = { version = "0.25", features = ["serde"] }
 futures = {version = "0.3", features = ["executor", "thread-pool"]}
 rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
 rustls-native-certs = "0.7"
@@ -41,9 +41,9 @@ inquire = "0.6"
 ipnet = "2.11"
 num_cpus = "1.17"
 termtree = "0.5"
-ndb-oui = { version = "0.3", features = ["bundled"] }
-ndb-tcp-service = { version = "0.3", features = ["bundled"] }
-ndb-udp-service = { version = "0.3", features = ["bundled"] }
+ndb-oui = { version = "0.4", features = ["bundled"] }
+ndb-tcp-service = { version = "0.4", features = ["bundled"] }
+ndb-udp-service = { version = "0.4", features = ["bundled"] }
 home = "0.5"
 base64 = "0.22"
 regex = "1.11"

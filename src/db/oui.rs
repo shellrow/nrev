@@ -17,3 +17,12 @@ pub fn init_oui_db() -> Result<()> {
 pub fn oui_db() -> &'static OuiDb {
     OUI_DB.get().expect("OUI_DB not initialized")
 }
+
+/// Lookup vendor name from MAC address.
+pub fn lookup_vendor_name(mac_addr: &netdev::MacAddr) -> Option<String> {
+    oui_db().lookup_mac(mac_addr).map(|oui| {
+        oui.vendor_detail
+            .clone()
+            .unwrap_or_else(|| oui.vendor.clone())
+    })
+}

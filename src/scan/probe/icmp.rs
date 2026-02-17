@@ -113,7 +113,6 @@ fn parse_hostscan_result(
     iface: &Interface,
     dns_map: &HashMap<IpAddr, String>,
 ) -> ScanResult {
-    let oui_db = crate::db::oui::oui_db();
     let if_ipv4_set: HashSet<Ipv4Addr> = iface.ipv4_addrs().into_iter().collect();
     let if_ipv6_set: HashSet<Ipv6Addr> = iface.ipv6_addrs().into_iter().collect();
     let mut result: ScanResult = ScanResult::new();
@@ -165,16 +164,7 @@ fn parse_hostscan_result(
             continue;
         }
 
-        let vendor_name_opt: Option<String>;
-        if let Some(oui) = oui_db.lookup_mac(&mac_addr) {
-            if let Some(vendor_detail) = &oui.vendor_detail {
-                vendor_name_opt = Some(vendor_detail.clone());
-            } else {
-                vendor_name_opt = Some(oui.vendor.clone());
-            }
-        } else {
-            vendor_name_opt = None;
-        }
+        let vendor_name_opt = crate::db::oui::lookup_vendor_name(&mac_addr);
 
         endpoint_map.entry(ip_addr).or_insert(EndpointResult {
             ip: ip_addr,

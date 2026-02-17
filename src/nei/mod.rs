@@ -45,13 +45,5 @@ impl NeighborDiscoveryResult {
 
 /// Lookup the vendor name for a given MAC address using the OUI database.
 pub fn lookup_vendor(mac: &MacAddr) -> Option<String> {
-    let oui_db = crate::db::oui::oui_db();
-    if let Some(oui) = oui_db.lookup_mac(mac) {
-        if let Some(vendor_detail) = &oui.vendor_detail {
-            return Some(vendor_detail.clone());
-        } else {
-            return Some(oui.vendor.clone());
-        }
-    }
-    None
+    crate::db::oui::lookup_vendor_name(mac)
 }
