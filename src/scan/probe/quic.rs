@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, time::Duration};
+use std::{collections::BTreeMap, net::SocketAddr, time::Duration};
 
 use crate::{
     cli::PortScanMethod,
@@ -58,20 +58,34 @@ pub async fn try_connect_ports(
         .for_each_concurrent(concurrency, move |socket_addr| {
             let ch_tx = ch_tx.clone();
             let hostname = hostname.clone();
-            let client_cfg = quic_client_config(true, &alpn).unwrap();
 
             async move {
-                let mut endpoint = match quinn::Endpoint::client(
-                    (if target.ip.is_ipv6() {
-                        "[::]:0"
-                    } else {
-                        "0.0.0.0:0"
-                    })
-                    .parse()
-                    .unwrap(),
-                ) {
+                let client_cfg = match quic_client_config(true, &alpn) {
+                    Ok(cfg) => cfg,
+                    Err(e) => {
+                        tracing::error!("Failed to build QUIC client config: {}", e);
+                        return;
+                    }
+                };
+                let bind_addr: SocketAddr = match (if target.ip.is_ipv6() {
+                    "[::]:0"
+                } else {
+                    "0.0.0.0:0"
+                })
+                .parse()
+                {
+                    Ok(addr) => addr,
+                    Err(e) => {
+                        tracing::error!("Failed to parse QUIC bind addr: {}", e);
+                        return;
+                    }
+                };
+                let mut endpoint = match quinn::Endpoint::client(bind_addr) {
                     Ok(ep) => ep,
-                    Err(_) => return,
+                    Err(e) => {
+                        tracing::error!("Failed to create QUIC endpoint: {}", e);
+                        return;
+                    }
                 };
                 endpoint.set_default_client_config(client_cfg.clone());
                 let connect_fut = match endpoint.connect(socket_addr, hostname.as_str()) {
@@ -82,7 +96,7 @@ pub async fn try_connect_ports(
                     }
                 };
                 let mut port_result = PortResult {
-                    port: Port::new(socket_addr.port(), TransportProtocol::Udp),
+                    port: Port::new(socket_addr.port(), TransportProtocol::Quic),
                     state: PortState::Closed,
                     service: ServiceInfo::default(),
                     rtt_ms: None,
