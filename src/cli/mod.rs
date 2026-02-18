@@ -74,7 +74,7 @@ pub enum Command {
     /// Scan ports on the target(s) (TCP/QUIC)
     Port(PortScanArgs),
 
-    /// Discover alive hosts (ICMP/UDP/TCP etc.)
+    /// Discover alive hosts (ICMP/UDP/TCP)
     Host(HostScanArgs),
 
     /// Simple ping (ICMP/UDP/TCP)
@@ -195,12 +195,12 @@ pub struct PortScanArgs {
     pub method: PortScanMethod,
 
     /// Enable service detection (banner/TLS/etc.)
-    #[arg(short='s', long, default_value_t = false, action=ArgAction::SetTrue)]
+    #[arg(short='S', long, default_value_t = false, action=ArgAction::SetTrue)]
     pub service_detect: bool,
 
     /// Enable OS fingerprinting
     /// for open ports, send one SYN to collect OS-fingerprint features
-    #[arg(short='o', long, default_value_t = false, action=ArgAction::SetTrue)]
+    #[arg(short='O', long, default_value_t = false, action=ArgAction::SetTrue)]
     pub os_detect: bool,
 
     /// Enable QUIC probing on UDP ports (e.g., 443/udp)
