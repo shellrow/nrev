@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use std::fs::File;
 use tracing::level_filters::LevelFilter;
 use tracing_indicatif::IndicatifLayer;
@@ -46,10 +46,10 @@ pub fn init_logger(cli_args: &Cli) -> Result<()> {
     }
 
     // Determine log file path
-    let log_file_path = cli_args
-        .log_file_path
-        .clone()
-        .unwrap_or_else(|| crate::config::get_user_file_path("nrev.log").unwrap());
+    let log_file_path = cli_args.log_file_path.clone().map(Ok).unwrap_or_else(|| {
+        crate::config::get_user_file_path("nrev.log")
+            .context("failed to resolve default log file path")
+    })?;
 
     // Open log file in append mode
     let file = File::options()
