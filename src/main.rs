@@ -27,6 +27,17 @@ use crate::db::DbInitializer;
 
 #[tokio::main]
 async fn main() {
+    let exit_code = match run().await {
+        Ok(_) => 0,
+        Err(e) => {
+            tracing::error!("{}", e);
+            1
+        }
+    };
+    std::process::exit(exit_code);
+}
+
+async fn run() -> anyhow::Result<()> {
     // Parse command line arguments
     let cli = Cli::parse();
     // Initialize logger
@@ -38,65 +49,50 @@ async fn main() {
     match cli.command {
         Command::Port(args) => {
             DbInitializer::with_all().init().await;
-            let r = cmd::port::run(args, cli.no_stdout, cli.output).await;
-            match r {
-                Ok(_) => {}
-                Err(e) => tracing::error!("Port scan failed: {}", e),
-            }
+            cmd::port::run(args, cli.no_stdout, cli.output)
+                .await
+                .map_err(|e| anyhow::anyhow!("Port scan failed: {}", e))?;
         }
         Command::Host(args) => {
             let db_ini = DbInitializer::new();
             db_ini.with_os_db().with_oui_db().init().await;
 
-            let r = cmd::host::run(args, cli.no_stdout, cli.output).await;
-            match r {
-                Ok(_) => {}
-                Err(e) => tracing::error!("Host scan failed: {}", e),
-            }
+            cmd::host::run(args, cli.no_stdout, cli.output)
+                .await
+                .map_err(|e| anyhow::anyhow!("Host scan failed: {}", e))?;
         }
         Command::Ping(args) => {
             let db_ini = DbInitializer::new();
             db_ini.with_os_db().with_oui_db().init().await;
 
-            let r = cmd::ping::run(args, cli.no_stdout, cli.output).await;
-            match r {
-                Ok(_) => {}
-                Err(e) => tracing::error!("Ping failed: {}", e),
-            }
+            cmd::ping::run(args, cli.no_stdout, cli.output)
+                .await
+                .map_err(|e| anyhow::anyhow!("Ping failed: {}", e))?;
         }
         Command::Trace(args) => {
             let db_ini = DbInitializer::new();
             db_ini.with_oui_db().init().await;
 
-            let r = cmd::trace::run(args, cli.no_stdout, cli.output).await;
-            match r {
-                Ok(_) => {}
-                Err(e) => tracing::error!("Trace failed: {}", e),
-            }
+            cmd::trace::run(args, cli.no_stdout, cli.output)
+                .await
+                .map_err(|e| anyhow::anyhow!("Trace failed: {}", e))?;
         }
         Command::Nei(args) => {
             let db_ini = DbInitializer::new();
             db_ini.with_oui_db().init().await;
 
-            let r = cmd::nei::run(args, cli.no_stdout, cli.output).await;
-            match r {
-                Ok(_) => {}
-                Err(e) => tracing::error!("Neighbor discovery failed: {}", e),
-            }
+            cmd::nei::run(args, cli.no_stdout, cli.output)
+                .await
+                .map_err(|e| anyhow::anyhow!("Neighbor discovery failed: {}", e))?;
         }
         Command::Domain(args) => {
-            let r = cmd::domain::run(args, cli.no_stdout, cli.output).await;
-            match r {
-                Ok(_) => {}
-                Err(e) => tracing::error!("Domain scan failed: {}", e),
-            }
+            cmd::domain::run(args, cli.no_stdout, cli.output)
+                .await
+                .map_err(|e| anyhow::anyhow!("Domain scan failed: {}", e))?;
         }
         Command::Interface(args) => {
-            let r = cmd::interface::show(&args);
-            match r {
-                Ok(_) => {}
-                Err(e) => tracing::error!("Show interfaces failed: {}", e),
-            }
+            cmd::interface::show(&args)
+                .map_err(|e| anyhow::anyhow!("Show interfaces failed: {}", e))?;
         }
     }
     tracing::info!(
@@ -104,4 +100,5 @@ async fn main() {
         env!("CARGO_PKG_VERSION"),
         start_time.elapsed()
     );
+    Ok(())
 }
