@@ -8,12 +8,12 @@ use std::{
 /// Get interface information by IP address.
 pub fn get_interface_by_ip(ip_addr: IpAddr) -> Option<Interface> {
     for iface in netdev::interface::get_interfaces() {
-        for ip in iface.ipv4.clone() {
+        for ip in &iface.ipv4 {
             if ip.addr() == ip_addr {
                 return Some(iface);
             }
         }
-        for ip in iface.ipv6.clone() {
+        for ip in &iface.ipv6 {
             if ip.addr() == ip_addr {
                 return Some(iface);
             }
@@ -44,15 +44,12 @@ pub fn get_interface_by_name(name: String) -> Option<Interface> {
 
 /// Get the first IPv4 address of the interface.
 pub fn get_interface_ipv4(iface: &Interface) -> Option<Ipv4Addr> {
-    for ip in iface.ipv4.clone() {
-        return Some(ip.addr());
-    }
-    return None;
+    iface.ipv4.first().map(|ip| ip.addr())
 }
 
 /// Get the first global IPv6 address of the interface.
 pub fn get_interface_global_ipv6(iface: &Interface) -> Option<Ipv6Addr> {
-    for ip in iface.ipv6.clone() {
+    for ip in &iface.ipv6 {
         if nex::net::ip::is_global_ipv6(&ip.addr()) {
             return Some(ip.addr());
         }
@@ -62,7 +59,7 @@ pub fn get_interface_global_ipv6(iface: &Interface) -> Option<Ipv6Addr> {
 
 /// Get the first local IPv6 address of the interface.
 pub fn get_interface_local_ipv6(iface: &Interface) -> Option<Ipv6Addr> {
-    for ip in iface.ipv6.clone() {
+    for ip in &iface.ipv6 {
         if !nex::net::ip::is_global_ipv6(&ip.addr()) {
             return Some(ip.addr());
         }
@@ -73,10 +70,10 @@ pub fn get_interface_local_ipv6(iface: &Interface) -> Option<Ipv6Addr> {
 /// Get all IP addresses of the interface as strings.
 pub fn get_interface_ips(iface: &Interface) -> Vec<String> {
     let mut ips: Vec<String> = Vec::new();
-    for ip in iface.ipv4.clone() {
+    for ip in &iface.ipv4 {
         ips.push(ip.addr().to_string());
     }
-    for ip in iface.ipv6.clone() {
+    for ip in &iface.ipv6 {
         ips.push(ip.addr().to_string());
     }
     ips
@@ -86,10 +83,10 @@ pub fn get_interface_ips(iface: &Interface) -> Vec<String> {
 pub fn get_local_ips(if_index: u32) -> HashSet<IpAddr> {
     let mut ips: HashSet<IpAddr> = HashSet::new();
     if let Some(interface) = get_interface_by_index(if_index) {
-        for ip in interface.ipv4.clone() {
+        for ip in &interface.ipv4 {
             ips.insert(IpAddr::V4(ip.addr()));
         }
-        for ip in interface.ipv6.clone() {
+        for ip in &interface.ipv6 {
             ips.insert(IpAddr::V6(ip.addr()));
         }
     } else {
@@ -107,10 +104,10 @@ pub fn get_default_local_ips() -> HashSet<IpAddr> {
     // Default interface IP addresses
     match netdev::get_default_interface() {
         Ok(default_interface) => {
-            for ip in default_interface.ipv4.clone() {
+            for ip in &default_interface.ipv4 {
                 ips.insert(IpAddr::V4(ip.addr()));
             }
-            for ip in default_interface.ipv6.clone() {
+            for ip in &default_interface.ipv6 {
                 ips.insert(IpAddr::V6(ip.addr()));
             }
         }
@@ -127,10 +124,10 @@ pub fn get_default_local_ips() -> HashSet<IpAddr> {
 /// Get all local IP addresses on the specified interface.
 pub fn get_interface_local_ips(iface: &Interface) -> HashSet<IpAddr> {
     let mut ips: HashSet<IpAddr> = HashSet::new();
-    for ip in iface.ipv4.clone() {
+    for ip in &iface.ipv4 {
         ips.insert(IpAddr::V4(ip.addr()));
     }
-    for ip in iface.ipv6.clone() {
+    for ip in &iface.ipv6 {
         ips.insert(IpAddr::V6(ip.addr()));
     }
     // localhost IP addresses
@@ -143,10 +140,10 @@ pub fn get_interface_local_ips(iface: &Interface) -> HashSet<IpAddr> {
 pub fn get_local_ip_map() -> HashMap<IpAddr, String> {
     let mut ip_map: HashMap<IpAddr, String> = HashMap::new();
     for iface in netdev::interface::get_interfaces() {
-        for ip in iface.ipv4.clone() {
+        for ip in &iface.ipv4 {
             ip_map.insert(IpAddr::V4(ip.addr()), iface.name.clone());
         }
-        for ip in iface.ipv6.clone() {
+        for ip in &iface.ipv6 {
             ip_map.insert(IpAddr::V6(ip.addr()), iface.name.clone());
         }
     }
@@ -167,7 +164,7 @@ pub fn get_usable_interfaces() -> Vec<Interface> {
 /// Get the MAC address of the interface, or MacAddr::zero() if not available.
 pub fn get_interface_macaddr(iface: &Interface) -> MacAddr {
     match &iface.mac_addr {
-        Some(mac_addr) => mac_addr.clone(),
+        Some(mac_addr) => *mac_addr,
         None => MacAddr::zero(),
     }
 }
@@ -175,7 +172,7 @@ pub fn get_interface_macaddr(iface: &Interface) -> MacAddr {
 /// Get the MAC address of the gateway, or MacAddr::zero() if not available.
 pub fn get_gateway_macaddr(iface: &Interface) -> MacAddr {
     match &iface.gateway {
-        Some(gateway) => gateway.mac_addr.clone(),
+        Some(gateway) => gateway.mac_addr,
         None => MacAddr::zero(),
     }
 }

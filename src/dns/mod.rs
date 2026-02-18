@@ -44,7 +44,12 @@ pub async fn lookup_domain(hostname: &str, timeout: Duration) -> Domain {
 pub async fn lookup_ip(hostname: &str, timeout: Duration) -> Option<Vec<IpAddr>> {
     let resolver = resolver::get_resolver().ok()?;
     match tokio::time::timeout(timeout, async move { resolver.lookup_ip(hostname).await }).await {
-        Ok(Ok(ips)) => Some(ips.iter().collect()),
+        Ok(Ok(ips)) => {
+            let mut out: Vec<IpAddr> = ips.iter().collect();
+            out.sort();
+            out.dedup();
+            Some(out)
+        }
         _ => None,
     }
 }
