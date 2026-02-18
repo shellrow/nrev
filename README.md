@@ -2,8 +2,7 @@
 [crates-url]: https://crates.io/crates/nrev
 
 # nrev [![Crates.io][crates-badge]][crates-url]
-Cross-platform Network Mapper.  
-Designed to be used in network scan, mapping and probes.
+Cross-platform network mapper for discovery and probing.
 
 ## Features
 - Port Scan (TCP/UDP/QUIC, Connect/SYN)
