@@ -33,7 +33,7 @@ impl OsProbeResult {
 }
 
 /// Comprehensive scan report combining various scan results.
-#[derive(Serialize, Deserialize, Debug, Default)]
+#[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct ScanReport {
     pub meta: ReportMeta,
     /// Keep IP as key for merging
@@ -44,7 +44,7 @@ pub struct ScanReport {
 }
 
 /// Metadata about the scan report
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ReportMeta {
     pub tool: String,    // "nrev"
     pub version: String, // env!("CARGO_PKG_VERSION")
@@ -64,7 +64,7 @@ impl Default for ReportMeta {
 }
 
 /// Statistics about the scan
-#[derive(Serialize, Deserialize, Debug, Default)]
+#[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct ReportStats {
     pub hosts_total: usize,
     pub ports_scanned: usize,
@@ -162,6 +162,15 @@ impl ScanReport {
     }
     pub fn as_vec(&self) -> Vec<&EndpointResult> {
         self.endpoints.values().collect()
+    }
+
+    /// Keep only open ports and drop endpoints without open ports.
+    pub fn retain_open_only(&mut self) {
+        self.endpoints.retain(|_, ep| {
+            ep.ports.retain(|_, pr| pr.state == PortState::Open);
+            !ep.ports.is_empty()
+        });
+        self.recompute_stats();
     }
 
     fn recompute_stats(&mut self) {

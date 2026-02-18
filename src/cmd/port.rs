@@ -214,7 +214,9 @@ pub async fn run(args: PortScanArgs, no_stdout: bool, output: Option<PathBuf>) -
         print_report_tree(&rep);
     }
     if let Some(path) = &output {
-        match save_json_output(&rep, path, JsonStyle::Pretty) {
+        let mut file_rep = rep.clone();
+        file_rep.retain_open_only();
+        match save_json_output(&file_rep, path, JsonStyle::Pretty) {
             Ok(_) => {
                 if !no_stdout {
                     tracing::info!("JSON output saved to {}", path.display());
