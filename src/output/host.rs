@@ -3,10 +3,16 @@ use termtree::Tree;
 
 /// Print the scan report results in a tree structure.
 pub fn print_report_tree(result: &ScanResult) {
-    let mut root = Tree::new(tree_label("Scan report(s)"));
+    let mut root = Tree::new(tree_label(format!(
+        "Host scan report (hosts: {}, elapsed: {:?})",
+        result.endpoints.len(),
+        result.scan_time
+    )));
 
     // Create a tree for each endpoint
-    for ep in &result.endpoints {
+    let mut endpoints = result.endpoints.clone();
+    endpoints.sort_by_key(|e| e.ip);
+    for ep in &endpoints {
         // Endpoint title
         let title = if let Some(hn) = &ep.hostname {
             format!("{} ({})", ep.ip, hn)
@@ -57,7 +63,10 @@ pub fn print_report_tree(result: &ScanResult) {
                     port.number,
                     port.transport.as_str().to_uppercase()
                 )));
-                pnode.push(Tree::new(tree_label(format!("state: {:?}", pr.state))));
+                pnode.push(Tree::new(tree_label(format!(
+                    "state: {}",
+                    pr.state.as_str()
+                ))));
                 if let Some(name) = &pr.service.name {
                     pnode.push(Tree::new(tree_label(format!("service: {}", name))));
                 }

@@ -8,9 +8,11 @@ pub fn print_neighbor_tree(entries: &[NeighborDiscoveryResult]) {
         return;
     }
 
-    let mut root = Tree::new("Neighbors".to_string());
+    let mut root = Tree::new(format!("Neighbors (found: {})", entries.len()));
 
-    for e in entries {
+    let mut nodes = entries.to_vec();
+    nodes.sort_by_key(|e| e.ip_addr);
+    for e in &nodes {
         let title = match &e.hostname {
             Some(h) => format!("{} ({})", e.ip_addr, h),
             None => format!("{}", e.ip_addr),
@@ -29,7 +31,7 @@ pub fn print_neighbor_tree(entries: &[NeighborDiscoveryResult]) {
         )));
 
         node.push(Tree::new(format!(
-            "Protoco: {}",
+            "Protocol: {}",
             e.protocol.as_str().to_uppercase()
         )));
 

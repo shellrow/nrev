@@ -32,7 +32,11 @@ fn fmt_ip_host(ip: IpAddr, host: &Option<String>) -> String {
 /// Print the traceroute results in a tree structure.
 pub fn print_trace_tree(tr: &TraceResult, target: Host) {
     if tr.nodes.is_empty() {
-        println!("(no hops)");
+        println!(
+            "Traceroute to {} - no hops (elapsed {})",
+            fmt_ip_host(target.ip, &target.hostname),
+            fmt_dur(tr.elapsed_time)
+        );
         return;
     }
 
@@ -43,17 +47,19 @@ pub fn print_trace_tree(tr: &TraceResult, target: Host) {
         .any(|n| n.ip_addr == target.ip && matches!(n.probe_status.kind, ProbeStatusKind::Done));
     let mut root = if reached {
         Tree::new(format!(
-            "Traceroute to {} - reached ({} hops, elapsed {})",
+            "Traceroute to {} - reached ({} hops, elapsed {}, proto {})",
             fmt_ip_host(target.ip, &target.hostname),
             tr.nodes.len(),
-            fmt_dur(tr.elapsed_time)
+            fmt_dur(tr.elapsed_time),
+            tr.protocol.as_str().to_uppercase()
         ))
     } else {
         Tree::new(format!(
-            "Traceroute to {} - not reached ({} hops, elapsed {})",
+            "Traceroute to {} - not reached ({} hops, elapsed {}, proto {})",
             fmt_ip_host(target.ip, &target.hostname),
             tr.nodes.len(),
-            fmt_dur(tr.elapsed_time)
+            fmt_dur(tr.elapsed_time),
+            tr.protocol.as_str().to_uppercase()
         ))
     };
 

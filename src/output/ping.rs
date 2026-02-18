@@ -15,6 +15,19 @@ fn pct(loss: f64) -> String {
     format!("{:.1}%", loss)
 }
 
+/// Format a Duration as HH:MM:SS.mmm
+fn fmt_dur(d: Duration) -> String {
+    let s = d.as_secs();
+    let ms = d.subsec_millis();
+    format!(
+        "{:02}:{:02}:{:02}.{:03}",
+        s / 3600,
+        (s % 3600) / 60,
+        s % 60,
+        ms
+    )
+}
+
 /// Print the ping scan results in a tree structure.
 pub fn print_ping_tree(res: &PingResult) {
     let s = &res.stat;
@@ -49,7 +62,7 @@ pub fn print_ping_tree(res: &PingResult) {
     }
     summary.push(Tree::new(format!(
         "Protocol: {}",
-        format!("{:?}", res.protocol).to_uppercase()
+        res.protocol.as_str().to_uppercase()
     )));
     match res.protocol {
         Protocol::Icmp => {}
@@ -66,7 +79,7 @@ pub fn print_ping_tree(res: &PingResult) {
         s.received_count, s.transmitted_count
     )));
     summary.push(Tree::new(format!("Packet loss: {}", pct(loss))));
-    summary.push(Tree::new(format!("Elapsed: {:?}", res.elapsed_time)));
+    summary.push(Tree::new(format!("Elapsed: {}", fmt_dur(res.elapsed_time))));
     if let Some(min) = &s.min {
         let mut rtt = Tree::new("RTT".to_string());
         rtt.push(Tree::new(format!("MIN: {}", fmt_ms(min))));
@@ -82,8 +95,10 @@ pub fn print_ping_tree(res: &PingResult) {
 
     // replies
     if !s.responses.is_empty() {
+        let mut responses = s.responses.clone();
+        responses.sort_by_key(|r| r.seq);
         let mut replies = Tree::new("Replies".to_string());
-        for r in &s.responses {
+        for r in &responses {
             match r.probe_status.kind {
                 ProbeStatusKind::Done => {
                     let head = format!(
