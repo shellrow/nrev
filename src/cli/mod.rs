@@ -14,7 +14,7 @@ use crate::{
 
 /// nrev - Fast Network Mapper
 #[derive(Parser, Debug)]
-#[command(author, version, about = "nrev - Cross-platform Network Mapper\nhttps://github.com/shellrow/nrev", long_about = None)]
+#[command(author, version, about = "nrev - Cross-platform network mapper\nhttps://github.com/shellrow/nrev", long_about = None)]
 pub struct Cli {
     /// Global log level
     #[arg(long, default_value = "info")]
