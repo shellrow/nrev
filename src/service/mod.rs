@@ -1,18 +1,25 @@
-use std::time::Duration;
-use regex::{Regex, RegexBuilder};
 use anyhow::{Result, bail};
 use futures::stream::{self, StreamExt};
-use tokio::{io::{AsyncRead, AsyncReadExt}, net::TcpStream, time::{timeout, Instant}};
+use regex::{Regex, RegexBuilder};
+use std::time::Duration;
 use tokio::sync::mpsc;
+use tokio::{
+    io::{AsyncRead, AsyncReadExt},
+    net::TcpStream,
+    time::{Instant, timeout},
+};
 use tracing_indicatif::span_ext::IndicatifSpanExt;
 
-use crate::{endpoint::Endpoint, service::probe::{PortProbe, PortProbeResult, ProbeContext, ServiceProbe}};
+use crate::{
+    endpoint::Endpoint,
+    service::probe::{PortProbe, PortProbeResult, ProbeContext, ServiceProbe},
+};
 
-pub mod probe;
 mod payload;
+pub mod probe;
 
 /// Configuration for service probing
-#[derive(Clone,Debug)]
+#[derive(Clone, Debug)]
 pub struct ServiceProbeConfig {
     pub timeout: Duration,
     pub max_concurrency: usize,
@@ -35,16 +42,17 @@ pub struct ServiceDetector {
 impl ServiceDetector {
     /// Create a new ServiceDetector with the given configuration
     pub fn new(config: ServiceProbeConfig) -> Self {
-        ServiceDetector {
-            config
-        }
+        ServiceDetector { config }
     }
     /// Detect services on the given endpoint using configured probes
-    pub async fn detect_services(config: ServiceProbeConfig, endpoint: Endpoint) -> Result<Vec<PortProbeResult>> {
+    pub async fn detect_services(
+        config: ServiceProbeConfig,
+        endpoint: Endpoint,
+    ) -> Result<Vec<PortProbeResult>> {
         let port_probe_db = crate::db::service::port_probe_db();
-        let service_probe_db = crate::db::service::service_probe_db();       
+        let service_probe_db = crate::db::service::service_probe_db();
         let (ch_tx, mut ch_rx) = mpsc::unbounded_channel::<Vec<Result<PortProbeResult>>>();
-        
+
         let header_span = tracing::info_span!("detect_services");
         header_span.pb_set_style(&crate::output::progress::get_progress_style());
         header_span.pb_set_message(&format!("Service Probe ({})", endpoint.ip));
@@ -84,7 +92,8 @@ impl ServiceDetector {
                         let probe_payload = match service_probe_db.get(&probe) {
                             Some(payload) => payload,
                             None => {
-                                results.push(Err(anyhow::anyhow!("No payload for probe {:?}", probe)));
+                                results
+                                    .push(Err(anyhow::anyhow!("No payload for probe {:?}", probe)));
                                 continue;
                             }
                         };
@@ -107,24 +116,21 @@ impl ServiceDetector {
                         };
 
                         let r = match probe {
-                            ServiceProbe::TcpHTTPGet | ServiceProbe::TcpHTTPSGet | ServiceProbe::TcpHTTPOptions => {
+                            ServiceProbe::TcpHTTPGet
+                            | ServiceProbe::TcpHTTPSGet
+                            | ServiceProbe::TcpHTTPOptions => {
                                 probe::http::HttpProbe::run(ctx).await
-                            },
-                            ServiceProbe::TcpTlsSession => {
-                                probe::tls::TlsProbe::run(ctx).await
-                            },
+                            }
+                            ServiceProbe::TcpTlsSession => probe::tls::TlsProbe::run(ctx).await,
                             ServiceProbe::TcpGenericLines | ServiceProbe::TcpHelp => {
                                 probe::generic::GenericProbe::run(ctx).await
-                            },
-                            ServiceProbe::UdpDNSVersionBindReq | ServiceProbe::TcpDNSVersionBindReq => {
-                                probe::dns::DnsProbe::run(ctx).await
-                            },
-                            ServiceProbe::UdpQuic => {
-                                probe::quic::QuicProbe::run(ctx).await
-                            },
-                            _ =>  {
-                                probe::null::NullProbe::run(ctx).await
                             }
+                            ServiceProbe::UdpDNSVersionBindReq
+                            | ServiceProbe::TcpDNSVersionBindReq => {
+                                probe::dns::DnsProbe::run(ctx).await
+                            }
+                            ServiceProbe::UdpQuic => probe::quic::QuicProbe::run(ctx).await,
+                            _ => probe::null::NullProbe::run(ctx).await,
                         };
                         results.push(r);
                     }
@@ -152,20 +158,19 @@ impl ServiceDetector {
         Ok(results)
     }
 
-    pub async fn run_service_detection(&self, targets: Vec<Endpoint>) -> Result<ServiceDetectionResult> {
+    pub async fn run_service_detection(
+        &self,
+        targets: Vec<Endpoint>,
+    ) -> Result<ServiceDetectionResult> {
         let start_time = Instant::now();
         let mut tasks = vec![];
         for endpoint in targets {
             let endpoint = endpoint.clone();
             let conf = self.config.clone();
             tasks.push(tokio::spawn(async move {
-                let probe_results = Self::detect_services(
-                        conf,
-                        endpoint
-                    )
-                    .await;
+                let probe_results = Self::detect_services(conf, endpoint).await;
                 probe_results
-            }));      
+            }));
         }
         let mut results: Vec<PortProbeResult> = Vec::new();
         for task in tasks {
@@ -174,7 +179,7 @@ impl ServiceDetector {
                     Ok(mut result) => {
                         // Merge results
                         results.append(&mut result);
-                    },
+                    }
                     Err(e) => {
                         tracing::error!("Service detection failed: {}", e);
                     }
@@ -225,8 +230,13 @@ where
             Ok(Ok(0)) => break,
             // Data read
             Ok(Ok(n)) => {
-                if out.len() > max_bytes {
-                    bail!("response exceeded max_bytes ({} > {})", out.len(), max_bytes);
+                if out.len().saturating_add(n) > max_bytes {
+                    bail!(
+                        "response exceeded max_bytes ({} + {} > {})",
+                        out.len(),
+                        n,
+                        max_bytes
+                    );
                 }
                 out.extend_from_slice(&buf[..n]);
 
@@ -248,7 +258,8 @@ where
 // Build a regex with given pattern and flags
 fn build_regex(pat: &str, flags: &str) -> anyhow::Result<Regex> {
     let mut b = RegexBuilder::new(pat);
-    b.case_insensitive(flags.contains('i')).dot_matches_new_line(flags.contains('s'));
+    b.case_insensitive(flags.contains('i'))
+        .dot_matches_new_line(flags.contains('s'));
     //b.multi_line(true);
     Ok(b.build()?)
 }
@@ -256,8 +267,8 @@ fn build_regex(pat: &str, flags: &str) -> anyhow::Result<Regex> {
 /// Build a regex for HTTP headers (multi-line, case-insensitive, dot matches new line)
 fn build_http_regex(pat: &str) -> anyhow::Result<Regex> {
     Ok(RegexBuilder::new(pat)
-        .multi_line(true)         
-        .case_insensitive(true)   
+        .multi_line(true)
+        .case_insensitive(true)
         .dot_matches_new_line(true)
         .build()?)
 }

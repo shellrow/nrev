@@ -1,17 +1,17 @@
-use anyhow::Result;
+use crate::endpoint::NodeType;
+use crate::probe::ProbeStatus;
 use crate::trace::{TraceResult, TraceSetting};
-use std::net::IpAddr;
-use std::time::{Duration, Instant};
-use futures::stream::StreamExt;
+use crate::{probe::ProbeResult, protocol::Protocol};
+use anyhow::Result;
 use futures::future::poll_fn;
+use futures::stream::StreamExt;
 use netdev::MacAddr;
+use nex::datalink::async_io::{AsyncChannel, async_channel};
 use nex::packet::frame::{Frame, ParseOption};
 use nex::packet::icmp::IcmpType;
 use nex::packet::icmpv6::Icmpv6Type;
-use crate::endpoint::NodeType;
-use crate::probe::ProbeStatus;
-use crate::{probe::ProbeResult, protocol::Protocol};
-use nex::datalink::async_io::{async_channel, AsyncChannel};
+use std::net::IpAddr;
+use std::time::{Duration, Instant};
 use tracing_indicatif::span_ext::IndicatifSpanExt;
 
 /// Run a UDP traceroute based on the provided trace settings.
@@ -35,15 +35,16 @@ pub async fn run_udp_trace(setting: &TraceSetting) -> Result<TraceResult> {
         promiscuous: false,
     };
 
-    let AsyncChannel::Ethernet(mut tx, mut rx) = async_channel(&interface, config)?
-    else {
+    let AsyncChannel::Ethernet(mut tx, mut rx) = async_channel(&interface, config)? else {
         unreachable!();
     };
 
     let mut responses: Vec<ProbeResult> = Vec::new();
 
     let mut parse_option: ParseOption = ParseOption::default();
-    if interface.is_tun() || (cfg!(any(target_os = "macos", target_os = "ios")) && interface.is_loopback()) {
+    if interface.is_tun()
+        || (cfg!(any(target_os = "macos", target_os = "ios")) && interface.is_loopback())
+    {
         let payload_offset = if interface.is_loopback() { 14 } else { 0 };
         parse_option.from_ip_packet = true;
         parse_option.offset = payload_offset;
@@ -59,12 +60,11 @@ pub async fn run_udp_trace(setting: &TraceSetting) -> Result<TraceResult> {
     let mut dst_reached: bool = false;
     let start_time = Instant::now();
     for seq_ttl in 1..setting.hop_limit {
-        let udp_packet = crate::packet::udp::build_udp_trace_packet(&interface, &setting, seq_ttl);
+        let udp_packet = crate::packet::udp::build_udp_trace_packet(&interface, setting, seq_ttl)?;
         let send_time = Instant::now();
         match poll_fn(|cx| tx.poll_send(cx, &udp_packet)).await {
-            Ok(_) => {
-            },
-            Err(e) => eprintln!("Failed to send packet: {}", e),
+            Ok(_) => {}
+            Err(e) => tracing::error!("Failed to send packet: {}", e),
         }
         loop {
             match tokio::time::timeout(setting.receive_timeout, rx.next()).await {
@@ -72,10 +72,7 @@ pub async fn run_udp_trace(setting: &TraceSetting) -> Result<TraceResult> {
                     let rtt = send_time.elapsed();
                     let frame = match Frame::from_buf(&packet, parse_option.clone()) {
                         Some(frame) => frame,
-                        None => {
-                            eprintln!("Failed to parse packet: {:?}", packet);
-                            continue;
-                        }
+                        None => continue,
                     };
                     let mut mac_addr: MacAddr = MacAddr::zero();
                     if let Some(datalink_layer) = &frame.datalink {
@@ -112,7 +109,14 @@ pub async fn run_udp_trace(setting: &TraceSetting) -> Result<TraceResult> {
                                             sent_packet_size: udp_packet.len(),
                                             received_packet_size: packet.len(),
                                         };
-                                        tracing::info!("#{} Reply from {}, RTT={:?} TTL={} Type={}", seq_ttl, ipv4_header.source, rtt, ipv4_header.ttl, probe_result.node_type.as_str());
+                                        tracing::info!(
+                                            "#{} Reply from {}, RTT={:?} TTL={} Type={}",
+                                            seq_ttl,
+                                            ipv4_header.source,
+                                            rtt,
+                                            ipv4_header.ttl,
+                                            probe_result.node_type.as_str()
+                                        );
                                         responses.push(probe_result);
                                         header_span.pb_inc(1);
                                         break;
@@ -136,7 +140,14 @@ pub async fn run_udp_trace(setting: &TraceSetting) -> Result<TraceResult> {
                                                 sent_packet_size: udp_packet.len(),
                                                 received_packet_size: packet.len(),
                                             };
-                                            tracing::info!("#{} Reply from {}, RTT={:?} TTL={} Type={}", seq_ttl, ipv4_header.source, rtt, ipv4_header.ttl, probe_result.node_type.as_str());
+                                            tracing::info!(
+                                                "#{} Reply from {}, RTT={:?} TTL={} Type={}",
+                                                seq_ttl,
+                                                ipv4_header.source,
+                                                rtt,
+                                                ipv4_header.ttl,
+                                                probe_result.node_type.as_str()
+                                            );
                                             responses.push(probe_result);
                                             header_span.pb_inc(1);
                                             dst_reached = true;
@@ -161,8 +172,9 @@ pub async fn run_udp_trace(setting: &TraceSetting) -> Result<TraceResult> {
                                             port_number: None,
                                             port_status: None,
                                             ttl: ipv6_header.hop_limit,
-                                            hop: crate::util::ip::initial_ttl(ipv6_header.hop_limit)
-                                                - ipv6_header.hop_limit,
+                                            hop: crate::util::ip::initial_ttl(
+                                                ipv6_header.hop_limit,
+                                            ) - ipv6_header.hop_limit,
                                             rtt: rtt,
                                             probe_status: ProbeStatus::new(),
                                             protocol: Protocol::Udp,
@@ -174,11 +186,18 @@ pub async fn run_udp_trace(setting: &TraceSetting) -> Result<TraceResult> {
                                             sent_packet_size: udp_packet.len(),
                                             received_packet_size: packet.len(),
                                         };
-                                        tracing::info!("#{} Reply from {}, RTT={:?} TTL={} Type={}", seq_ttl, ipv6_header.source, rtt, ipv6_header.hop_limit, probe_result.node_type.as_str());
+                                        tracing::info!(
+                                            "#{} Reply from {}, RTT={:?} TTL={} Type={}",
+                                            seq_ttl,
+                                            ipv6_header.source,
+                                            rtt,
+                                            ipv6_header.hop_limit,
+                                            probe_result.node_type.as_str()
+                                        );
                                         responses.push(probe_result);
                                         header_span.pb_inc(1);
                                         break;
-                                    },
+                                    }
                                     Icmpv6Type::DestinationUnreachable => {
                                         if IpAddr::V6(ipv6_header.source) == setting.dst_ip {
                                             let probe_result: ProbeResult = ProbeResult {
@@ -189,8 +208,9 @@ pub async fn run_udp_trace(setting: &TraceSetting) -> Result<TraceResult> {
                                                 port_number: None,
                                                 port_status: None,
                                                 ttl: ipv6_header.hop_limit,
-                                                hop: crate::util::ip::initial_ttl(ipv6_header.hop_limit)
-                                                    - ipv6_header.hop_limit,
+                                                hop: crate::util::ip::initial_ttl(
+                                                    ipv6_header.hop_limit,
+                                                ) - ipv6_header.hop_limit,
                                                 rtt: rtt,
                                                 probe_status: ProbeStatus::new(),
                                                 protocol: Protocol::Udp,
@@ -198,7 +218,14 @@ pub async fn run_udp_trace(setting: &TraceSetting) -> Result<TraceResult> {
                                                 sent_packet_size: udp_packet.len(),
                                                 received_packet_size: packet.len(),
                                             };
-                                            tracing::info!("#{} Reply from {}, RTT={:?} TTL={} Type={}", seq_ttl, ipv6_header.source, rtt, ipv6_header.hop_limit, probe_result.node_type.as_str());
+                                            tracing::info!(
+                                                "#{} Reply from {}, RTT={:?} TTL={} Type={}",
+                                                seq_ttl,
+                                                ipv6_header.source,
+                                                rtt,
+                                                ipv6_header.hop_limit,
+                                                probe_result.node_type.as_str()
+                                            );
                                             responses.push(probe_result);
                                             header_span.pb_inc(1);
                                             dst_reached = true;
@@ -210,17 +237,17 @@ pub async fn run_udp_trace(setting: &TraceSetting) -> Result<TraceResult> {
                             }
                         }
                     }
-                },
+                }
                 Ok(Some(Err(e))) => {
                     tracing::error!("Failed to receive packet: {}", e);
                     header_span.pb_inc(1);
                     break;
-                },
+                }
                 Ok(None) => {
                     tracing::error!("Channel closed");
                     header_span.pb_inc(1);
                     break;
-                },
+                }
                 Err(_) => {
                     tracing::error!("Request timeout for seq {}", seq_ttl as u32);
                     let probe_result = ProbeResult::timeout(

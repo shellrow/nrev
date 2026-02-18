@@ -3,9 +3,9 @@ pub mod probe;
 use std::net::Ipv4Addr;
 use std::{net::IpAddr, time::Duration};
 
+use anyhow::Result;
 use netdev::Interface;
 use serde::{Deserialize, Serialize};
-use anyhow::Result;
 
 use crate::config::default::{DEFAULT_BASE_TARGET_UDP_PORT, DEFAULT_HOP_LIMIT};
 use crate::endpoint::Host;
@@ -108,9 +108,7 @@ impl Tracer {
     pub async fn run(&self) -> Result<TraceResult> {
         match self.setting.protocol {
             Protocol::Udp => probe::udp::run_udp_trace(&self.setting).await,
-            _ => {
-                Err(anyhow::anyhow!("Unsupported protocol"))
-            },
+            _ => Err(anyhow::anyhow!("Unsupported protocol")),
         }
     }
 }

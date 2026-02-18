@@ -1,9 +1,17 @@
-use std::{collections::BTreeMap, net::IpAddr, time::{Duration, SystemTime}};
+use std::{
+    collections::BTreeMap,
+    net::IpAddr,
+    time::{Duration, SystemTime},
+};
 
+use crate::{
+    endpoint::{EndpointResult, Port, PortResult, PortState, ServiceInfo, TransportProtocol},
+    output::{ScanResult, tree_label},
+    service::{ServiceDetectionResult, probe::ServiceProbe},
+};
 use nex::packet::frame::Frame;
 use serde::{Deserialize, Serialize};
 use termtree::Tree;
-use crate::{endpoint::{EndpointResult, Port, PortResult, PortState, ServiceInfo, TransportProtocol}, output::{tree_label, ScanResult}, service::{probe::ServiceProbe, ServiceDetectionResult}};
 
 /// Results of OS probing
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -25,7 +33,7 @@ impl OsProbeResult {
 }
 
 /// Comprehensive scan report combining various scan results.
-#[derive(Serialize, Deserialize, Debug, Default)]
+#[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct ScanReport {
     pub meta: ReportMeta,
     /// Keep IP as key for merging
@@ -36,10 +44,10 @@ pub struct ScanReport {
 }
 
 /// Metadata about the scan report
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct ReportMeta {
-    pub tool: String,            // "nrev"
-    pub version: String,         // env!("CARGO_PKG_VERSION")
+    pub tool: String,    // "nrev"
+    pub version: String, // env!("CARGO_PKG_VERSION")
     pub started_at: SystemTime,
     pub finished_at: Option<SystemTime>,
 }
@@ -56,14 +64,14 @@ impl Default for ReportMeta {
 }
 
 /// Statistics about the scan
-#[derive(Serialize, Deserialize, Debug, Default)]
+#[derive(Serialize, Deserialize, Debug, Default, Clone)]
 pub struct ReportStats {
     pub hosts_total: usize,
     pub ports_scanned: usize,
     pub open_ports: usize,
-    pub duration_scan: Option<Duration>,      // PortScan
-    pub duration_service: Option<Duration>,   // ServiceDetect
-    pub duration_os: Option<Duration>,        // OS probe
+    pub duration_scan: Option<Duration>,    // PortScan
+    pub duration_service: Option<Duration>, // ServiceDetect
+    pub duration_os: Option<Duration>,      // OS probe
 }
 
 /// An attempt to probe a service on a port
@@ -74,7 +82,9 @@ pub struct PortProbeAttempt {
 }
 
 impl ScanReport {
-    pub fn new() -> Self { Self::default() }
+    pub fn new() -> Self {
+        Self::default()
+    }
 
     /// Apply port scan results: merge endpoints, update stats
     pub fn apply_port_scan(&mut self, ps: ScanResult) {
@@ -96,7 +106,10 @@ impl ScanReport {
                 continue;
             };
             // Upsert port result
-            let port_key = Port { number: r.port, transport: r.transport };
+            let port_key = Port {
+                number: r.port,
+                transport: r.transport,
+            };
             let pr = ep.ports.entry(port_key).or_insert_with(|| PortResult {
                 port: port_key,
                 state: PortState::Open,
@@ -135,10 +148,12 @@ impl ScanReport {
                 if pr.service.name.is_none() {
                     match port.transport {
                         TransportProtocol::Tcp => {
-                            pr.service.name = tcp_svc_db.get_name(port.number).map(|s| s.to_string());
+                            pr.service.name =
+                                tcp_svc_db.get_name(port.number).map(|s| s.to_string());
                         }
                         TransportProtocol::Udp | TransportProtocol::Quic => {
-                            pr.service.name = udp_svc_db.get_name(port.number).map(|s| s.to_string());
+                            pr.service.name =
+                                udp_svc_db.get_name(port.number).map(|s| s.to_string());
                         }
                     }
                 }
@@ -149,13 +164,26 @@ impl ScanReport {
         self.endpoints.values().collect()
     }
 
+    /// Keep only open ports and drop endpoints without open ports.
+    pub fn retain_open_only(&mut self) {
+        self.endpoints.retain(|_, ep| {
+            ep.ports.retain(|_, pr| pr.state == PortState::Open);
+            !ep.ports.is_empty()
+        });
+        self.recompute_stats();
+    }
+
     fn recompute_stats(&mut self) {
         self.stats.hosts_total = self.endpoints.len();
         let mut ports_scanned = 0usize;
         let mut open_ports = 0usize;
         for ep in self.endpoints.values() {
             ports_scanned += ep.ports.len();
-            open_ports += ep.ports.values().filter(|p| p.state == PortState::Open).count();
+            open_ports += ep
+                .ports
+                .values()
+                .filter(|p| p.state == PortState::Open)
+                .count();
         }
         self.stats.ports_scanned = ports_scanned;
         self.stats.open_ports = open_ports;
@@ -172,8 +200,12 @@ fn select_better_service(cur: ServiceInfo, newv: ServiceInfo) -> ServiceInfo {
 /// Score a ServiceInfo based on the presence of certain fields.
 fn score_service(s: &ServiceInfo) -> usize {
     let mut sc = 0;
-    if s.name.is_some()    { sc += 1; }
-    if s.product.is_some() { sc += 1; }
+    if s.name.is_some() {
+        sc += 1;
+    }
+    if s.product.is_some() {
+        sc += 1;
+    }
     if let Some(b) = &s.banner {
         sc += 1;
         // Check for HTTP 200 OK for additional points
@@ -199,11 +231,17 @@ pub fn print_report_tree(rep: &ScanReport) {
         // OS
         if ep.os.family.is_some() || !ep.cpes.is_empty() {
             let mut os_node = Tree::new(tree_label("os"));
-            if let Some(f) = &ep.os.family { os_node.push(Tree::new(tree_label(format!("family: {}", f)))); }
-            if let Some(v) = &ep.os.ttl_observed { os_node.push(Tree::new(tree_label(format!("TTL: {}", v)))); }
+            if let Some(f) = &ep.os.family {
+                os_node.push(Tree::new(tree_label(format!("family: {}", f))));
+            }
+            if let Some(v) = &ep.os.ttl_observed {
+                os_node.push(Tree::new(tree_label(format!("TTL: {}", v))));
+            }
             if !ep.cpes.is_empty() {
                 let mut cpe_node = Tree::new(tree_label("cpes"));
-                for c in &ep.cpes { cpe_node.push(Tree::new(c.clone())); }
+                for c in &ep.cpes {
+                    cpe_node.push(Tree::new(c.clone()));
+                }
                 os_node.push(cpe_node);
             }
             ep_root.push(os_node);
@@ -214,14 +252,26 @@ pub fn print_report_tree(rep: &ScanReport) {
             if pr.state != PortState::Open {
                 continue;
             }
-            let mut pnode = Tree::new(tree_label(format!("{}/{}", port.number, port.transport.as_str().to_uppercase())));
+            let mut pnode = Tree::new(tree_label(format!(
+                "{}/{}",
+                port.number,
+                port.transport.as_str().to_uppercase()
+            )));
             pnode.push(Tree::new(tree_label(format!("state: {:?}", pr.state))));
-            if let Some(name) = &pr.service.name { pnode.push(Tree::new(tree_label(format!("service: {}", name)))); }
-            if let Some(b) = &pr.service.banner { pnode.push(Tree::new(tree_label(format!("banner: {}", b)))); }
-            if let Some(p) = &pr.service.product { pnode.push(Tree::new(tree_label(format!("product: {}", p)))); }
+            if let Some(name) = &pr.service.name {
+                pnode.push(Tree::new(tree_label(format!("service: {}", name))));
+            }
+            if let Some(b) = &pr.service.banner {
+                pnode.push(Tree::new(tree_label(format!("banner: {}", b))));
+            }
+            if let Some(p) = &pr.service.product {
+                pnode.push(Tree::new(tree_label(format!("product: {}", p))));
+            }
             if !pr.service.cpes.is_empty() {
                 let mut c = Tree::new(tree_label("cpes"));
-                for cp in &pr.service.cpes { c.push(Tree::new(cp.clone())); }
+                for cp in &pr.service.cpes {
+                    c.push(Tree::new(cp.clone()));
+                }
                 pnode.push(c);
             }
             ep_root.push(pnode);

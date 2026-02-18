@@ -1,19 +1,19 @@
-use futures::stream::StreamExt;
-use futures::future::poll_fn;
-use nex::datalink::async_io::{async_channel, AsyncChannel};
-use nex::packet::frame::{Frame, ParseOption};
-use tracing_indicatif::span_ext::IndicatifSpanExt;
-use std::collections::BTreeMap;
-use anyhow::Result;
 use crate::config::default::DEFAULT_LOCAL_TCP_PORT;
-use crate::endpoint::{EndpointResult, OsGuess, Port, PortResult, PortState, ServiceInfo, TransportProtocol};
+use crate::endpoint::{
+    EndpointResult, OsGuess, Port, PortResult, PortState, ServiceInfo, TransportProtocol,
+};
 use crate::output::port::OsProbeResult;
 use crate::probe::ProbeSetting;
+use anyhow::Result;
+use futures::future::poll_fn;
+use futures::stream::StreamExt;
+use nex::datalink::async_io::{AsyncChannel, async_channel};
+use nex::packet::frame::{Frame, ParseOption};
+use std::collections::BTreeMap;
+use tracing_indicatif::span_ext::IndicatifSpanExt;
 
 /// Run OS detection probe using TCP SYN packets and return the results.
-pub async fn run_os_probe(
-    setting: ProbeSetting,
-) -> Result<OsProbeResult> {
+pub async fn run_os_probe(setting: ProbeSetting) -> Result<OsProbeResult> {
     let mut result = OsProbeResult::new();
     let interface = match crate::interface::get_interface_by_index(setting.if_index) {
         Some(interface) => interface,
@@ -31,13 +31,14 @@ pub async fn run_os_probe(
         promiscuous: false,
     };
 
-    let AsyncChannel::Ethernet(mut tx, mut rx) = async_channel(&interface, config)?
-    else {
+    let AsyncChannel::Ethernet(mut tx, mut rx) = async_channel(&interface, config)? else {
         unreachable!();
     };
 
     let mut parse_option: ParseOption = ParseOption::default();
-    if interface.is_tun() || (cfg!(any(target_os = "macos", target_os = "ios")) && interface.is_loopback()) {
+    if interface.is_tun()
+        || (cfg!(any(target_os = "macos", target_os = "ios")) && interface.is_loopback())
+    {
         let payload_offset = if interface.is_loopback() { 14 } else { 0 };
         parse_option.from_ip_packet = true;
         parse_option.offset = payload_offset;
@@ -53,8 +54,12 @@ pub async fn run_os_probe(
 
         let mut detected: bool = false;
         for port in &target.ports {
-            let packet =
-                crate::packet::tcp::build_tcp_syn_packet(&interface, target.ip, port.number, false);
+            let packet = crate::packet::tcp::build_tcp_syn_packet(
+                &interface,
+                target.ip,
+                port.number,
+                false,
+            )?;
 
             // Send a packet using poll_fn.
             match poll_fn(|cx| tx.poll_send(cx, &packet)).await {
@@ -68,16 +73,15 @@ pub async fn run_os_probe(
                     Ok(Some(Ok(packet))) => {
                         let frame = match Frame::from_buf(&packet, parse_option.clone()) {
                             Some(frame) => frame,
-                            None => {
-                                eprintln!("Failed to parse packet: {:?}", packet);
-                                continue;
-                            }
+                            None => continue,
                         };
-                        if frame.ip.is_none() || frame.transport.is_none() {
+                        let Some(ip) = &frame.ip else {
                             continue;
-                        }
+                        };
+                        let Some(transport) = &frame.transport else {
+                            continue;
+                        };
                         let ttl: u8;
-                        let ip = frame.ip.as_ref().unwrap();
                         if let Some(ipv4) = &ip.ipv4 {
                             if ipv4.source != target.ip {
                                 continue;
@@ -91,23 +95,19 @@ pub async fn run_os_probe(
                         } else {
                             continue;
                         }
-                        if let Some(transport) = &frame.transport {
-                            if let Some(tcp) = &transport.tcp {
-                                if tcp.destination != DEFAULT_LOCAL_TCP_PORT {
-                                    continue;
-                                }
-                                if tcp.options.len() == 0 {
-                                    continue;
-                                }
-                            } else {
+                        if let Some(tcp) = &transport.tcp {
+                            if tcp.destination != DEFAULT_LOCAL_TCP_PORT {
+                                continue;
+                            }
+                            if tcp.options.is_empty() {
                                 continue;
                             }
                         } else {
                             continue;
                         }
-                        tracing::debug!("Matching frame...: {:?}", frame.transport.as_ref().unwrap().tcp);
+                        tracing::debug!("Matching frame...: {:?}", transport.tcp);
                         match crate::os::match_tcpip_signatures(&frame) {
-                           Some(os_match) => {
+                            Some(os_match) => {
                                 let port_result = PortResult {
                                     port: Port::new(port.number, TransportProtocol::Tcp),
                                     state: PortState::Open,
@@ -117,7 +117,10 @@ pub async fn run_os_probe(
                                 let endpoint_result = EndpointResult {
                                     ip: target.ip,
                                     hostname: target.hostname.clone(),
-                                    ports: BTreeMap::from([(port_result.port.clone(), port_result)]),
+                                    ports: BTreeMap::from([(
+                                        port_result.port.clone(),
+                                        port_result,
+                                    )]),
                                     mac_addr: target.mac_addr,
                                     vendor_name: None,
                                     os: OsGuess {
@@ -133,11 +136,11 @@ pub async fn run_os_probe(
 
                                 detected = true;
                                 break;
-                           }
-                           None => {
-                               tracing::debug!("No matching OS found");
-                           }
-                       }
+                            }
+                            None => {
+                                tracing::debug!("No matching OS found");
+                            }
+                        }
                     }
                     Ok(Some(Err(e))) => {
                         tracing::error!("Failed to receive packet: {}", e);
