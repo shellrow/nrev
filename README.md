@@ -6,12 +6,12 @@ Cross-platform Network Mapper.
 Designed to be used in network scan, mapping and probes.
 
 ## Features
-- Port Scan
-- Host Scan
-- Ping
+- Port Scan (TCP/UDP/QUIC, Connect/SYN)
+- Host Scan (ICMP/UDP/TCP)
+- Ping (ICMP/UDP/TCP/QUIC)
 - Traceroute
-- Neighbor Discovery
-- Subdomain scan
+- Neighbor Discovery (ARP/NDP)
+- Subdomain Enumeration
 
 ## Supported platforms
 - Linux
@@ -47,10 +47,22 @@ cargo binstall nrev
 
 ## Basic Usage
 ### Port Scan Example
-To scan the default 1000 ports on a target, simply specify the target (-s for service detection, -o for OS detection)
+To scan the default top 1000 ports on a target:
 ```
-nrev port yourcorpone.com -s -o
-nrev port 192.168.1.10 -s -o
+nrev port yourcorpone.com
+nrev port 192.168.1.10
+```
+
+Enable service detection and OS fingerprinting:
+```
+nrev port yourcorpone.com -S -O
+```
+
+You can pass multiple targets, CIDR blocks, or `@`-prefixed target list files:
+```
+nrev port 192.168.1.10 192.168.1.11
+nrev port 10.0.0.0/24
+nrev port @/path/to/targets.txt
 ```
 
 ### Sub-commands and Options
@@ -59,7 +71,7 @@ Usage: nrev [OPTIONS] <COMMAND>
 
 Commands:
   port       Scan ports on the target(s) (TCP/QUIC)
-  host       Discover alive hosts (ICMP/UDP/TCP etc.)
+  host       Discover alive hosts (ICMP/UDP/TCP)
   ping       Simple ping (ICMP/UDP/TCP)
   trace      Traceroute (UDP)
   nei        Neighbor discovery (ARP/NDP)
@@ -84,7 +96,7 @@ See `nrev <sub-command> -h` for more detail.
 ### Port scan
 Scan default 1000 ports and enable service and OS detection for open ports
 ```
-nrev port yourcorpone.com -s -o
+nrev port yourcorpone.com -S -O
 ```
 
 Specify the ports
@@ -98,9 +110,9 @@ nrev port yourcorpone.com --ports 20-100
 ```
 
 #### Settings
-By default, nrev determines the connection timeout or waiting time until packet reception (before concluding the scan task) based on the results of the initial PING.  
-The initial PING is executed in the order of ICMP Ping, UDP Ping, TCP Ping, and if successful, proceeds to the next scan task.  
-If all PING attempts fail, nrev exits before executing the scan. This step can be skipped by setting the `--noping` flag.  
+By default, nrev derives connect/wait timing from an initial ping phase.  
+If initial ping fails, nrev continues scanning with a safe default RTT.  
+You can skip the initial ping with `--no-ping`.  
 For other settings, please refer to `nrev port -h` for details.
 
 ### Host scan
@@ -110,7 +122,7 @@ nrev host 192.168.1.0/24
 ```
 
 ```
-nrev host /path/to/list/hostlist.txt
+nrev host @/path/to/list/hostlist.txt
 ```
 
 TCP Host scan
@@ -147,7 +159,7 @@ nrev trace 8.8.8.8 --interval-ms 500
 
 ### Subdomain scan
 ```
-nrev subdomain yourcorpone.com --wordlist /path/to/wordlist/top-1000.txt
+nrev domain yourcorpone.com --wordlist /path/to/wordlist/top-1000.txt
 ```
 
 ### Neighbor (ARP/NDP)
@@ -158,6 +170,22 @@ nrev nei 192.168.1.1
 ### Specify the network interface
 ```
 nrev port 10.10.11.14 --interface tun0
+```
+
+## Output and Logging
+Save command results as JSON:
+```
+nrev -o result.json port yourcorpone.com -S -O
+```
+
+Run in non-interactive mode (no tree output to stdout):
+```
+nrev --no-stdout -o hosts.json host 10.0.0.0/24
+```
+
+Write logs to file:
+```
+nrev --log-file --log-file-path /tmp/nrev.log port yourcorpone.com
 ```
 
 ## Privileges
