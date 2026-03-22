@@ -8,8 +8,11 @@ use serde::{Deserialize, Serialize};
 use crate::{
     config::ScanRecipe,
     error::{NrevError, Result},
-    fingerprint::FingerprintRule,
+    fingerprint::{
+        FingerprintRule, LegacyOsDb, LegacyOsSignature, OsClassTtl, builtin_os_signatures,
+    },
     probes::{BuiltinProbeCatalog, ExternalProbeDefinition},
+    service_db::{LegacyServiceDb, LegacyServiceSignature, builtin_service_signatures},
 };
 
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
@@ -19,14 +22,36 @@ pub struct ExternalDataFile {
     #[serde(default)]
     pub fingerprint_rules: Vec<FingerprintRule>,
     #[serde(default)]
+    pub os_ttl_classes: Vec<OsClassTtl>,
+    #[serde(default)]
+    pub os_signatures: Vec<LegacyOsSignature>,
+    #[serde(default)]
+    pub service_signatures: Vec<LegacyServiceSignature>,
+    #[serde(default)]
     pub recipes: Vec<ScanRecipe>,
 }
 
-#[derive(Clone, Debug, Default)]
+#[derive(Clone, Debug)]
 pub struct DataRegistry {
     pub external_probes: Vec<ExternalProbeDefinition>,
     pub fingerprint_rules: Vec<FingerprintRule>,
+    pub os_ttl_classes: Vec<OsClassTtl>,
+    pub os_signatures: Vec<LegacyOsSignature>,
+    pub service_signatures: Vec<LegacyServiceSignature>,
     pub recipes: Vec<ScanRecipe>,
+}
+
+impl Default for DataRegistry {
+    fn default() -> Self {
+        Self {
+            external_probes: Vec::new(),
+            fingerprint_rules: Vec::new(),
+            os_ttl_classes: Vec::new(),
+            os_signatures: builtin_os_signatures(),
+            service_signatures: builtin_service_signatures(),
+            recipes: Vec::new(),
+        }
+    }
 }
 
 impl DataRegistry {
@@ -53,12 +78,15 @@ impl DataRegistry {
     fn extend_from_file(&mut self, path: &Path) -> Result<()> {
         let content = fs::read_to_string(path)?;
         let file = match path.extension().and_then(|ext| ext.to_str()) {
-            Some("json") => serde_json::from_str::<ExternalDataFile>(&content)?,
+            Some("json") => parse_json_data_file(&content)?,
             Some("toml") => toml::from_str::<ExternalDataFile>(&content)?,
             _ => return Err(NrevError::UnsupportedFileExtension(path.to_path_buf())),
         };
         self.external_probes.extend(file.probes);
         self.fingerprint_rules.extend(file.fingerprint_rules);
+        self.os_ttl_classes.extend(file.os_ttl_classes);
+        self.os_signatures.extend(file.os_signatures);
+        self.service_signatures.extend(file.service_signatures);
         self.recipes.extend(file.recipes);
         Ok(())
     }
@@ -78,6 +106,39 @@ impl DataRegistry {
     }
 }
 
+fn parse_json_data_file(content: &str) -> Result<ExternalDataFile> {
+    if let Ok(file) = serde_json::from_str::<ExternalDataFile>(content) {
+        return Ok(file);
+    }
+
+    if let Ok(ttl_classes) = serde_json::from_str::<Vec<OsClassTtl>>(content) {
+        return Ok(ExternalDataFile {
+            os_ttl_classes: ttl_classes,
+            ..ExternalDataFile::default()
+        });
+    }
+
+    if let Ok(db) = serde_json::from_str::<LegacyOsDb>(content)
+        && !db.signatures.is_empty()
+    {
+        return Ok(ExternalDataFile {
+            os_signatures: db.signatures,
+            ..ExternalDataFile::default()
+        });
+    }
+
+    if let Ok(db) = serde_json::from_str::<LegacyServiceDb>(content)
+        && !db.signatures.is_empty()
+    {
+        return Ok(ExternalDataFile {
+            service_signatures: db.signatures,
+            ..ExternalDataFile::default()
+        });
+    }
+
+    Ok(serde_json::from_str::<ExternalDataFile>(content)?)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -95,6 +156,13 @@ mod tests {
         assert_eq!(registry.fingerprint_rules.len(), 1);
         assert_eq!(registry.recipes.len(), 1);
         fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn loads_builtin_registry_by_default() {
+        let registry = DataRegistry::load(None).expect("load registry");
+        assert!(!registry.os_signatures.is_empty());
+        assert!(!registry.service_signatures.is_empty());
     }
 
     #[test]

@@ -42,6 +42,7 @@ use x509_parser::parse_x509_certificate;
 
 use crate::{
     capture::pcap::{CapturedFrame, PacketCaptureOptions, start_capture, start_capture_timed},
+    fingerprint::classify_initial_ttl,
     interface::get_interface_by_name,
     model::{HostDiscoveryMethod, HostObservation, TlsObservation, Transport},
 };
@@ -52,9 +53,16 @@ const ICMP_ECHO_IDENTIFIER: u16 = 0x4e52;
 #[derive(Debug)]
 pub struct SynAckObservation {
     pub ttl_hint: Option<u8>,
+    pub ttl_class: Option<u8>,
     pub window_size: Option<u32>,
     pub syn_ack_seen: bool,
     pub rst_seen: bool,
+    pub tcp_option_order: Option<String>,
+    pub tcp_option_set: Option<String>,
+    pub mss: Option<u16>,
+    pub window_scale: Option<u8>,
+    pub sack_permitted: Option<bool>,
+    pub timestamps: Option<bool>,
 }
 
 #[derive(Debug)]
@@ -858,11 +866,19 @@ fn parse_syn_frames(
         }
 
         if (tcp.flags & (TcpFlags::SYN | TcpFlags::ACK)) == (TcpFlags::SYN | TcpFlags::ACK) {
+            let features = extract_tcp_option_signature(&tcp.options);
             return Ok(SynAckObservation {
                 ttl_hint,
+                ttl_class: ttl_hint.map(classify_initial_ttl),
                 window_size: Some(tcp.window.into()),
                 syn_ack_seen: true,
                 rst_seen: false,
+                tcp_option_order: features.order_key,
+                tcp_option_set: features.set_key,
+                mss: features.mss,
+                window_scale: features.window_scale,
+                sack_permitted: features.sack_permitted,
+                timestamps: features.timestamps,
             });
         }
         if (tcp.flags & TcpFlags::RST) != 0 {
@@ -916,12 +932,20 @@ fn parse_syn_scan_frames(
         if tcp.destination != source_port || !port_set.contains(&tcp.source) {
             continue;
         }
+        let features = extract_tcp_option_signature(&tcp.options);
         let observation = SynAckObservation {
             ttl_hint,
+            ttl_class: ttl_hint.map(classify_initial_ttl),
             window_size: Some(tcp.window.into()),
             syn_ack_seen: (tcp.flags & (TcpFlags::SYN | TcpFlags::ACK))
                 == (TcpFlags::SYN | TcpFlags::ACK),
             rst_seen: (tcp.flags & TcpFlags::RST) != 0,
+            tcp_option_order: features.order_key,
+            tcp_option_set: features.set_key,
+            mss: features.mss,
+            window_scale: features.window_scale,
+            sack_permitted: features.sack_permitted,
+            timestamps: features.timestamps,
         };
         if observation.syn_ack_seen {
             results.insert(tcp.source, SynPortStatus::Open(observation));
@@ -975,12 +999,20 @@ fn parse_syn_scan_frames_multi(
         if tcp.destination != source_port || !port_set.contains(&tcp.source) {
             continue;
         }
+        let features = extract_tcp_option_signature(&tcp.options);
         let observation = SynAckObservation {
             ttl_hint,
+            ttl_class: ttl_hint.map(classify_initial_ttl),
             window_size: Some(tcp.window.into()),
             syn_ack_seen: (tcp.flags & (TcpFlags::SYN | TcpFlags::ACK))
                 == (TcpFlags::SYN | TcpFlags::ACK),
             rst_seen: (tcp.flags & TcpFlags::RST) != 0,
+            tcp_option_order: features.order_key,
+            tcp_option_set: features.set_key,
+            mss: features.mss,
+            window_scale: features.window_scale,
+            sack_permitted: features.sack_permitted,
+            timestamps: features.timestamps,
         };
         if observation.syn_ack_seen {
             results
@@ -1071,6 +1103,96 @@ fn build_tcp_syn_packet(
         .build();
 
     Ok(ethernet_packet.to_bytes().to_vec())
+}
+
+struct TcpOptionSignature {
+    order_key: Option<String>,
+    set_key: Option<String>,
+    mss: Option<u16>,
+    window_scale: Option<u8>,
+    sack_permitted: Option<bool>,
+    timestamps: Option<bool>,
+}
+
+fn extract_tcp_option_signature(options: &[TcpOptionPacket]) -> TcpOptionSignature {
+    use nex::packet::tcp::TcpOptionKind;
+
+    let mut ordered = Vec::new();
+    let mut compressed = Vec::new();
+    let mut prev_nop = false;
+    let mut mss = None;
+    let mut window_scale = None;
+    let mut sack_permitted = None;
+    let mut timestamps = None;
+
+    for option in options {
+        let token = match option.kind() {
+            TcpOptionKind::MSS => {
+                mss = Some(option.get_mss());
+                Some("MSS")
+            }
+            TcpOptionKind::SACK_PERMITTED => {
+                sack_permitted = Some(true);
+                Some("SACK")
+            }
+            TcpOptionKind::TIMESTAMPS => {
+                timestamps = Some(true);
+                Some("TS")
+            }
+            TcpOptionKind::WSCALE => {
+                window_scale = Some(option.get_wscale());
+                Some("WS")
+            }
+            TcpOptionKind::NOP => Some("NOP"),
+            _ => None,
+        };
+
+        let Some(token) = token else {
+            continue;
+        };
+
+        ordered.push(token);
+        if token == "NOP" {
+            if !prev_nop {
+                compressed.push(token);
+            }
+            prev_nop = true;
+        } else {
+            prev_nop = false;
+            compressed.push(token);
+        }
+    }
+
+    let set_key = if compressed.is_empty() {
+        None
+    } else {
+        use std::collections::BTreeSet;
+
+        const PRIORITY: [&str; 5] = ["MSS", "SACK", "TS", "WS", "NOP"];
+        let set = compressed.iter().copied().collect::<BTreeSet<_>>();
+        let mut head = PRIORITY
+            .iter()
+            .copied()
+            .filter(|token| set.contains(token))
+            .collect::<Vec<_>>();
+        let mut tail = set
+            .iter()
+            .copied()
+            .filter(|token| !PRIORITY.contains(token))
+            .collect::<Vec<_>>();
+        tail.sort_unstable();
+        head.extend(tail);
+        Some(format!("{{{}}}", head.join(",")))
+    };
+
+    TcpOptionSignature {
+        order_key: (!ordered.is_empty()).then(|| ordered.join(",")),
+        set_key,
+        mss,
+        window_scale,
+        sack_permitted,
+        timestamps,
+    }
 }
 
 fn build_icmp_echo_packet(interface: &Interface, dst_ip: IpAddr) -> std::io::Result<Vec<u8>> {

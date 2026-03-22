@@ -15,6 +15,7 @@ pub mod model;
 pub mod output;
 pub mod probes;
 pub mod scanner;
+pub mod service_db;
 pub mod target;
 pub mod tls;
 pub mod transport;

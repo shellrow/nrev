@@ -1,0 +1,218 @@
+{
+  "meta": {
+    "name": "nrev builtin service fingerprint db",
+    "version": "1"
+  },
+  "signatures": [
+    {
+      "probe_id": "tcp:null",
+      "service": "http",
+      "regex": "Microsoft-HTTPAPI/2\\.0",
+      "regex_literal_tokens": ["Microsoft-HTTPAPI/2.0"],
+      "cpe": ["cpe:/o:microsoft:windows"]
+    },
+    {
+      "probe_id": "tcp:null",
+      "service": "http",
+      "regex": "Server: Microsoft-IIS/[\\d.]+",
+      "regex_literal_tokens": ["Microsoft-IIS/"],
+      "cpe": ["cpe:/o:microsoft:windows"]
+    },
+    {
+      "probe_id": "tcp:null",
+      "service": "http",
+      "regex": "<title>IIS Windows Server</title>",
+      "regex_literal_tokens": ["<title>IIS Windows Server</title>"],
+      "cpe": ["cpe:/o:microsoft:windows"]
+    },
+    {
+      "probe_id": "tcp:null",
+      "service": "ftp",
+      "regex": "Microsoft FTP Service",
+      "regex_literal_tokens": ["Microsoft FTP Service"],
+      "cpe": ["cpe:/o:microsoft:windows"]
+    },
+    {
+      "probe_id": "tcp:null",
+      "service": "pop3",
+      "regex": "Microsoft Windows POP3 Service",
+      "regex_literal_tokens": ["Microsoft Windows POP3 Service"],
+      "cpe": ["cpe:/o:microsoft:windows"]
+    },
+    {
+      "probe_id": "tcp:null",
+      "service": "http",
+      "regex": "Microsoft-WinCE/",
+      "regex_literal_tokens": ["Microsoft-WinCE/"],
+      "cpe": ["cpe:/o:microsoft:windows"]
+    },
+    {
+      "probe_id": "tcp:null",
+      "service": "ftp",
+      "regex": "Mac OS X Server",
+      "regex_literal_tokens": ["Mac OS X Server"],
+      "cpe": ["cpe:/o:apple:mac_os_x"]
+    },
+    {
+      "probe_id": "tcp:null",
+      "service": "http",
+      "regex": "RIPT-Server: iTunesLib/.*\\(Mac OS X\\)",
+      "regex_literal_tokens": ["RIPT-Server: iTunesLib/", "(Mac OS X)"],
+      "cpe": ["cpe:/o:apple:mac_os_x"]
+    },
+    {
+      "probe_id": "tcp:null",
+      "service": "http",
+      "regex": "GoodReader for iPad|Good\\.iWare WebDAV Server for iPhone",
+      "regex_literal_tokens": [],
+      "cpe": ["cpe:/o:apple:iphone_os"]
+    },
+    {
+      "probe_id": "tcp:null",
+      "service": "ssh",
+      "regex": "SSH-.*OpenSSH_.*(Ubuntu|Debian)",
+      "regex_literal_tokens": ["SSH-", "OpenSSH_"],
+      "cpe": ["cpe:/o:linux:linux_kernel"]
+    },
+    {
+      "probe_id": "tcp:null",
+      "service": "http",
+      "regex": "Server: Apache/[\\w.-]+ \\((Ubuntu|Debian|Debian GNU/Linux|Gentoo Linux)\\)",
+      "regex_literal_tokens": ["Server: Apache/"],
+      "cpe": ["cpe:/o:linux:linux_kernel"]
+    },
+    {
+      "probe_id": "tcp:null",
+      "service": "http",
+      "regex": "Server: nginx/[\\d.]+ \\(Ubuntu\\)",
+      "regex_literal_tokens": ["Server: nginx/", "(Ubuntu)"],
+      "cpe": ["cpe:/o:linux:linux_kernel"]
+    },
+    {
+      "probe_id": "tcp:null",
+      "service": "http",
+      "regex": "Server: nginx/[\\d.]+ \\(Debian\\)",
+      "regex_literal_tokens": ["Server: nginx/", "(Debian)"],
+      "cpe": ["cpe:/o:linux:linux_kernel"]
+    },
+    {
+      "probe_id": "tcp:null",
+      "service": "http",
+      "regex": "Server: Linux/",
+      "regex_literal_tokens": ["Server: Linux/"],
+      "cpe": ["cpe:/o:linux:linux_kernel"]
+    },
+    {
+      "probe_id": "tcp:null",
+      "service": "upnp",
+      "regex": "Server: (?:OpenWrt )?Linux/|Server: LINUX/",
+      "regex_literal_tokens": ["Linux/", "Server:"],
+      "cpe": ["cpe:/o:linux:linux_kernel"]
+    },
+    {
+      "probe_id": "tcp:null",
+      "service": "http",
+      "regex": "doubleTwist Sync \\(Android\\)|AirDroid|Android Webcam Server|DoaHTTP",
+      "regex_literal_tokens": [],
+      "cpe": ["cpe:/o:google:android", "cpe:/o:linux:linux_kernel"]
+    },
+    {
+      "probe_id": "tcp:null",
+      "service": "ftp",
+      "regex": "OpenBSD",
+      "regex_literal_tokens": ["OpenBSD"],
+      "cpe": ["cpe:/o:openbsd:openbsd"]
+    },
+    {
+      "probe_id": "tcp:null",
+      "service": "ftp",
+      "regex": "NetBSD-ftpd",
+      "regex_literal_tokens": ["NetBSD-ftpd"],
+      "cpe": ["cpe:/o:netbsd:netbsd"]
+    },
+    {
+      "probe_id": "tcp:null",
+      "service": "ftp",
+      "regex": "220-Debian GNU/Linux .*220 ProFTPD",
+      "regex_literal_tokens": ["220-Debian GNU/Linux", "220 ProFTPD", "Server"],
+      "cpe": ["cpe:/o:linux:linux_kernel"]
+    },
+    {
+      "probe_id": "tcp:null",
+      "service": "imap",
+      "regex": "Dovecot \\(Ubuntu\\) ready\\.",
+      "regex_literal_tokens": ["] Dovecot (Ubuntu) ready."],
+      "cpe": ["cpe:/o:linux:linux_kernel"]
+    },
+    {
+      "probe_id": "tcp:null",
+      "service": "imap",
+      "regex": "Cyrus IMAP.*-Debian",
+      "regex_literal_tokens": ["Cyrus IMAP", "-Debian"],
+      "cpe": ["cpe:/o:linux:linux_kernel"]
+    },
+    {
+      "probe_id": "tcp:null",
+      "service": "upnp",
+      "regex": "Server: FreeBSD/|SERVER: FreeBSD/",
+      "regex_literal_tokens": ["FreeBSD/"],
+      "cpe": ["cpe:/o:freebsd:freebsd"]
+    },
+    {
+      "probe_id": "tcp:null",
+      "service": "upnp",
+      "regex": "MiniDLNA/|ReadyDLNA/",
+      "regex_literal_tokens": ["UPnP/"],
+      "cpe": ["cpe:/o:linux:linux_kernel"]
+    },
+    {
+      "probe_id": "tcp:null",
+      "service": "ssh",
+      "regex": "OpenSSH_for_Windows",
+      "regex_literal_tokens": ["OpenSSH_for_Windows"],
+      "cpe": ["cpe:/o:microsoft:windows"]
+    },
+    {
+      "probe_id": "tcp:null",
+      "service": "ssh",
+      "regex": "ROSSSH",
+      "regex_literal_tokens": ["ROSSSH"],
+      "cpe": ["cpe:/o:mikrotik:routeros"]
+    },
+    {
+      "probe_id": "tcp:null",
+      "service": "http",
+      "regex": "RouterOS router configuration page|MikroTik RouterOS Managing Webpage",
+      "regex_literal_tokens": ["RouterOS"],
+      "cpe": ["cpe:/o:mikrotik:routeros"]
+    },
+    {
+      "probe_id": "tcp:null",
+      "service": "http",
+      "regex": "ProCurve Switch|realm=\\\"ProCurve",
+      "regex_literal_tokens": ["ProCurve"],
+      "cpe": ["cpe:/o:hp:procurve_switch_software"]
+    },
+    {
+      "probe_id": "tcp:null",
+      "service": "telnet",
+      "regex": "ProCurve Switch|ProCurve .* Switch",
+      "regex_literal_tokens": ["ProCurve", "Switch"],
+      "cpe": ["cpe:/o:hp:procurve_switch_software"]
+    },
+    {
+      "probe_id": "tcp:null",
+      "service": "telnet",
+      "regex": "Hewlett-Packard Development Company, L\\.P\\.|Login authentication",
+      "regex_literal_tokens": ["Hewlett-Packard Development Company", "Login authentication"],
+      "cpe": ["cpe:/o:h3c:comware"]
+    },
+    {
+      "probe_id": "tcp:null",
+      "service": "http",
+      "regex": "SW ZyNOS V|ZyXEL-UPnP/",
+      "regex_literal_tokens": ["ZyNOS", "ZyXEL"],
+      "cpe": ["cpe:/o:zyxel:zynos"]
+    }
+  ]
+}

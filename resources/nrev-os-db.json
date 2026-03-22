@@ -1,0 +1,184 @@
+{
+  "meta": {
+    "name": "nrev builtin os fingerprint db",
+    "version": "1"
+  },
+  "signatures": [
+    {
+      "signature": {
+        "order_key": "MSS,NOP,WS,SACK,TS",
+        "set_key": "{MSS,NOP,SACK,TS,WS}",
+        "win_bucket": [8192, 64000, 65535]
+      },
+      "cpe": ["cpe:/o:microsoft:windows"]
+    },
+    {
+      "signature": {
+        "order_key": "MSS,EOL,NOP,WS,SACK,TS",
+        "set_key": "{EOL,MSS,NOP,SACK,TS,WS}",
+        "win_bucket": [8192]
+      },
+      "cpe": ["cpe:/o:microsoft:windows"]
+    },
+    {
+      "signature": {
+        "order_key": "MSS,SACK,TS",
+        "set_key": "{MSS,SACK,TS}",
+        "win_bucket": [8192]
+      },
+      "cpe": ["cpe:/o:microsoft:windows"]
+    },
+    {
+      "signature": {
+        "order_key": "MSS,NOP,WS,NOP,NOP,TS,SACK,EOL,EOL",
+        "set_key": "{EOL,MSS,NOP,SACK,TS,WS}",
+        "win_bucket": [65535]
+      },
+      "cpe": ["cpe:/o:apple:iphone_os", "cpe:/o:apple:mac_os_x"]
+    },
+    {
+      "signature": {
+        "order_key": "MSS,EOL,NOP,WS,NOP,NOP,TS,SACK,EOL,EOL",
+        "set_key": "{EOL,MSS,NOP,SACK,TS,WS}",
+        "win_bucket": [65535]
+      },
+      "cpe": ["cpe:/o:apple:iphone_os", "cpe:/o:apple:mac_os_x"]
+    },
+    {
+      "signature": {
+        "order_key": "MSS,NOP,WS,NOP,NOP,TS",
+        "set_key": "{MSS,NOP,TS,WS}",
+        "win_bucket": [65535]
+      },
+      "cpe": ["cpe:/o:apple:mac_os_x"]
+    },
+    {
+      "signature": {
+        "order_key": "MSS",
+        "set_key": "{MSS}",
+        "win_bucket": [64240]
+      },
+      "cpe": ["cpe:/o:linux:linux_kernel"]
+    },
+    {
+      "signature": {
+        "order_key": "MSS,NOP,NOP,SACK,NOP,WS",
+        "set_key": "{MSS,NOP,SACK,WS}",
+        "win_bucket": [5840]
+      },
+      "cpe": ["cpe:/o:linux:linux_kernel"]
+    },
+    {
+      "signature": {
+        "order_key": "NOP,NOP,MSS,SACK,NOP,WS",
+        "set_key": "{MSS,NOP,SACK,WS}",
+        "win_bucket": [65535]
+      },
+      "cpe": ["cpe:/o:linux:linux_kernel"]
+    },
+    {
+      "signature": {
+        "order_key": "MSS,SACK,TS,NOP,WS",
+        "set_key": "{MSS,NOP,SACK,TS,WS}",
+        "win_bucket": [5792, 65160]
+      },
+      "cpe": ["cpe:/o:linux:linux_kernel"]
+    },
+    {
+      "signature": {
+        "order_key": "MSS,SACK,TS,NOP,WS",
+        "set_key": "{MSS,NOP,SACK,TS,WS}",
+        "win_bucket": [43440]
+      },
+      "cpe": ["cpe:/o:google:android"]
+    },
+    {
+      "signature": {
+        "order_key": "MSS,SACK,TS,NOP,WS",
+        "set_key": "{MSS,NOP,SACK,TS,WS}",
+        "win_bucket": [65535]
+      },
+      "cpe": ["cpe:/o:google:android"]
+    },
+    {
+      "signature": {
+        "order_key": "MSS,NOP,NOP,SACK",
+        "set_key": "{MSS,NOP,SACK}",
+        "win_bucket": [65535]
+      },
+      "cpe": ["cpe:/h:nintendo:3ds"]
+    },
+    {
+      "signature": {
+        "order_key": "MSS,EOL,NOP,NOP,SACK,MSS,NOP,NOP,SACK",
+        "set_key": "{EOL,MSS,NOP,SACK}",
+        "win_bucket": [8192]
+      },
+      "cpe": ["cpe:/h:nintendo:3ds"]
+    },
+    {
+      "signature": {
+        "order_key": "MSS,NOP,WS,SACK,TS",
+        "set_key": "{MSS,NOP,SACK,TS,WS}",
+        "win_bucket": [65535]
+      },
+      "cpe": ["cpe:/h:sony:playstation_4", "cpe:/o:freebsd:freebsd"]
+    },
+    {
+      "signature": {
+        "order_key": "MSS,SACK,TS,NOP,WS",
+        "set_key": "{MSS,NOP,SACK,TS,WS}",
+        "win_bucket": [14480]
+      },
+      "cpe": ["cpe:/o:mikrotik:routeros", "cpe:/o:linux:linux_kernel"]
+    },
+    {
+      "signature": {
+        "order_key": "MSS,EOL,SACK,TS,NOP,WS",
+        "set_key": "{EOL,MSS,NOP,SACK,TS,WS}",
+        "win_bucket": [65160]
+      },
+      "cpe": ["cpe:/o:mikrotik:routeros", "cpe:/o:linux:linux_kernel"]
+    },
+    {
+      "signature": {
+        "order_key": "MSS,NOP,WS,NOP,NOP,TS,SACK,EOL,EOL",
+        "set_key": "{EOL,MSS,NOP,SACK,TS,WS}",
+        "win_bucket": [65535]
+      },
+      "cpe": ["cpe:/o:juniper:junos"]
+    },
+    {
+      "signature": {
+        "order_key": "MSS,WS,EOL",
+        "set_key": "{EOL,MSS,WS}",
+        "win_bucket": [16384]
+      },
+      "cpe": ["cpe:/o:cisco:ios_xr"]
+    },
+    {
+      "signature": {
+        "order_key": "MSS,SACK,TS,NOP,WS,EOL",
+        "set_key": "{EOL,MSS,NOP,SACK,TS,WS}",
+        "win_bucket": [65535]
+      },
+      "cpe": ["cpe:/o:fortinet:fortios"]
+    },
+    {
+      "signature": {
+        "order_key": "MSS,NOP,WS,SACK,TS",
+        "set_key": "{MSS,NOP,SACK,TS,WS}",
+        "win_bucket": [65535]
+      },
+      "cpe": ["cpe:/o:h3c:comware"]
+    },
+    {
+      "signature": {
+        "order_key": "MSS",
+        "set_key": "{MSS}",
+        "win_bucket": [1024]
+      },
+      "cpe": ["cpe:/o:hp:procurve_switch_software", "cpe:/o:zyxel:zynos"]
+    }
+  ]
+}

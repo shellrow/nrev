@@ -70,9 +70,16 @@ pub struct TcpIpObservation {
     pub handshake_observed: bool,
     pub response_observed: bool,
     pub ttl_hint: Option<u8>,
+    pub ttl_class: Option<u8>,
     pub window_size: Option<u32>,
     pub syn_ack_seen: bool,
     pub rst_seen: bool,
+    pub tcp_option_order: Option<String>,
+    pub tcp_option_set: Option<String>,
+    pub mss: Option<u16>,
+    pub window_scale: Option<u8>,
+    pub sack_permitted: Option<bool>,
+    pub timestamps: Option<bool>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
@@ -123,6 +130,12 @@ pub struct Target {
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
 pub struct TargetReport {
     pub target: Target,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fingerprint: Option<TcpIpObservation>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub fingerprint_matches: Vec<FingerprintMatch>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub os_guesses: Vec<FingerprintMatch>,
     pub endpoints: BTreeMap<u16, EndpointResult>,
 }
 

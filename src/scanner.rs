@@ -10,10 +10,13 @@ use crate::{
     config::ScanConfig,
     data::DataRegistry,
     fingerprint::{
-        baseline_syn_observation, baseline_tcp_observation, baseline_udp_observation, match_rules,
+        baseline_syn_observation, baseline_tcp_observation, baseline_udp_observation,
+        build_platform_match, builtin_os_ttl_classes, match_legacy_os_signatures, match_rules,
+        match_ttl_classes,
     },
     model::{EndpointResult, EndpointState, ScanMetadata, ScanReport, TargetReport, Transport},
     probes::{ProbeContext, select_builtin_probes},
+    service_db::apply_legacy_service_signatures,
     transport::{
         Connector, ProbeConnection, SynPortStatus, estimate_tcp_rtt, syn_scan_target,
         syn_scan_targets,
@@ -321,32 +324,36 @@ async fn scan_syn_target_phase<C: Connector>(
                 let endpoint = match results.get(&port) {
                     Some(SynPortStatus::Open(observation)) => {
                         open_ports.push(port);
+                        let mut fingerprint = baseline_syn_observation(
+                            true,
+                            observation.syn_ack_seen,
+                            observation.rst_seen,
+                            observation.ttl_hint,
+                            observation.window_size,
+                        );
+                        apply_syn_observation_details(&mut fingerprint, observation);
                         EndpointResult {
                             port,
                             transport: Transport::Syn,
                             state: EndpointState::Open,
                             latency: std::time::Duration::default(),
                             observations: Vec::new(),
-                            fingerprint: Some(baseline_syn_observation(
-                                true,
-                                observation.syn_ack_seen,
-                                observation.rst_seen,
-                                observation.ttl_hint,
-                                observation.window_size,
-                            )),
+                            fingerprint: Some(fingerprint),
                             fingerprint_matches: Vec::new(),
                             errors: Vec::new(),
                         }
                     }
                     Some(SynPortStatus::Closed(observation)) => {
                         let fingerprint = if let Some(observation) = observation {
-                            baseline_syn_observation(
+                            let mut fingerprint = baseline_syn_observation(
                                 true,
                                 observation.syn_ack_seen,
                                 observation.rst_seen,
                                 observation.ttl_hint,
                                 observation.window_size,
-                            )
+                            );
+                            apply_syn_observation_details(&mut fingerprint, observation);
+                            fingerprint
                         } else {
                             baseline_syn_observation(false, false, true, None, None)
                         };
@@ -528,21 +535,34 @@ async fn run_followup_phase<C: Connector>(
                 if let Some(fingerprint) = endpoint.fingerprint.as_mut() {
                     fingerprint.response_observed = !endpoint.observations.is_empty();
                     endpoint.fingerprint_matches =
-                        match_rules(fingerprint, &registry.fingerprint_rules);
+                        collect_fingerprint_matches(fingerprint, registry);
                 }
             }
         }
     }
 
     for endpoint in endpoints.values_mut() {
-        if let Some(fingerprint) = endpoint.fingerprint.as_ref()
-            && endpoint.fingerprint_matches.is_empty()
-        {
-            endpoint.fingerprint_matches = match_rules(fingerprint, &registry.fingerprint_rules);
+        let _ = endpoint;
+    }
+
+    let (target_fingerprint, stack_matches) =
+        collect_target_fingerprint(&endpoints, registry, config.transport);
+    let target_fingerprint_matches =
+        merge_platform_matches(stack_matches, collect_target_service_matches(&endpoints));
+
+    if config.transport == Transport::Syn {
+        for endpoint in endpoints.values_mut() {
+            endpoint.fingerprint_matches.clear();
         }
     }
 
-    TargetReport { target, endpoints }
+    TargetReport {
+        target,
+        fingerprint: target_fingerprint,
+        fingerprint_matches: Vec::new(),
+        os_guesses: target_fingerprint_matches,
+        endpoints,
+    }
 }
 
 async fn collect_followup_observations<C: Connector>(
@@ -642,7 +662,13 @@ async fn collect_followup_observations<C: Connector>(
     }
 
     FollowupResult {
-        observations,
+        observations: {
+            let mut observations = observations;
+            for observation in &mut observations {
+                apply_legacy_service_signatures(observation, &registry.service_signatures);
+            }
+            observations
+        },
         errors,
     }
 }
@@ -667,13 +693,17 @@ fn build_fingerprint(
             fingerprint
         }
         Transport::Syn => match connection {
-            ProbeConnection::Syn(observation) => baseline_syn_observation(
-                true,
-                observation.syn_ack_seen,
-                observation.rst_seen,
-                observation.ttl_hint,
-                observation.window_size,
-            ),
+            ProbeConnection::Syn(observation) => {
+                let mut fingerprint = baseline_syn_observation(
+                    true,
+                    observation.syn_ack_seen,
+                    observation.rst_seen,
+                    observation.ttl_hint,
+                    observation.window_size,
+                );
+                apply_syn_observation_details(&mut fingerprint, observation);
+                fingerprint
+            }
             _ => baseline_syn_observation(false, false, false, None, None),
         },
     }
@@ -694,6 +724,240 @@ fn build_closed_fingerprint(transport: Transport) -> crate::model::TcpIpObservat
         }
         Transport::Syn => baseline_syn_observation(false, false, false, None, None),
     }
+}
+
+fn collect_fingerprint_matches(
+    fingerprint: &crate::model::TcpIpObservation,
+    registry: &DataRegistry,
+) -> Vec<crate::model::FingerprintMatch> {
+    let mut matches = match_rules(fingerprint, &registry.fingerprint_rules);
+    matches.extend(match_ttl_classes(fingerprint, &builtin_os_ttl_classes()));
+    matches.extend(match_ttl_classes(fingerprint, &registry.os_ttl_classes));
+    matches.extend(match_legacy_os_signatures(
+        fingerprint,
+        &registry.os_signatures,
+    ));
+    matches
+}
+
+fn apply_syn_observation_details(
+    fingerprint: &mut crate::model::TcpIpObservation,
+    observation: &crate::transport::SynAckObservation,
+) {
+    fingerprint.ttl_class = observation.ttl_class;
+    fingerprint.tcp_option_order = observation.tcp_option_order.clone();
+    fingerprint.tcp_option_set = observation.tcp_option_set.clone();
+    fingerprint.mss = observation.mss;
+    fingerprint.window_scale = observation.window_scale;
+    fingerprint.sack_permitted = observation.sack_permitted;
+    fingerprint.timestamps = observation.timestamps;
+}
+
+fn collect_target_fingerprint(
+    endpoints: &BTreeMap<u16, EndpointResult>,
+    registry: &DataRegistry,
+    transport: Transport,
+) -> (
+    Option<crate::model::TcpIpObservation>,
+    Vec<crate::model::FingerprintMatch>,
+) {
+    if transport != Transport::Syn {
+        return (None, Vec::new());
+    }
+
+    let best = endpoints
+        .values()
+        .filter_map(|endpoint| endpoint.fingerprint.as_ref())
+        .max_by_key(|fingerprint| fingerprint_rank(fingerprint))
+        .cloned();
+
+    let matches = best
+        .as_ref()
+        .map(|fingerprint| collect_fingerprint_matches(fingerprint, registry))
+        .unwrap_or_default();
+
+    (best, matches)
+}
+
+fn collect_target_service_matches(
+    endpoints: &BTreeMap<u16, EndpointResult>,
+) -> Vec<crate::model::FingerprintMatch> {
+    endpoints
+        .values()
+        .flat_map(|endpoint| endpoint.observations.iter())
+        .filter_map(|observation| {
+            let cpes = observation
+                .evidence
+                .iter()
+                .filter(|item| item.key == "cpe")
+                .map(|item| item.value.clone())
+                .collect::<Vec<_>>();
+            if cpes.is_empty() {
+                return None;
+            }
+            let evidence = observation
+                .evidence
+                .iter()
+                .filter(|item| item.key == "service_signature" || item.key == "cpe")
+                .cloned()
+                .collect::<Vec<_>>();
+            build_platform_match(&cpes, observation.confidence.clone(), evidence)
+        })
+        .collect()
+}
+
+fn merge_platform_matches(
+    primary: Vec<crate::model::FingerprintMatch>,
+    secondary: Vec<crate::model::FingerprintMatch>,
+) -> Vec<crate::model::FingerprintMatch> {
+    let preferred = preferred_service_families(&secondary);
+    let mut merged = Vec::new();
+    for item in primary
+        .into_iter()
+        .filter(|item| stack_match_is_compatible(item, &preferred))
+        .chain(secondary)
+    {
+        insert_platform_match(&mut merged, item);
+    }
+    suppress_generic_matches(merged)
+}
+
+fn insert_platform_match(
+    merged: &mut Vec<crate::model::FingerprintMatch>,
+    candidate: crate::model::FingerprintMatch,
+) {
+    if let Some(index) = merged
+        .iter()
+        .position(|item| item.family == candidate.family || item.label == candidate.label)
+    {
+        if confidence_rank(&candidate.confidence) > confidence_rank(&merged[index].confidence) {
+            merged[index] = candidate;
+        }
+        return;
+    }
+
+    let candidate_root = family_root(&candidate.family);
+    if candidate_root.is_some() {
+        if let Some(root) = candidate_root
+            && let Some(index) = merged
+                .iter()
+                .position(|item| family_root(&item.family) == Some(root))
+        {
+            let existing_is_generic = merged[index].family == root;
+            let candidate_is_generic = candidate.family == root;
+            if existing_is_generic && !candidate_is_generic {
+                merged[index] = candidate;
+            } else if !existing_is_generic
+                && !candidate_is_generic
+                && confidence_rank(&candidate.confidence)
+                    > confidence_rank(&merged[index].confidence)
+            {
+                merged[index] = candidate;
+            }
+            return;
+        }
+    }
+
+    merged.push(candidate);
+}
+
+fn preferred_service_families(matches: &[crate::model::FingerprintMatch]) -> Vec<String> {
+    matches
+        .iter()
+        .filter(|item| {
+            item.evidence
+                .iter()
+                .any(|evidence| evidence.key == "service_signature")
+        })
+        .map(|item| item.family.clone())
+        .collect()
+}
+
+fn stack_match_is_compatible(
+    candidate: &crate::model::FingerprintMatch,
+    preferred: &[String],
+) -> bool {
+    if preferred.is_empty() {
+        return true;
+    }
+
+    if is_ttl_class_match(candidate) {
+        return true;
+    }
+
+    preferred
+        .iter()
+        .any(|family| families_are_compatible(&candidate.family, family))
+}
+
+fn families_are_compatible(candidate: &str, preferred: &str) -> bool {
+    if candidate == preferred {
+        return true;
+    }
+
+    match (family_root(candidate), family_root(preferred)) {
+        (Some(left), Some(right)) => left == right,
+        (Some(root), None) => root == preferred,
+        (None, Some(root)) => candidate == root,
+        (None, None) => false,
+    }
+}
+
+fn suppress_generic_matches(
+    matches: Vec<crate::model::FingerprintMatch>,
+) -> Vec<crate::model::FingerprintMatch> {
+    let has_specific_platform = matches
+        .iter()
+        .any(|item| is_specific_platform_match(item) && !is_ttl_class_match(item));
+
+    matches
+        .into_iter()
+        .filter(|item| !has_specific_platform || !is_ttl_class_match(item))
+        .collect()
+}
+
+fn family_root(family: &str) -> Option<&str> {
+    match family {
+        "apple" | "apple:mac_os" | "apple:iphone_os" => Some("apple"),
+        "linux" | "linux:linux_kernel" | "google:android" => Some("linux"),
+        "bsd" | "openbsd:openbsd" | "freebsd:freebsd" | "netbsd:netbsd" => Some("bsd"),
+        _ => None,
+    }
+}
+
+fn is_ttl_class_match(candidate: &crate::model::FingerprintMatch) -> bool {
+    candidate
+        .evidence
+        .iter()
+        .any(|item| item.key == "source" && item.value == "builtin-ttl-class")
+}
+
+fn is_specific_platform_match(candidate: &crate::model::FingerprintMatch) -> bool {
+    candidate.family.contains(':')
+        || matches!(
+            candidate.family.as_str(),
+            "apple" | "linux" | "bsd" | "microsoft:windows" | "nintendo" | "playstation"
+        )
+}
+
+fn confidence_rank(confidence: &crate::model::Confidence) -> u8 {
+    match confidence {
+        crate::model::Confidence::Low => 0,
+        crate::model::Confidence::Medium => 1,
+        crate::model::Confidence::High => 2,
+    }
+}
+
+fn fingerprint_rank(fingerprint: &crate::model::TcpIpObservation) -> usize {
+    usize::from(fingerprint.ttl_hint.is_some())
+        + usize::from(fingerprint.window_size.is_some())
+        + usize::from(fingerprint.tcp_option_order.is_some())
+        + usize::from(fingerprint.tcp_option_set.is_some())
+        + usize::from(fingerprint.mss.is_some())
+        + usize::from(fingerprint.window_scale.is_some())
+        + usize::from(fingerprint.sack_permitted.is_some())
+        + usize::from(fingerprint.timestamps.is_some())
+        + usize::from(fingerprint.syn_ack_seen)
 }
 
 fn classify_open_state(transport: Transport, connection: &ProbeConnection) -> EndpointState {
@@ -766,32 +1030,36 @@ async fn scan_syn_transport_phase(
                         let endpoint = match results.and_then(|result| result.get(&port)) {
                             Some(SynPortStatus::Open(observation)) => {
                                 open_ports.push(port);
+                                let mut fingerprint = baseline_syn_observation(
+                                    true,
+                                    observation.syn_ack_seen,
+                                    observation.rst_seen,
+                                    observation.ttl_hint,
+                                    observation.window_size,
+                                );
+                                apply_syn_observation_details(&mut fingerprint, observation);
                                 EndpointResult {
                                     port,
                                     transport: Transport::Syn,
                                     state: EndpointState::Open,
                                     latency: std::time::Duration::default(),
                                     observations: Vec::new(),
-                                    fingerprint: Some(baseline_syn_observation(
-                                        true,
-                                        observation.syn_ack_seen,
-                                        observation.rst_seen,
-                                        observation.ttl_hint,
-                                        observation.window_size,
-                                    )),
+                                    fingerprint: Some(fingerprint),
                                     fingerprint_matches: Vec::new(),
                                     errors: Vec::new(),
                                 }
                             }
                             Some(SynPortStatus::Closed(observation)) => {
                                 let fingerprint = if let Some(observation) = observation {
-                                    baseline_syn_observation(
+                                    let mut fingerprint = baseline_syn_observation(
                                         true,
                                         observation.syn_ack_seen,
                                         observation.rst_seen,
                                         observation.ttl_hint,
                                         observation.window_size,
-                                    )
+                                    );
+                                    apply_syn_observation_details(&mut fingerprint, observation);
+                                    fingerprint
                                 } else {
                                     baseline_syn_observation(false, false, true, None, None)
                                 };
@@ -904,6 +1172,7 @@ fn should_stop_after_observation(observation: &crate::model::ProbeObservation) -
 mod tests {
     use std::{
         net::IpAddr,
+        sync::Arc,
         time::{Duration, Instant},
     };
 
@@ -918,7 +1187,7 @@ mod tests {
     use crate::{
         config::ScanConfig,
         data::DataRegistry,
-        model::{Target, Transport},
+        model::{Confidence, Evidence, FingerprintMatch, Target, Transport},
         transport::{ConnectOutcome, Connector, ProbeConnection},
     };
 
@@ -1207,5 +1476,99 @@ mod tests {
             derive_connect_timeout(Duration::from_millis(10), 32),
             Duration::from_millis(150)
         );
+    }
+
+    #[test]
+    fn service_matches_filter_conflicting_stack_matches() {
+        let merged = merge_platform_matches(
+            vec![
+                FingerprintMatch {
+                    label: "Unix-like: Linux / BSD / Darwin".to_string(),
+                    family: "UnixLike".to_string(),
+                    confidence: Confidence::Low,
+                    evidence: vec![Evidence {
+                        key: "source".to_string(),
+                        value: "builtin-ttl-class".to_string(),
+                    }],
+                },
+                FingerprintMatch {
+                    label: "MikroTik RouterOS".to_string(),
+                    family: "mikrotik:routeros".to_string(),
+                    confidence: Confidence::High,
+                    evidence: Vec::new(),
+                },
+                FingerprintMatch {
+                    label: "Linux".to_string(),
+                    family: "linux:linux_kernel".to_string(),
+                    confidence: Confidence::Medium,
+                    evidence: Vec::new(),
+                },
+            ],
+            vec![FingerprintMatch {
+                label: "Linux".to_string(),
+                family: "linux:linux_kernel".to_string(),
+                confidence: Confidence::High,
+                evidence: vec![Evidence {
+                    key: "service_signature".to_string(),
+                    value: "http:tcp:null".to_string(),
+                }],
+            }],
+        );
+
+        let families = merged
+            .iter()
+            .map(|item| item.family.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(families, vec!["linux:linux_kernel"]);
+    }
+
+    #[test]
+    fn service_matches_filter_conflicting_windows_stack_matches() {
+        let merged = merge_platform_matches(
+            vec![
+                FingerprintMatch {
+                    label: "Microsoft Windows family".to_string(),
+                    family: "Windows".to_string(),
+                    confidence: Confidence::Low,
+                    evidence: vec![Evidence {
+                        key: "source".to_string(),
+                        value: "builtin-ttl-class".to_string(),
+                    }],
+                },
+                FingerprintMatch {
+                    label: "Microsoft Windows".to_string(),
+                    family: "microsoft:windows".to_string(),
+                    confidence: Confidence::Medium,
+                    evidence: Vec::new(),
+                },
+                FingerprintMatch {
+                    label: "PlayStation".to_string(),
+                    family: "playstation".to_string(),
+                    confidence: Confidence::Medium,
+                    evidence: Vec::new(),
+                },
+                FingerprintMatch {
+                    label: "Comware".to_string(),
+                    family: "comware".to_string(),
+                    confidence: Confidence::Medium,
+                    evidence: Vec::new(),
+                },
+            ],
+            vec![FingerprintMatch {
+                label: "Microsoft Windows".to_string(),
+                family: "microsoft:windows".to_string(),
+                confidence: Confidence::High,
+                evidence: vec![Evidence {
+                    key: "service_signature".to_string(),
+                    value: "http:tcp:null".to_string(),
+                }],
+            }],
+        );
+
+        let families = merged
+            .iter()
+            .map(|item| item.family.as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(families, vec!["microsoft:windows"]);
     }
 }

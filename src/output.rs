@@ -271,17 +271,6 @@ fn render_endpoint_tree(endpoint: &EndpointResult) -> Tree<String> {
     if let Some(tls) = primary_tls(endpoint) {
         node.push(Tree::new(format!("tls: {tls}")));
     }
-    if !endpoint.fingerprint_matches.is_empty() {
-        node.push(Tree::new(format!(
-            "fingerprint: {}",
-            endpoint
-                .fingerprint_matches
-                .iter()
-                .map(|item| item.label.clone())
-                .collect::<Vec<_>>()
-                .join(", ")
-        )));
-    }
     node
 }
 
@@ -301,6 +290,19 @@ fn render_scan_target_tree(
         target_tree.push(render_endpoint_tree(endpoint));
     }
 
+    if let Some(fingerprint) = &target.fingerprint {
+        target_tree
+            .leaves
+            .insert(0, render_target_fingerprint_tree(fingerprint));
+    }
+
+    if !target.os_guesses.is_empty() {
+        let insert_at = usize::from(target.fingerprint.is_some());
+        target_tree
+            .leaves
+            .insert(insert_at, render_target_os_guess_tree(&target.os_guesses));
+    }
+
     if target_tree.leaves.is_empty() {
         if show_all_states {
             target_tree.push(Tree::new("no endpoints".to_string()));
@@ -310,6 +312,50 @@ fn render_scan_target_tree(
     }
 
     Some(target_tree)
+}
+
+fn render_target_fingerprint_tree(fingerprint: &crate::model::TcpIpObservation) -> Tree<String> {
+    let mut node = Tree::new("fingerprint".to_string());
+    node.push(Tree::new(format!(
+        "syn_ack_seen: {}",
+        fingerprint.syn_ack_seen
+    )));
+    node.push(Tree::new(format!("rst_seen: {}", fingerprint.rst_seen)));
+
+    if let Some(ttl_hint) = fingerprint.ttl_hint {
+        node.push(Tree::new(format!("ttl: {ttl_hint}")));
+    }
+    if let Some(ttl_class) = fingerprint.ttl_class {
+        node.push(Tree::new(format!("ttl_class: {ttl_class}")));
+    }
+    if let Some(window_size) = fingerprint.window_size {
+        node.push(Tree::new(format!("window_size: {window_size}")));
+    }
+    if let Some(order) = &fingerprint.tcp_option_order {
+        node.push(Tree::new(format!("tcp_option_order: {order}")));
+    }
+    if let Some(mss) = fingerprint.mss {
+        node.push(Tree::new(format!("mss: {mss}")));
+    }
+    if let Some(window_scale) = fingerprint.window_scale {
+        node.push(Tree::new(format!("window_scale: {window_scale}")));
+    }
+    if let Some(sack_permitted) = fingerprint.sack_permitted {
+        node.push(Tree::new(format!("sack_permitted: {sack_permitted}")));
+    }
+    if let Some(timestamps) = fingerprint.timestamps {
+        node.push(Tree::new(format!("timestamps: {timestamps}")));
+    }
+
+    node
+}
+
+fn render_target_os_guess_tree(guesses: &[crate::model::FingerprintMatch]) -> Tree<String> {
+    let mut node = Tree::new("os-guess".to_string());
+    for guess in guesses {
+        node.push(Tree::new(guess.label.clone()));
+    }
+    node
 }
 
 fn render_target_label(target: &crate::model::TargetReport, grouped: bool) -> String {
@@ -529,6 +575,9 @@ mod tests {
                     hostname: None,
                     address: IpAddr::from_str("127.0.0.1").expect("ip"),
                 },
+                fingerprint: None,
+                fingerprint_matches: Vec::new(),
+                os_guesses: Vec::new(),
                 endpoints,
             }],
         }
@@ -607,6 +656,9 @@ mod tests {
                 hostname: None,
                 address: IpAddr::from_str("127.0.0.2").expect("ip"),
             },
+            fingerprint: None,
+            fingerprint_matches: Vec::new(),
+            os_guesses: Vec::new(),
             endpoints: BTreeMap::from([(
                 443,
                 EndpointResult {
@@ -644,6 +696,9 @@ mod tests {
                         hostname: None,
                         address: IpAddr::from_str("192.168.10.101").expect("ip"),
                     },
+                    fingerprint: None,
+                    fingerprint_matches: Vec::new(),
+                    os_guesses: Vec::new(),
                     endpoints: BTreeMap::from([(
                         80,
                         EndpointResult {
@@ -664,6 +719,9 @@ mod tests {
                         hostname: None,
                         address: IpAddr::from_str("192.168.10.102").expect("ip"),
                     },
+                    fingerprint: None,
+                    fingerprint_matches: Vec::new(),
+                    os_guesses: Vec::new(),
                     endpoints: BTreeMap::from([(
                         443,
                         EndpointResult {
@@ -694,6 +752,39 @@ mod tests {
         let rendered = render_human_scan_report(&sample_report(), true);
         assert!(rendered.contains("80/TCP"));
         assert!(rendered.contains("state: Filtered"));
+    }
+
+    #[test]
+    fn human_output_renders_raw_fingerprint_and_os_guess_nodes() {
+        let mut report = sample_report();
+        report.targets[0].fingerprint = Some(crate::model::TcpIpObservation {
+            transport: Transport::Syn,
+            handshake_observed: true,
+            response_observed: true,
+            ttl_hint: Some(64),
+            ttl_class: Some(64),
+            window_size: Some(64240),
+            syn_ack_seen: true,
+            rst_seen: false,
+            tcp_option_order: Some("MSS,SACK,TS,NOP,WS".to_string()),
+            tcp_option_set: Some("{MSS,NOP,SACK,TS,WS}".to_string()),
+            mss: Some(1460),
+            window_scale: Some(7),
+            sack_permitted: Some(true),
+            timestamps: Some(true),
+        });
+        report.targets[0].os_guesses = vec![crate::model::FingerprintMatch {
+            label: "Unix-like: Linux / BSD / Darwin".to_string(),
+            family: "UnixLike".to_string(),
+            confidence: Confidence::Low,
+            evidence: Vec::new(),
+        }];
+
+        let rendered = render_human_scan_report(&report, false);
+        assert!(rendered.contains("fingerprint"));
+        assert!(rendered.contains("tcp_option_order: MSS,SACK,TS,NOP,WS"));
+        assert!(rendered.contains("os-guess"));
+        assert!(rendered.contains("Unix-like: Linux / BSD / Darwin"));
     }
 
     #[test]
