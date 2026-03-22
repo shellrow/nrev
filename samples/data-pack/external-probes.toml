@@ -1,0 +1,20 @@
+[[probes]]
+id = "corp-http-alt"
+transport = "tcp"
+ports = [8080, 8088]
+payload = "GET / HTTP/1.1\r\nHost: target.local\r\nUser-Agent: nrev-sample\r\nConnection: close\r\n\r\n"
+expect = ["HTTP/", "Server:"]
+
+[[probes]]
+id = "redis-info-lite"
+transport = "tcp"
+ports = [6379]
+payload = "*1\r\n$4\r\nINFO\r\n"
+expect = ["redis_version", "os:"]
+
+[[probes]]
+id = "quic-alt-svc"
+transport = "quic"
+ports = [9443]
+payload = ""
+expect = ["h3", "alt-svc"]

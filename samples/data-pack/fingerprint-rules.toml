@@ -1,0 +1,16 @@
+[[fingerprint_rules]]
+id = "syn-router-ish"
+label = "Router-like SYN responder"
+family = "network-device"
+transport = "syn"
+response_observed = true
+syn_ack_seen = true
+confidence = "medium"
+
+[[fingerprint_rules]]
+id = "udp-responder"
+label = "UDP responder"
+family = "service-node"
+transport = "udp"
+response_observed = true
+confidence = "medium"

@@ -1,0 +1,40 @@
+{
+  "probes": [
+    {
+      "id": "corp-http-alt",
+      "transport": "tcp",
+      "ports": [8080, 8088],
+      "payload": "GET / HTTP/1.1\r\nHost: target.local\r\nUser-Agent: nrev-sample\r\nConnection: close\r\n\r\n",
+      "expect": ["HTTP/", "Server:"]
+    },
+    {
+      "id": "redis-info-lite",
+      "transport": "tcp",
+      "ports": [6379],
+      "payload": "*1\r\n$4\r\nINFO\r\n",
+      "expect": ["redis_version", "os:"]
+    }
+  ],
+  "fingerprint_rules": [
+    {
+      "id": "udp-responder",
+      "label": "UDP responder",
+      "family": "service-node",
+      "transport": "udp",
+      "response_observed": true,
+      "confidence": "medium"
+    }
+  ],
+  "recipes": [
+    {
+      "name": "corp-web-alt",
+      "description": "Target common alternate enterprise web ports with built-in and external HTTP probes.",
+      "ports": "8080,8088,8443,9443",
+      "transport": "tcp",
+      "probe_timeout_ms": 2500,
+      "probes": ["http", "tls", "corp-http-alt"],
+      "builtin_probes": true,
+      "tags": ["web", "enterprise", "alternate-ports"]
+    }
+  ]
+}

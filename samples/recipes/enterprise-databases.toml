@@ -1,0 +1,9 @@
+[[recipes]]
+name = "enterprise-databases"
+description = "Enterprise-focused database observation for common TCP services."
+ports = "1433,1434,1521,2483,2484,3306,5432"
+transport = "tcp"
+probe_timeout_ms = 2500
+probes = ["mssql-prelogin", "oracle-tns", "mysql", "postgresql"]
+builtin_probes = true
+tags = ["enterprise", "database"]

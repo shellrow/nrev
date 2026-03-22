@@ -1,0 +1,10 @@
+[[recipes]]
+name = "quic-web"
+description = "QUIC and HTTP/3 observation on common QUIC-capable web ports."
+ports = "443,4433,784,8443,8853,9443"
+transport = "quic"
+probe_timeout_ms = 2500
+http_body_preview_bytes = 8192
+probes = ["quic"]
+builtin_probes = true
+tags = ["quic", "http3", "web"]

@@ -1,191 +1,59 @@
-[crates-badge]: https://img.shields.io/crates/v/nrev.svg
-[crates-url]: https://crates.io/crates/nrev
+# nrev
 
-# nrev [![Crates.io][crates-badge]][crates-url]
-Cross-platform network mapper for discovery and probing.
+An observation-first, cross-platform network mapper for discovery and probing.
 
-## Features
-- Port Scan (TCP/UDP/QUIC, Connect/SYN)
-- Host Scan (ICMP/UDP/TCP)
-- Ping (ICMP/UDP/TCP/QUIC)
-- Traceroute
-- Neighbor Discovery (ARP/NDP)
-- Subdomain Enumeration
+It focuses on:
 
-## Supported platforms
-- Linux
-- macOS
-- Windows
+- port scanning with TCP, UDP, TCP-SYN, and QUIC transports
+- host discovery with ICMP, UDP, and TCP probes
+- built-in service observation for common protocols
+- structured JSON output for automation
+- external data packs for probes, fingerprint rules, profiles, and recipes
 
-## Installation
-### Install prebuilt binaries via shell script
+## Commands
 
-```sh
-curl --proto '=https' --tlsv1.2 -LsSf https://github.com/shellrow/nrev/releases/latest/download/nrev-installer.sh | sh
-```
-
-### Install prebuilt binaries via powershell script
-
-```sh
-irm https://github.com/shellrow/nrev/releases/latest/download/nrev-installer.ps1 | iex
-```
-
-### From Releases
-You can download archives of precompiled binaries from the [releases](https://github.com/shellrow/nrev/releases) .
-
-### Cargo
-If you have Rust and the Cargo package manager installed on your system, you can install (download and build) `nrev` with the following command:
-```
-cargo install nrev
-```
-
-Or you can use [binstall](https://github.com/cargo-bins/cargo-binstall) for install nrev from github release.
-```
-cargo binstall nrev
-```
-
-## Basic Usage
-### Port Scan Example
-To scan the default top 1000 ports on a target:
-```
-nrev port yourcorpone.com
-nrev port 192.168.1.10
-```
-
-Enable service detection and OS fingerprinting:
-```
-nrev port yourcorpone.com -S -O
-```
-
-You can pass multiple targets, CIDR blocks, or `@`-prefixed target list files:
-```
-nrev port 192.168.1.10 192.168.1.11
-nrev port 10.0.0.0/24
-nrev port @/path/to/targets.txt
-```
-
-### Sub-commands and Options
-```
-Usage: nrev [OPTIONS] <COMMAND>
+```text
+Usage: nrev <COMMAND>
 
 Commands:
-  port       Scan ports on the target(s) (TCP/QUIC)
-  host       Discover alive hosts (ICMP/UDP/TCP)
-  ping       Simple ping (ICMP/UDP/TCP)
-  trace      Traceroute (UDP)
-  nei        Neighbor discovery (ARP/NDP)
-  domain     Subdomain enumeration
-  interface  Show network interface(s)
-  help       Print this message or the help of the given subcommand(s)
-
-Options:
-      --log-level <LOG_LEVEL>  Global log level [default: info] [possible values: error, warn, info, debug, trace]
-      --log-file               Log to file (in addition to stdout)
-      --log-file-path <FILE>   Log file path (default: ~/.nrev/logs/nrev.log)
-      --quiet                  Suppress all log output (only errors are shown)
-  -o, --output <FILE>          Save output to file (JSON format)
-      --no-stdout              Suppress stdout console output (only save to file if -o is set)
-  -h, --help                   Print help
-  -V, --version                Print version
+  port    Scan ports and collect structured observations
+  host    Discover reachable hosts with ICMP, UDP, or TCP probes
+  probe   Show the built-in and externally loaded probe catalog
+  recipe  Show externally loaded scan recipes
 ```
 
-See `nrev <sub-command> -h` for more detail.
+## Output
 
-## Examples
-### Port scan
-Scan default 1000 ports and enable service and OS detection for open ports
-```
-nrev port yourcorpone.com -S -O
-```
+`nrev` provides:
 
-Specify the ports
-```
-nrev port yourcorpone.com --ports 22,80,443,5000,8080
-```
+- compact human-readable reports for interactive use
+- stable JSON reports for downstream tooling
+- phase timings for resolution, discovery, scanning, and follow-up probes
 
-Specify the range
-```
-nrev port yourcorpone.com --ports 20-100
-```
+## External Data
 
-#### Settings
-By default, nrev derives connect/wait timing from an initial ping phase.  
-If initial ping fails, nrev continues scanning with a safe default RTT.  
-You can skip the initial ping with `--no-ping`.  
-For other settings, please refer to `nrev port -h` for details.
+`--data` accepts:
 
-### Host scan
-ICMP Host scan
-```
-nrev host 192.168.1.0/24
-```
+- a single `.json` file
+- a single `.toml` file
+- a directory containing multiple `.json` and `.toml` files
 
-```
-nrev host @/path/to/list/hostlist.txt
-```
+Each file may contain any combination of:
 
-TCP Host scan
-```
-nrev host 192.168.1.0/24 --proto tcp --ports 80
-```
+- `probes`
+- `fingerprint_rules`
+- `recipes`
 
-### Ping 
-Default ICMP Ping
-```
-nrev ping 1.1.1.1 -c 4
-```
+## Samples
 
-UDP Ping
-```
-nrev ping 1.1.1.1 --proto udp
-```
+The repository includes sample data under [samples/](samples):
 
-TCP Ping
-```
-nrev ping 1.1.1.1 --proto tcp --port 80
-```
+- [samples/recipes/](samples/recipes) for recipe-only examples
+- [samples/data-pack/](samples/data-pack) for mixed external data pack examples
 
-### Traceroute
-UDP Trace
-```
-nrev trace 8.8.8.8
-```
+## Documentation
 
-You can specify the interval in milliseconds for faster trace.
-```
-nrev trace 8.8.8.8 --interval-ms 500
-```
-
-### Subdomain scan
-```
-nrev domain yourcorpone.com --wordlist /path/to/wordlist/top-1000.txt
-```
-
-### Neighbor (ARP/NDP)
-```
-nrev nei 192.168.1.1
-```
-
-### Specify the network interface
-```
-nrev port 10.10.11.14 --interface tun0
-```
-
-## Output and Logging
-Save command results as JSON:
-```
-nrev -o result.json port yourcorpone.com -S -O
-```
-
-Run in non-interactive mode (no tree output to stdout):
-```
-nrev --no-stdout -o hosts.json host 10.0.0.0/24
-```
-
-Write logs to file:
-```
-nrev --log-file --log-file-path /tmp/nrev.log port yourcorpone.com
-```
+- [Usage Guide](docs/USAGE.md)
 
 ## Privileges
 `nrev` uses a raw socket which require elevated privileges. Execute with administrator privileges.
@@ -226,11 +94,6 @@ Alternatively, of course, you can also use `sudo` to temporarily grant the neces
 Install prebuilt binaries via shell script
 ```
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/shellrow/chmod-bpf/releases/latest/download/chmod-bpf-installer.sh | sh
-```
-
-Install prebuilt binaries via Homebrew
-```sh
-brew install shellrow/tap-chmod-bpf/chmod-bpf
 ```
 
 #### Check BPF device permissions
