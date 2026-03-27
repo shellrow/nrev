@@ -12,6 +12,9 @@ Usage: nrev <COMMAND>
 Commands:
   port    Scan ports and collect structured observations
   host    Discover reachable hosts with ICMP, UDP, or TCP probes
+  ping    Send repeated probes to a target with ICMP, UDP, TCP, or QUIC
+  trace   Trace the path to a target with UDP or ICMP probes
+  nei     Discover a neighbor with ARP or NDP
   probe   Show the built-in and externally loaded probe catalog
   recipe  Show externally loaded scan recipes
 ```
@@ -109,6 +112,82 @@ Write JSON output:
 nrev host 192.168.10.0/24 --format json --output hosts.json
 ```
 
+## Ping
+
+Basic ICMP ping:
+
+```sh
+nrev ping 192.168.10.10
+```
+
+UDP, TCP, and QUIC ping:
+
+```sh
+nrev ping example.com --method udp --port 33435
+nrev ping example.com --method tcp --port 443
+nrev ping example.com --method quic --port 443
+```
+
+Tune probe count and timing:
+
+```sh
+nrev ping example.com --count 5 --interval-ms 250 --timeout-ms 1500
+```
+
+Write JSON output:
+
+```sh
+nrev ping example.com --format json --output ping.json
+```
+
+## Traceroute
+
+Basic UDP trace:
+
+```sh
+nrev trace example.com
+```
+
+ICMP trace:
+
+```sh
+nrev trace example.com --method icmp
+```
+
+Tune hop limit and timeout:
+
+```sh
+nrev trace example.com --max-hops 20 --interval-ms 250 --timeout-ms 1200
+```
+
+Write JSON output:
+
+```sh
+nrev trace example.com --format json --output trace.json
+```
+
+## Neighbor Discovery
+
+Auto-select ARP for IPv4 and NDP for IPv6:
+
+```sh
+nrev nei 192.168.10.1
+nrev nei fe80::1 --interface en0
+```
+
+Force a method explicitly:
+
+```sh
+nrev nei 192.168.10.1 --method arp
+nrev nei fe80::1 --method ndp --interface en0
+```
+
+Write JSON output:
+
+```sh
+nrev nei 192.168.10.1 --format json --output neighbor.json
+```
+
 ## Progress and Verbosity
 
 Quiet mode:
@@ -192,6 +271,9 @@ Common short forms:
 ```sh
 nrev port 192.168.10.10 -p 80,443 -t tcp -c 128 -q -f json -o result.json
 nrev host 192.168.10.0/24 -m tcp -p 80,443 -c 128 -t 1200 -f json -o hosts.json
+nrev ping example.com -m tcp -p 443 -c 5 -t 1500 -f json -o ping.json
+nrev trace example.com -m icmp -t 1200 -f json -o trace.json
+nrev nei 192.168.10.1 -m arp -t 1000 -f json -o neighbor.json
 nrev probe -d ./samples/data-pack -j
 nrev recipe -d ./samples/recipes -j
 ```

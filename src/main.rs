@@ -8,16 +8,21 @@ use tracing_subscriber::{
 
 use nrev::{
     cli::{Cli, Command, ProgressMode, ScanArgSources},
-    config::{HostConfig, ScanConfig},
+    config::{HostConfig, NeighborConfig, PingConfig, ScanConfig, TraceConfig},
     data::DataRegistry,
     host::{HostScanEvent, HostScanner, resolve_host_targets},
     model::{EndpointState, HostScanTimings, ScanTimings},
+    neighbor::resolve_neighbor,
     output::{
-        render_human_host_report, render_human_probe_catalog, render_human_recipe_catalog,
-        render_human_scan_report, write_json_host_report, write_json_report,
+        render_human_host_report, render_human_neighbor_report, render_human_ping_report,
+        render_human_probe_catalog, render_human_recipe_catalog, render_human_scan_report,
+        render_human_trace_report, write_json_host_report, write_json_neighbor_report,
+        write_json_ping_report, write_json_report, write_json_trace_report,
     },
+    ping::run_ping,
     scanner::{ScanEvent, Scanner},
     target::TargetResolver,
+    trace::run_trace,
     transport::SocketConnector,
 };
 
@@ -188,6 +193,42 @@ async fn run() -> anyhow::Result<()> {
                 write_json_host_report(&execution.report, path)?;
             }
         }
+        Command::Ping(args) => {
+            let config = PingConfig::from_ping_args(&args);
+            let report = run_ping(&args.target, &config).await?;
+            if args.format.is_json() {
+                println!("{}", serde_json::to_string_pretty(&report)?);
+            } else {
+                print!("{}", render_human_ping_report(&report));
+            }
+            if let Some(path) = &args.output {
+                write_json_ping_report(&report, path)?;
+            }
+        }
+        Command::Trace(args) => {
+            let config = TraceConfig::from_trace_args(&args);
+            let report = run_trace(&args.target, &config).await?;
+            if args.format.is_json() {
+                println!("{}", serde_json::to_string_pretty(&report)?);
+            } else {
+                print!("{}", render_human_trace_report(&report));
+            }
+            if let Some(path) = &args.output {
+                write_json_trace_report(&report, path)?;
+            }
+        }
+        Command::Nei(args) => {
+            let config = NeighborConfig::from_neighbor_args(&args);
+            let report = resolve_neighbor(&args.target, &config).await?;
+            if args.format.is_json() {
+                println!("{}", serde_json::to_string_pretty(&report)?);
+            } else {
+                print!("{}", render_human_neighbor_report(&report));
+            }
+            if let Some(path) = &args.output {
+                write_json_neighbor_report(&report, path)?;
+            }
+        }
         Command::Probe(args) => {
             let registry = DataRegistry::load(args.data.as_deref())?;
             if args.json {
@@ -265,7 +306,9 @@ fn command_logging_mode(command: &Command) -> (ProgressMode, bool) {
     match command {
         Command::Port(args) => (args.progress, args.quiet),
         Command::Host(args) => (args.progress, args.quiet),
-        Command::Probe(_) | Command::Recipe(_) => (ProgressMode::Quiet, true),
+        Command::Ping(args) => (args.progress, args.quiet),
+        Command::Trace(args) => (args.progress, args.quiet),
+        Command::Nei(_) | Command::Probe(_) | Command::Recipe(_) => (ProgressMode::Quiet, true),
     }
 }
 

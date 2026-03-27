@@ -6,6 +6,9 @@ It focuses on:
 
 - port scanning with TCP, UDP, TCP-SYN, and QUIC transports
 - host discovery with ICMP, UDP, and TCP probes
+- active ping with ICMP, UDP, TCP, and QUIC methods
+- traceroute with UDP and ICMP probes
+- neighbor discovery with ARP and NDP
 - built-in service observation for common protocols
 - structured JSON output for automation
 - external data packs for probes, fingerprint rules, profiles, and recipes
@@ -18,6 +21,9 @@ Usage: nrev <COMMAND>
 Commands:
   port    Scan ports and collect structured observations
   host    Discover reachable hosts with ICMP, UDP, or TCP probes
+  ping    Send repeated probes to a target with ICMP, UDP, TCP, or QUIC
+  trace   Trace the path to a target with UDP or ICMP probes
+  nei     Discover a neighbor with ARP or NDP
   probe   Show the built-in and externally loaded probe catalog
   recipe  Show externally loaded scan recipes
 ```

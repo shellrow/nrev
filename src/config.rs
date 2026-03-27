@@ -3,12 +3,20 @@ use std::{path::Path, time::Duration};
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    cli::{HostArgs, HostDiscoveryMode, ProgressMode, ScanArgSources, ScanArgs, ScanTransport},
+    cli::{
+        HostArgs, HostDiscoveryMode, NeighborArgs, NeighborMethod as CliNeighborMethod, PingArgs,
+        PingMethod as CliPingMethod, ProgressMode, ScanArgSources, ScanArgs, ScanTransport,
+        TraceArgs, TraceMethod as CliTraceMethod,
+    },
     data::DataRegistry,
     error::{NrevError, Result},
-    model::{HostDiscoveryMethod, Transport},
+    model::{HostDiscoveryMethod, NeighborMethod, PingMethod, TraceMethod, Transport},
     target::parse_ports,
 };
+
+const DEFAULT_UDP_PROBE_PORT: u16 = 33435;
+const DEFAULT_TCP_PROBE_PORT: u16 = 80;
+const DEFAULT_QUIC_PROBE_PORT: u16 = 443;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ScanProfile {
@@ -75,6 +83,33 @@ pub struct HostConfig {
     pub show_all_hosts: bool,
     pub quiet: bool,
     pub progress_mode: ProgressMode,
+}
+
+#[derive(Clone, Debug)]
+pub struct PingConfig {
+    pub method: PingMethod,
+    pub port: Option<u16>,
+    pub count: u32,
+    pub interval: Duration,
+    pub timeout: Duration,
+    pub interface: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+pub struct TraceConfig {
+    pub method: TraceMethod,
+    pub port: Option<u16>,
+    pub max_hops: u8,
+    pub interval: Duration,
+    pub timeout: Duration,
+    pub interface: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+pub struct NeighborConfig {
+    pub method: Option<NeighborMethod>,
+    pub timeout: Duration,
+    pub interface: Option<String>,
 }
 
 impl ScanConfig {
@@ -258,6 +293,26 @@ impl From<HostDiscoveryMode> for HostDiscoveryMethod {
     }
 }
 
+impl From<CliPingMethod> for PingMethod {
+    fn from(value: CliPingMethod) -> Self {
+        match value {
+            CliPingMethod::Icmp => Self::Icmp,
+            CliPingMethod::Udp => Self::Udp,
+            CliPingMethod::Tcp => Self::Tcp,
+            CliPingMethod::Quic => Self::Quic,
+        }
+    }
+}
+
+impl From<CliTraceMethod> for TraceMethod {
+    fn from(value: CliTraceMethod) -> Self {
+        match value {
+            CliTraceMethod::Icmp => Self::Icmp,
+            CliTraceMethod::Udp => Self::Udp,
+        }
+    }
+}
+
 impl HostConfig {
     pub fn from_host_args(args: &HostArgs) -> Result<Self> {
         let method: HostDiscoveryMethod = args.method.into();
@@ -278,6 +333,57 @@ impl HostConfig {
             quiet: args.quiet || args.progress == ProgressMode::Quiet,
             progress_mode: args.progress,
         })
+    }
+}
+
+impl PingConfig {
+    pub fn from_ping_args(args: &PingArgs) -> Self {
+        let method: PingMethod = args.method.into();
+        let port = match method {
+            PingMethod::Icmp => None,
+            PingMethod::Udp => Some(args.port.unwrap_or(DEFAULT_UDP_PROBE_PORT)),
+            PingMethod::Tcp => Some(args.port.unwrap_or(DEFAULT_TCP_PROBE_PORT)),
+            PingMethod::Quic => Some(args.port.unwrap_or(DEFAULT_QUIC_PROBE_PORT)),
+        };
+        Self {
+            method,
+            port,
+            count: args.count,
+            interval: Duration::from_millis(args.interval_ms),
+            timeout: Duration::from_millis(args.timeout_ms),
+            interface: args.interface.clone(),
+        }
+    }
+}
+
+impl TraceConfig {
+    pub fn from_trace_args(args: &TraceArgs) -> Self {
+        let method: TraceMethod = args.method.into();
+        Self {
+            method,
+            port: match method {
+                TraceMethod::Icmp => None,
+                TraceMethod::Udp => Some(args.port.unwrap_or(DEFAULT_UDP_PROBE_PORT)),
+            },
+            max_hops: args.max_hops,
+            interval: Duration::from_millis(args.interval_ms),
+            timeout: Duration::from_millis(args.timeout_ms),
+            interface: args.interface.clone(),
+        }
+    }
+}
+
+impl NeighborConfig {
+    pub fn from_neighbor_args(args: &NeighborArgs) -> Self {
+        Self {
+            method: match args.method {
+                CliNeighborMethod::Auto => None,
+                CliNeighborMethod::Arp => Some(NeighborMethod::Arp),
+                CliNeighborMethod::Ndp => Some(NeighborMethod::Ndp),
+            },
+            timeout: Duration::from_millis(args.timeout_ms),
+            interface: args.interface.clone(),
+        }
     }
 }
 

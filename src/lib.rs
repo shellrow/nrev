@@ -11,11 +11,14 @@ pub mod host;
 #[path = "interface.rs"]
 pub mod interface;
 pub mod model;
+pub mod neighbor;
 #[path = "output.rs"]
 pub mod output;
+pub mod ping;
 pub mod probes;
 pub mod scanner;
 pub mod service_db;
 pub mod target;
 pub mod tls;
+pub mod trace;
 pub mod transport;

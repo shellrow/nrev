@@ -173,6 +173,156 @@ impl HostDiscoveryMethod {
     }
 }
 
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, PartialEq)]
+pub enum PingMethod {
+    Icmp,
+    Udp,
+    Tcp,
+    Quic,
+}
+
+impl PingMethod {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Icmp => "icmp",
+            Self::Udp => "udp",
+            Self::Tcp => "tcp",
+            Self::Quic => "quic",
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
+pub struct PingReply {
+    pub seq: u32,
+    pub success: bool,
+    pub outcome: String,
+    #[serde(skip_serializing_if = "Option::is_none", with = "duration_ms_option")]
+    pub latency: Option<Duration>,
+    pub ttl_hint: Option<u8>,
+    pub mac_address: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct PingSummary {
+    pub transmitted: u32,
+    pub received: u32,
+    pub packet_loss_percent: f64,
+    #[serde(skip_serializing_if = "Option::is_none", with = "duration_ms_option")]
+    pub min: Option<Duration>,
+    #[serde(skip_serializing_if = "Option::is_none", with = "duration_ms_option")]
+    pub avg: Option<Duration>,
+    #[serde(skip_serializing_if = "Option::is_none", with = "duration_ms_option")]
+    pub max: Option<Duration>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
+pub struct PingMetadata {
+    pub version: String,
+    pub target: Target,
+    pub method: PingMethod,
+    pub port: Option<u16>,
+    pub count: u32,
+    pub generated_at: DateTime<Utc>,
+    #[serde(skip_serializing_if = "Option::is_none", with = "duration_ms_option")]
+    pub total: Option<Duration>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
+pub struct PingReport {
+    pub metadata: PingMetadata,
+    pub replies: Vec<PingReply>,
+    pub summary: PingSummary,
+    pub errors: Vec<String>,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, PartialEq)]
+pub enum TraceMethod {
+    Icmp,
+    Udp,
+}
+
+impl TraceMethod {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Icmp => "icmp",
+            Self::Udp => "udp",
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
+pub struct TraceHop {
+    pub ttl: u8,
+    pub responder: Option<IpAddr>,
+    pub outcome: String,
+    pub reached_destination: bool,
+    #[serde(skip_serializing_if = "Option::is_none", with = "duration_ms_option")]
+    pub latency: Option<Duration>,
+    pub ttl_hint: Option<u8>,
+    pub mac_address: Option<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
+pub struct TraceMetadata {
+    pub version: String,
+    pub target: Target,
+    pub method: TraceMethod,
+    pub port: Option<u16>,
+    pub max_hops: u8,
+    pub generated_at: DateTime<Utc>,
+    #[serde(skip_serializing_if = "Option::is_none", with = "duration_ms_option")]
+    pub total: Option<Duration>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
+pub struct TraceReport {
+    pub metadata: TraceMetadata,
+    pub hops: Vec<TraceHop>,
+    pub errors: Vec<String>,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, PartialEq)]
+pub enum NeighborMethod {
+    Arp,
+    Ndp,
+}
+
+impl NeighborMethod {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Arp => "arp",
+            Self::Ndp => "ndp",
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
+pub struct NeighborMetadata {
+    pub version: String,
+    pub target: Target,
+    pub method: NeighborMethod,
+    pub generated_at: DateTime<Utc>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
+pub struct NeighborResolution {
+    pub resolved_ip: IpAddr,
+    pub mac_address: String,
+    #[serde(with = "duration_ms")]
+    pub latency: Duration,
+    pub interface_name: String,
+    pub interface_friendly_name: Option<String>,
+    pub interface_index: u32,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
+pub struct NeighborReport {
+    pub metadata: NeighborMetadata,
+    pub result: Option<NeighborResolution>,
+    pub errors: Vec<String>,
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
 pub struct HostObservation {
     pub method: HostDiscoveryMethod,

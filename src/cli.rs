@@ -19,6 +19,12 @@ pub enum Command {
     Port(Box<ScanArgs>),
     /// Discover reachable hosts with ICMP, UDP, or TCP probes.
     Host(Box<HostArgs>),
+    /// Send repeated probes to a target with ICMP, UDP, TCP, or QUIC.
+    Ping(Box<PingArgs>),
+    /// Trace the path to a target with UDP or ICMP probes.
+    Trace(Box<TraceArgs>),
+    /// Discover a neighbor with ARP or NDP.
+    Nei(Box<NeighborArgs>),
     /// Show the built-in and externally loaded probe catalog.
     Probe(ProbeArgs),
     /// Show externally loaded scan recipes.
@@ -57,6 +63,57 @@ pub enum HostDiscoveryMode {
     Icmp,
     Udp,
     Tcp,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+pub enum PingMethod {
+    Icmp,
+    Udp,
+    Tcp,
+    Quic,
+}
+
+impl PingMethod {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Icmp => "icmp",
+            Self::Udp => "udp",
+            Self::Tcp => "tcp",
+            Self::Quic => "quic",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+pub enum TraceMethod {
+    Icmp,
+    Udp,
+}
+
+impl TraceMethod {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Icmp => "icmp",
+            Self::Udp => "udp",
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+pub enum NeighborMethod {
+    Auto,
+    Arp,
+    Ndp,
+}
+
+impl NeighborMethod {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Auto => "auto",
+            Self::Arp => "arp",
+            Self::Ndp => "ndp",
+        }
+    }
 }
 
 #[derive(Debug, Args)]
@@ -201,6 +258,124 @@ pub struct HostArgs {
     /// Progress output mode.
     #[arg(long, value_enum, default_value_t = ProgressMode::Auto)]
     pub progress: ProgressMode,
+
+    /// Output format for stdout.
+    #[arg(short = 'f', long, value_enum, default_value_t = OutputFormat::Human)]
+    pub format: OutputFormat,
+
+    /// Write the stable JSON report to a file.
+    #[arg(short, long, value_name = "FILE", value_parser = value_parser!(PathBuf))]
+    pub output: Option<PathBuf>,
+}
+
+#[derive(Debug, Args)]
+pub struct PingArgs {
+    /// Target host, IP, or hostname.
+    pub target: String,
+
+    /// Probe method to use.
+    #[arg(short = 'm', long, value_enum, default_value_t = PingMethod::Icmp)]
+    pub method: PingMethod,
+
+    /// Destination port for UDP, TCP, or QUIC ping.
+    #[arg(short, long)]
+    pub port: Option<u16>,
+
+    /// Number of probes to send.
+    #[arg(short = 'c', long, default_value_t = 4, value_parser = value_parser!(u32).range(1..=100))]
+    pub count: u32,
+
+    /// Delay between probes in milliseconds.
+    #[arg(long, default_value_t = 1000, value_parser = value_parser!(u64).range(0..=60_000))]
+    pub interval_ms: u64,
+
+    /// Per-probe timeout in milliseconds.
+    #[arg(short = 't', long, default_value_t = 1000, value_parser = value_parser!(u64).range(50..=60_000))]
+    pub timeout_ms: u64,
+
+    /// Interface name to use for ICMP probing.
+    #[arg(short = 'i', long)]
+    pub interface: Option<String>,
+
+    /// Disable progress output.
+    #[arg(short = 'q', long, action = ArgAction::SetTrue)]
+    pub quiet: bool,
+
+    /// Progress output mode.
+    #[arg(long, value_enum, default_value_t = ProgressMode::Auto)]
+    pub progress: ProgressMode,
+
+    /// Output format for stdout.
+    #[arg(short = 'f', long, value_enum, default_value_t = OutputFormat::Human)]
+    pub format: OutputFormat,
+
+    /// Write the stable JSON report to a file.
+    #[arg(short, long, value_name = "FILE", value_parser = value_parser!(PathBuf))]
+    pub output: Option<PathBuf>,
+}
+
+#[derive(Debug, Args)]
+pub struct TraceArgs {
+    /// Target host, IP, or hostname.
+    pub target: String,
+
+    /// Trace method to use.
+    #[arg(short = 'm', long, value_enum, default_value_t = TraceMethod::Udp)]
+    pub method: TraceMethod,
+
+    /// Destination port for UDP trace.
+    #[arg(short, long)]
+    pub port: Option<u16>,
+
+    /// Maximum hop count.
+    #[arg(long, default_value_t = 30, value_parser = value_parser!(u8).range(1..=64))]
+    pub max_hops: u8,
+
+    /// Delay between probes in milliseconds.
+    #[arg(long, default_value_t = 500, value_parser = value_parser!(u64).range(0..=60_000))]
+    pub interval_ms: u64,
+
+    /// Per-hop timeout in milliseconds.
+    #[arg(short = 't', long, default_value_t = 1000, value_parser = value_parser!(u64).range(50..=60_000))]
+    pub timeout_ms: u64,
+
+    /// Interface name to use for tracing.
+    #[arg(short = 'i', long)]
+    pub interface: Option<String>,
+
+    /// Disable progress output.
+    #[arg(short = 'q', long, action = ArgAction::SetTrue)]
+    pub quiet: bool,
+
+    /// Progress output mode.
+    #[arg(long, value_enum, default_value_t = ProgressMode::Auto)]
+    pub progress: ProgressMode,
+
+    /// Output format for stdout.
+    #[arg(short = 'f', long, value_enum, default_value_t = OutputFormat::Human)]
+    pub format: OutputFormat,
+
+    /// Write the stable JSON report to a file.
+    #[arg(short, long, value_name = "FILE", value_parser = value_parser!(PathBuf))]
+    pub output: Option<PathBuf>,
+}
+
+#[derive(Debug, Args)]
+pub struct NeighborArgs {
+    /// Target host, IP, or hostname.
+    pub target: String,
+
+    /// Discovery method. `auto` picks ARP for IPv4 and NDP for IPv6.
+    #[arg(short = 'm', long, value_enum, default_value_t = NeighborMethod::Auto)]
+    pub method: NeighborMethod,
+
+    /// Response timeout in milliseconds.
+    #[arg(short = 't', long, default_value_t = 1000, value_parser = value_parser!(u64).range(50..=60_000))]
+    pub timeout_ms: u64,
+
+    /// Interface name to use for discovery.
+    #[arg(short = 'i', long)]
+    pub interface: Option<String>,
 
     /// Output format for stdout.
     #[arg(short = 'f', long, value_enum, default_value_t = OutputFormat::Human)]

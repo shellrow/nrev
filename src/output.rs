@@ -4,8 +4,8 @@ use termtree::Tree;
 
 use crate::config::ScanRecipe;
 use crate::model::{
-    EndpointResult, EndpointState, HostResult, HostScanReport, ProbeObservation, ScanReport,
-    TlsObservation,
+    EndpointResult, EndpointState, HostResult, HostScanReport, NeighborReport, PingReport,
+    ProbeObservation, ScanReport, TlsObservation, TraceReport,
 };
 use crate::probes::{BuiltinProbeMetadata, ExternalProbeDefinition};
 
@@ -114,6 +114,146 @@ pub fn render_human_host_report(report: &HostScanReport, show_all_hosts: bool) -
 }
 
 pub fn write_json_host_report(report: &HostScanReport, path: &Path) -> anyhow::Result<()> {
+    std::fs::write(path, serde_json::to_vec_pretty(report)?)?;
+    Ok(())
+}
+
+pub fn render_human_ping_report(report: &PingReport) -> String {
+    let target = &report.metadata.target;
+    let label = match &target.hostname {
+        Some(hostname) => format!("{hostname} ({})", target.address),
+        None => target.address.to_string(),
+    };
+    let mut root = Tree::new(format!(
+        "Ping {} via {}",
+        label,
+        report.metadata.method.as_str().to_uppercase()
+    ));
+    if let Some(port) = report.metadata.port {
+        root.push(Tree::new(format!("port: {port}")));
+    }
+    for reply in &report.replies {
+        let label = if reply.success {
+            format!("#{} {}", reply.seq, report.metadata.target.address)
+        } else {
+            format!("#{} *", reply.seq)
+        };
+        let mut node = Tree::new(label);
+        if let Some(latency) = reply.latency {
+            node.push(Tree::new(format!("RTT: {}ms", latency.as_millis())));
+        }
+        if let Some(ttl_hint) = reply.ttl_hint {
+            node.push(Tree::new(format!("TTL: {ttl_hint}")));
+        }
+        root.push(node);
+    }
+    root.push(Tree::new(format!(
+        "summary: tx={} rx={} loss={:.1}% min/avg/max={}/{}/{}ms",
+        report.summary.transmitted,
+        report.summary.received,
+        report.summary.packet_loss_percent,
+        report.summary.min.map(|v| v.as_millis()).unwrap_or(0),
+        report.summary.avg.map(|v| v.as_millis()).unwrap_or(0),
+        report.summary.max.map(|v| v.as_millis()).unwrap_or(0)
+    )));
+    if !report.errors.is_empty() {
+        for error in &report.errors {
+            root.push(Tree::new(format!("error: {error}")));
+        }
+    }
+    format!("{root}\n")
+}
+
+pub fn write_json_ping_report(report: &PingReport, path: &Path) -> anyhow::Result<()> {
+    std::fs::write(path, serde_json::to_vec_pretty(report)?)?;
+    Ok(())
+}
+
+pub fn render_human_trace_report(report: &TraceReport) -> String {
+    let target = &report.metadata.target;
+    let label = match &target.hostname {
+        Some(hostname) => format!("{hostname} ({})", target.address),
+        None => target.address.to_string(),
+    };
+    let mut root = Tree::new(format!(
+        "Trace {} via {}",
+        label,
+        report.metadata.method.as_str().to_uppercase()
+    ));
+    if let Some(port) = report.metadata.port {
+        root.push(Tree::new(format!("port: {port}")));
+    }
+    for hop in &report.hops {
+        let label = match hop.responder {
+            Some(responder) => format!("#{} {}", hop.ttl, responder),
+            None => format!("#{} *", hop.ttl),
+        };
+        let mut node = Tree::new(label);
+        node.push(Tree::new(format!(
+            "Type: {}",
+            if hop.reached_destination {
+                "destination"
+            } else if hop.ttl == 1 {
+                "gateway"
+            } else {
+                "hop"
+            }
+        )));
+        if let Some(latency) = hop.latency {
+            node.push(Tree::new(format!("RTT: {}ms", latency.as_millis())));
+        }
+        if let Some(ttl_hint) = hop.ttl_hint {
+            node.push(Tree::new(format!("TTL: {ttl_hint}")));
+        }
+        if hop.reached_destination {
+            node.push(Tree::new("destination reached".to_string()));
+        }
+        root.push(node);
+    }
+    if !report.errors.is_empty() {
+        for error in &report.errors {
+            root.push(Tree::new(format!("error: {error}")));
+        }
+    }
+    format!("{root}\n")
+}
+
+pub fn write_json_trace_report(report: &TraceReport, path: &Path) -> anyhow::Result<()> {
+    std::fs::write(path, serde_json::to_vec_pretty(report)?)?;
+    Ok(())
+}
+
+pub fn render_human_neighbor_report(report: &NeighborReport) -> String {
+    let target = &report.metadata.target;
+    let label = match &target.hostname {
+        Some(hostname) => format!("{hostname} ({})", target.address),
+        None => target.address.to_string(),
+    };
+    let mut root = Tree::new(format!(
+        "Neighbor {} via {}",
+        label,
+        report.metadata.method.as_str().to_uppercase()
+    ));
+    if let Some(result) = &report.result {
+        root.push(Tree::new(format!("resolved-ip: {}", result.resolved_ip)));
+        root.push(Tree::new(format!("mac: {}", result.mac_address)));
+        root.push(Tree::new(format!(
+            "latency: {}ms",
+            result.latency.as_millis()
+        )));
+        root.push(Tree::new(format!("interface: {}", result.interface_name)));
+    } else {
+        root.push(Tree::new("no neighbor information".to_string()));
+    }
+    if !report.errors.is_empty() {
+        for error in &report.errors {
+            root.push(Tree::new(format!("error: {error}")));
+        }
+    }
+    format!("{root}\n")
+}
+
+pub fn write_json_neighbor_report(report: &NeighborReport, path: &Path) -> anyhow::Result<()> {
     std::fs::write(path, serde_json::to_vec_pretty(report)?)?;
     Ok(())
 }
