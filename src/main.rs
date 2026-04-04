@@ -14,10 +14,11 @@ use nrev::{
     model::{EndpointState, HostScanTimings, ScanTimings},
     neighbor::resolve_neighbor,
     output::{
-        render_human_host_report, render_human_neighbor_report, render_human_ping_report,
-        render_human_probe_catalog, render_human_recipe_catalog, render_human_scan_report,
-        render_human_trace_report, write_json_host_report, write_json_neighbor_report,
-        write_json_ping_report, write_json_report, write_json_trace_report,
+        filtered_host_report, filtered_scan_report, render_human_host_report,
+        render_human_neighbor_report, render_human_ping_report, render_human_probe_catalog,
+        render_human_recipe_catalog, render_human_scan_report, render_human_trace_report,
+        write_json_host_report, write_json_neighbor_report, write_json_ping_report,
+        write_json_report, write_json_trace_report,
     },
     ping::run_ping,
     scanner::{ScanEvent, Scanner},
@@ -92,7 +93,8 @@ async fn run() -> anyhow::Result<()> {
             log_open_port_summary(config.quiet, &execution.report);
 
             if args.format.is_json() {
-                let json = serde_json::to_string_pretty(&execution.report)?;
+                let json_report = filtered_scan_report(&execution.report, config.show_all_states);
+                let json = serde_json::to_string_pretty(&json_report)?;
                 println!("{json}");
             } else {
                 print!(
@@ -120,7 +122,8 @@ async fn run() -> anyhow::Result<()> {
             );
 
             if let Some(path) = &args.output {
-                write_json_report(&execution.report, path)?;
+                let json_report = filtered_scan_report(&execution.report, config.show_all_states);
+                write_json_report(&json_report, path)?;
             }
         }
         Command::Host(args) => {
@@ -163,7 +166,8 @@ async fn run() -> anyhow::Result<()> {
             log_reachable_host_summary(config.quiet, &execution.report);
 
             if args.format.is_json() {
-                println!("{}", serde_json::to_string_pretty(&execution.report)?);
+                let json_report = filtered_host_report(&execution.report, config.show_all_hosts);
+                println!("{}", serde_json::to_string_pretty(&json_report)?);
             } else {
                 print!(
                     "{}",
@@ -190,7 +194,8 @@ async fn run() -> anyhow::Result<()> {
             );
 
             if let Some(path) = &args.output {
-                write_json_host_report(&execution.report, path)?;
+                let json_report = filtered_host_report(&execution.report, config.show_all_hosts);
+                write_json_host_report(&json_report, path)?;
             }
         }
         Command::Ping(args) => {
@@ -372,16 +377,11 @@ fn log_reachable_host_summary(quiet: bool, report: &nrev::model::HostScanReport)
         .targets
         .iter()
         .filter(|target| target.reachable)
-        .map(|target| target.target.address.to_string())
-        .collect::<Vec<_>>();
+        .count();
     progress(
         ProgressMode::Auto,
         quiet,
-        &format!(
-            "Reachable hosts: {} [{}]",
-            reachable.len(),
-            reachable.join(", ")
-        ),
+        &format!("Reachable hosts: {reachable}"),
     );
 }
 

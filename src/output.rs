@@ -67,6 +67,18 @@ pub fn write_json_report(report: &ScanReport, path: &Path) -> anyhow::Result<()>
     Ok(())
 }
 
+pub fn filtered_scan_report(report: &ScanReport, show_all_states: bool) -> ScanReport {
+    let mut filtered = report.clone();
+    if !show_all_states {
+        for target in &mut filtered.targets {
+            target
+                .endpoints
+                .retain(|_, endpoint| endpoint.state == EndpointState::Open);
+        }
+    }
+    filtered
+}
+
 pub fn render_human_host_report(report: &HostScanReport, show_all_hosts: bool) -> String {
     let mut root = Tree::new("Host report(s)".to_string());
 
@@ -116,6 +128,14 @@ pub fn render_human_host_report(report: &HostScanReport, show_all_hosts: bool) -
 pub fn write_json_host_report(report: &HostScanReport, path: &Path) -> anyhow::Result<()> {
     std::fs::write(path, serde_json::to_vec_pretty(report)?)?;
     Ok(())
+}
+
+pub fn filtered_host_report(report: &HostScanReport, show_all_hosts: bool) -> HostScanReport {
+    let mut filtered = report.clone();
+    if !show_all_hosts {
+        filtered.targets.retain(|target| target.reachable);
+    }
+    filtered
 }
 
 pub fn render_human_ping_report(report: &PingReport) -> String {
@@ -895,6 +915,30 @@ mod tests {
     }
 
     #[test]
+    fn json_scan_output_hides_non_open_by_default() {
+        let report = filtered_scan_report(&sample_report(), false);
+        assert_eq!(report.targets[0].endpoints.len(), 1);
+        assert_eq!(
+            report.targets[0].endpoints.get(&22).expect("endpoint").state,
+            EndpointState::Open
+        );
+    }
+
+    #[test]
+    fn json_scan_output_keeps_non_open_when_requested() {
+        let report = filtered_scan_report(&sample_report(), true);
+        assert_eq!(report.targets[0].endpoints.len(), 2);
+        assert_eq!(
+            report.targets[0]
+                .endpoints
+                .get(&80)
+                .expect("endpoint")
+                .state,
+            EndpointState::Filtered
+        );
+    }
+
+    #[test]
     fn human_output_renders_raw_fingerprint_and_os_guess_nodes() {
         let mut report = sample_report();
         report.targets[0].fingerprint = Some(crate::model::TcpIpObservation {
@@ -972,5 +1016,80 @@ mod tests {
         assert!(rendered.contains("192.0.2.10"));
         assert!(rendered.contains("mac=00:11:22:33:44:55"));
         assert!(!rendered.contains("192.0.2.11"));
+    }
+
+    #[test]
+    fn json_host_output_hides_unreachable_by_default() {
+        let report = HostScanReport {
+            metadata: HostScanMetadata {
+                version: "test".to_string(),
+                method: HostDiscoveryMethod::Icmp,
+                generated_at: Utc::now(),
+                timings: None,
+            },
+            targets: vec![
+                HostResult {
+                    target: Target {
+                        original: "alive".to_string(),
+                        hostname: None,
+                        address: IpAddr::from_str("192.0.2.10").expect("ip"),
+                    },
+                    reachable: true,
+                    observations: Vec::new(),
+                    errors: Vec::new(),
+                },
+                HostResult {
+                    target: Target {
+                        original: "down".to_string(),
+                        hostname: None,
+                        address: IpAddr::from_str("192.0.2.11").expect("ip"),
+                    },
+                    reachable: false,
+                    observations: Vec::new(),
+                    errors: vec!["timed out".to_string()],
+                },
+            ],
+        };
+
+        let filtered = filtered_host_report(&report, false);
+        assert_eq!(filtered.targets.len(), 1);
+        assert_eq!(filtered.targets[0].target.original, "alive");
+    }
+
+    #[test]
+    fn json_host_output_keeps_unreachable_when_requested() {
+        let report = HostScanReport {
+            metadata: HostScanMetadata {
+                version: "test".to_string(),
+                method: HostDiscoveryMethod::Icmp,
+                generated_at: Utc::now(),
+                timings: None,
+            },
+            targets: vec![
+                HostResult {
+                    target: Target {
+                        original: "alive".to_string(),
+                        hostname: None,
+                        address: IpAddr::from_str("192.0.2.10").expect("ip"),
+                    },
+                    reachable: true,
+                    observations: Vec::new(),
+                    errors: Vec::new(),
+                },
+                HostResult {
+                    target: Target {
+                        original: "down".to_string(),
+                        hostname: None,
+                        address: IpAddr::from_str("192.0.2.11").expect("ip"),
+                    },
+                    reachable: false,
+                    observations: Vec::new(),
+                    errors: vec!["timed out".to_string()],
+                },
+            ],
+        };
+
+        let filtered = filtered_host_report(&report, true);
+        assert_eq!(filtered.targets.len(), 2);
     }
 }
