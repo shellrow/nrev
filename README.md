@@ -2,7 +2,7 @@
 
 An observation-first, cross-platform network mapper for discovery and probing.
 
-It focuses on:
+`nrev` focuses on:
 
 - port scanning with TCP, UDP, TCP-SYN, and QUIC transports
 - host discovery with ICMP, UDP, and TCP probes
@@ -13,6 +13,33 @@ It focuses on:
 - structured JSON output for automation
 - external data packs for probes, fingerprint rules, profiles, and recipes
 - task files for repeatable target lists and scan executions
+
+## Installation
+### Install prebuilt binaries via shell script
+
+```sh
+curl --proto '=https' --tlsv1.2 -LsSf https://github.com/shellrow/nrev/releases/latest/download/nrev-installer.sh | sh
+```
+
+### Install prebuilt binaries via powershell script
+
+```sh
+irm https://github.com/shellrow/nrev/releases/latest/download/nrev-installer.ps1 | iex
+```
+
+### From Releases
+You can download archives of precompiled binaries from the [releases](https://github.com/shellrow/nrev/releases) .
+
+### Cargo
+If you have Rust and the Cargo package manager installed on your system, you can install (download and build) `nrev` with the following command:
+```
+cargo install nrev
+```
+
+Or you can use [binstall](https://github.com/cargo-bins/cargo-binstall) for install nrev from github release.
+```
+cargo binstall nrev
+```
 
 ## Commands
 
