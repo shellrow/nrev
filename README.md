@@ -4,15 +4,20 @@ An observation-first, cross-platform network mapper for discovery and probing.
 
 `nrev` focuses on:
 
-- port scanning with TCP, UDP, TCP-SYN, and QUIC transports
-- host discovery with ICMP, UDP, and TCP probes
-- active ping with ICMP, UDP, TCP, and QUIC methods
-- traceroute with UDP and ICMP probes
-- neighbor discovery with ARP and NDP
-- built-in service observation for common protocols
-- structured JSON output for automation
-- external data packs for probes, fingerprint rules, profiles, and recipes
-- task files for repeatable target lists and scan executions
+- Port scanning with TCP, UDP, TCP-SYN, and QUIC transports
+- Host discovery with ICMP, UDP, and TCP probes
+- Active ping with ICMP, UDP, TCP, and QUIC methods
+- Traceroute with UDP and ICMP probes
+- Neighbor discovery with ARP and NDP
+- Built-in service observation for common protocols
+- Structured JSON output for automation
+- External data packs for probes, fingerprint rules, profiles, and recipes
+- Task files for repeatable target lists and scan executions
+
+## Supported platforms
+- Linux
+- macOS
+- Windows
 
 ## Installation
 ### Install prebuilt binaries via shell script
@@ -61,17 +66,17 @@ Commands:
 
 `nrev` provides:
 
-- compact human-readable reports for interactive use
-- stable JSON reports for downstream tooling
-- phase timings for resolution, discovery, scanning, and follow-up probes
+- Compact human-readable reports for interactive use
+- Stable JSON reports for downstream tooling
+- Phase timings for resolution, discovery, scanning, and follow-up probes
 
 ## External Data
 
 `--data` accepts:
 
-- a single `.json` file
-- a single `.toml` file
-- a directory containing multiple `.json` and `.toml` files
+- A single `.json` file
+- A single `.toml` file
+- A directory containing multiple `.json` and `.toml` files
 
 Each file may contain any combination of:
 
