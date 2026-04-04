@@ -836,26 +836,21 @@ fn insert_platform_match(
         return;
     }
 
-    let candidate_root = family_root(&candidate.family);
-    if candidate_root.is_some() {
-        if let Some(root) = candidate_root
-            && let Some(index) = merged
-                .iter()
-                .position(|item| family_root(&item.family) == Some(root))
-        {
-            let existing_is_generic = merged[index].family == root;
-            let candidate_is_generic = candidate.family == root;
-            if existing_is_generic && !candidate_is_generic {
-                merged[index] = candidate;
-            } else if !existing_is_generic
-                && !candidate_is_generic
-                && confidence_rank(&candidate.confidence)
-                    > confidence_rank(&merged[index].confidence)
-            {
-                merged[index] = candidate;
-            }
-            return;
+    if let Some(root) = family_root(&candidate.family)
+        && let Some(index) = merged
+            .iter()
+            .position(|item| family_root(&item.family) == Some(root))
+    {
+        let existing_is_generic = merged[index].family == root;
+        let candidate_is_generic = candidate.family == root;
+        let should_replace = !candidate_is_generic
+            && (existing_is_generic
+                || confidence_rank(&candidate.confidence)
+                    > confidence_rank(&merged[index].confidence));
+        if should_replace {
+            merged[index] = candidate;
         }
+        return;
     }
 
     merged.push(candidate);

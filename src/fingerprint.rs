@@ -599,7 +599,7 @@ pub fn canonical_platform_family(cpes: &[String]) -> Option<String> {
         .iter()
         .filter(|family| {
             matches!(
-                family.as_ref(),
+                **family,
                 "openbsd:openbsd" | "freebsd:freebsd" | "netbsd:netbsd"
             )
         })
