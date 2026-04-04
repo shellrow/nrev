@@ -1,0 +1,10 @@
+[[recipes]]
+name = "web-balanced"
+description = "Balanced web reconnaissance across common HTTP and HTTPS ports."
+ports = "80,81,443,8000,8008,8080,8081,8088,8090,8443,8888"
+transport = "tcp"
+probe_timeout_ms = 2500
+http_body_preview_bytes = 8192
+probes = ["http", "tls"]
+builtin_probes = true
+tags = ["web", "http", "https"]

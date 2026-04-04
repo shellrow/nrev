@@ -1,0 +1,10 @@
+[[recipes]]
+name = "fast-syn-triage"
+description = "Fast top-1000 SYN triage with follow-up built-in probes on open ports."
+ports = "top-1000"
+transport = "syn"
+concurrency = 1024
+connect_timeout_ms = 250
+probe_timeout_ms = 1500
+builtin_probes = true
+tags = ["triage", "syn", "top-1000"]

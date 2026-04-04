@@ -1,0 +1,19 @@
+[[recipes]]
+name = "corp-web-alt"
+description = "Target common alternate enterprise web ports with built-in and external HTTP probes."
+ports = "8080,8088,8443,9443"
+transport = "tcp"
+probe_timeout_ms = 2500
+probes = ["http", "tls", "corp-http-alt"]
+builtin_probes = true
+tags = ["web", "enterprise", "alternate-ports"]
+
+[[recipes]]
+name = "corp-quic"
+description = "Probe enterprise QUIC and HTTP/3 listeners on alternate ports."
+ports = "443,9443"
+transport = "quic"
+probe_timeout_ms = 2500
+probes = ["quic", "quic-alt-svc"]
+builtin_probes = true
+tags = ["quic", "http3", "enterprise"]

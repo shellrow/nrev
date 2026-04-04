@@ -12,6 +12,12 @@ use std::time::Duration;
 use std::time::Instant;
 use tokio::sync::oneshot;
 
+#[derive(Debug, Clone)]
+pub struct CapturedFrame {
+    pub frame: Frame,
+    pub captured_at: Instant,
+}
+
 /// Packet capture options
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PacketCaptureOptions {
@@ -47,9 +53,9 @@ pub struct PacketCaptureOptions {
 }
 
 impl PacketCaptureOptions {
-    pub fn default() -> Result<PacketCaptureOptions, String> {
+    pub fn from_default_interface() -> Result<PacketCaptureOptions, String> {
         let iface = netdev::get_default_interface()?;
-        let options = PacketCaptureOptions {
+        Ok(PacketCaptureOptions {
             interface_index: iface.index,
             interface_name: iface.name.clone(),
             src_ips: HashSet::new(),
@@ -64,12 +70,11 @@ impl PacketCaptureOptions {
             receive_undefined: true,
             tunnel: iface.is_tun(),
             loopback: iface.is_loopback(),
-        };
-        Ok(options)
+        })
     }
     pub fn from_interface_index(if_index: u32) -> Option<PacketCaptureOptions> {
         let iface = interface::get_interface_by_index(if_index)?;
-        let options = PacketCaptureOptions {
+        Some(PacketCaptureOptions {
             interface_index: if_index,
             interface_name: iface.name.clone(),
             src_ips: HashSet::new(),
@@ -84,8 +89,7 @@ impl PacketCaptureOptions {
             receive_undefined: true,
             tunnel: iface.is_tun(),
             loopback: iface.is_loopback(),
-        };
-        Some(options)
+        })
     }
     pub fn from_interface_name(if_name: String) -> PacketCaptureOptions {
         let iface = interface::get_interface_by_name(if_name.clone()).or_else(|| {
@@ -106,7 +110,7 @@ impl PacketCaptureOptions {
             tracing::warn!("no usable interface found, using index=0 placeholder capture options");
             (0, if_name, false, false)
         };
-        let options = PacketCaptureOptions {
+        PacketCaptureOptions {
             interface_index,
             interface_name,
             src_ips: HashSet::new(),
@@ -121,11 +125,10 @@ impl PacketCaptureOptions {
             receive_undefined: true,
             tunnel,
             loopback,
-        };
-        options
+        }
     }
     pub fn from_interface(iface: &Interface) -> PacketCaptureOptions {
-        let options = PacketCaptureOptions {
+        PacketCaptureOptions {
             interface_index: iface.index,
             interface_name: iface.name.clone(),
             src_ips: HashSet::new(),
@@ -140,8 +143,7 @@ impl PacketCaptureOptions {
             receive_undefined: true,
             tunnel: iface.is_tun(),
             loopback: iface.is_loopback(),
-        };
-        options
+        }
     }
 }
 
@@ -152,6 +154,19 @@ pub async fn start_capture(
     ready_tx: oneshot::Sender<()>,
     stop_rx: &mut oneshot::Receiver<()>,
 ) -> Vec<Frame> {
+    start_capture_timed(rx, capture_options, ready_tx, stop_rx)
+        .await
+        .into_iter()
+        .map(|captured| captured.frame)
+        .collect()
+}
+
+pub async fn start_capture_timed(
+    rx: &mut Box<dyn AsyncRawReceiver>,
+    capture_options: PacketCaptureOptions,
+    ready_tx: oneshot::Sender<()>,
+    stop_rx: &mut oneshot::Receiver<()>,
+) -> Vec<CapturedFrame> {
     let mut frames = Vec::new();
     let start_time = Instant::now();
     let _ = ready_tx.send(());
@@ -171,7 +186,10 @@ pub async fn start_capture(
                         }
                         if let Some(frame) = Frame::from_buf(&packet, parse_option) {
                             if filter_packet(&frame, &capture_options) {
-                                frames.push(frame);
+                                frames.push(CapturedFrame {
+                                    frame,
+                                    captured_at: Instant::now(),
+                                });
                             }
                         } else {
                             tracing::debug!("Error parsing packet");
@@ -194,19 +212,19 @@ pub async fn start_capture(
 
 fn filter_packet(frame: &Frame, capture_options: &PacketCaptureOptions) -> bool {
     if let Some(datalink) = &frame.datalink {
-        if let Some(ethernet_header) = &datalink.ethernet {
-            if !filter_ether_type(ethernet_header.ethertype, capture_options) {
-                return false;
-            }
+        if let Some(ethernet_header) = &datalink.ethernet
+            && !filter_ether_type(ethernet_header.ethertype, capture_options)
+        {
+            return false;
         }
-        if let Some(arp_header) = &datalink.arp {
-            if !filter_host(
+        if let Some(arp_header) = &datalink.arp
+            && !filter_host(
                 IpAddr::V4(arp_header.sender_proto_addr),
                 IpAddr::V4(arp_header.target_proto_addr),
                 capture_options,
-            ) {
-                return false;
-            }
+            )
+        {
+            return false;
         }
     }
     if let Some(ip) = &frame.ip {
@@ -236,56 +254,38 @@ fn filter_packet(frame: &Frame, capture_options: &PacketCaptureOptions) -> bool 
         }
     }
     if let Some(transport) = &frame.transport {
-        if let Some(tcp_header) = &transport.tcp {
-            if !filter_port(tcp_header.source, tcp_header.destination, capture_options) {
-                return false;
-            }
+        if let Some(tcp_header) = &transport.tcp
+            && !filter_port(tcp_header.source, tcp_header.destination, capture_options)
+        {
+            return false;
         }
-        if let Some(udp_header) = &transport.udp {
-            if !filter_port(udp_header.source, udp_header.destination, capture_options) {
-                return false;
-            }
+        if let Some(udp_header) = &transport.udp
+            && !filter_port(udp_header.source, udp_header.destination, capture_options)
+        {
+            return false;
         }
     }
     true
 }
 
 fn filter_host(src_ip: IpAddr, dst_ip: IpAddr, capture_options: &PacketCaptureOptions) -> bool {
-    if capture_options.src_ips.len() == 0 && capture_options.dst_ips.len() == 0 {
+    if capture_options.src_ips.is_empty() && capture_options.dst_ips.is_empty() {
         return true;
     }
-    if capture_options.src_ips.contains(&src_ip) || capture_options.dst_ips.contains(&dst_ip) {
-        return true;
-    } else {
-        return false;
-    }
+    capture_options.src_ips.contains(&src_ip) || capture_options.dst_ips.contains(&dst_ip)
 }
 
 fn filter_port(src_port: u16, dst_port: u16, capture_options: &PacketCaptureOptions) -> bool {
-    if capture_options.src_ports.len() == 0 && capture_options.dst_ports.len() == 0 {
+    if capture_options.src_ports.is_empty() && capture_options.dst_ports.is_empty() {
         return true;
     }
-    if capture_options.src_ports.contains(&src_port)
-        || capture_options.dst_ports.contains(&dst_port)
-    {
-        return true;
-    } else {
-        return false;
-    }
+    capture_options.src_ports.contains(&src_port) || capture_options.dst_ports.contains(&dst_port)
 }
 
 fn filter_ether_type(ether_type: EtherType, capture_options: &PacketCaptureOptions) -> bool {
-    if capture_options.ether_types.len() == 0 || capture_options.ether_types.contains(&ether_type) {
-        return true;
-    } else {
-        return false;
-    }
+    capture_options.ether_types.is_empty() || capture_options.ether_types.contains(&ether_type)
 }
 
 fn filter_ip_protocol(protocol: IpNextProtocol, capture_options: &PacketCaptureOptions) -> bool {
-    if capture_options.ip_protocols.len() == 0 || capture_options.ip_protocols.contains(&protocol) {
-        return true;
-    } else {
-        return false;
-    }
+    capture_options.ip_protocols.is_empty() || capture_options.ip_protocols.contains(&protocol)
 }
