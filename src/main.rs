@@ -8,7 +8,7 @@ use tracing_subscriber::{
 
 use nrev::{
     cli::{Cli, Command, ProgressMode, ScanArgSources},
-    config::{HostConfig, NeighborConfig, PingConfig, ScanConfig, TraceConfig},
+    config::{HostConfig, NeighborConfig, PingConfig, ScanConfig, ScanTask, TraceConfig},
     data::DataRegistry,
     host::{HostScanEvent, HostScanner, resolve_host_targets},
     model::{EndpointState, HostScanTimings, ScanTimings},
@@ -43,88 +43,20 @@ async fn run() -> anyhow::Result<()> {
     let command = Cli::command();
     let matches = command.get_matches();
     let cli = Cli::from_arg_matches(&matches)?;
-    let (progress_mode, quiet) = command_logging_mode(&cli.command);
+    let task = match &cli.command {
+        Command::Task(args) => Some(ScanTask::from_task_args(args)?),
+        _ => None,
+    };
+    let (progress_mode, quiet) = command_logging_mode(&cli.command, task.as_ref());
     init_logging(progress_mode, quiet)?;
     match cli.command {
         Command::Port(args) => {
-            let started = std::time::Instant::now();
-            let registry = DataRegistry::load(args.data.as_deref())?;
             let arg_sources = scan_arg_sources(matches.subcommand_matches("port"));
-            let config = ScanConfig::from_scan_args_with_sources(&args, &registry, &arg_sources)?;
-            debug!(
-                transport = %config.transport.as_str(),
-                concurrency = config.concurrency,
-                connect_timeout_ms = config.connect_timeout.as_millis(),
-                probe_timeout_ms = config.probe_timeout.as_millis(),
-                retries = config.retries,
-                "Port scan configuration resolved"
-            );
-            progress(
-                config.progress_mode,
-                config.quiet,
-                &format!("nrev v{} started", env!("CARGO_PKG_VERSION")),
-            );
-
-            let target_resolution_started = std::time::Instant::now();
-            let targets =
-                TargetResolver::new(config.default_ports.clone()).resolve(&args.targets)?;
-            let target_resolution_time = target_resolution_started.elapsed();
-            let target_count = targets.len();
-            let requested_port_count: usize = targets.iter().map(|(_, ports)| ports.len()).sum();
-            progress(
-                config.progress_mode,
-                config.quiet,
-                &format!(
-                    "Resolved {target_count} host(s), {requested_port_count} port assignment(s) in {}",
-                    format_duration(target_resolution_time)
-                ),
-            );
-
-            let mut execution = Scanner::new(config.clone(), registry, SocketConnector)
-                .scan_with_progress(targets, |event| log_scan_event(config.quiet, event))
-                .await?;
-            execution.report.metadata.timings = Some(ScanTimings {
-                target_resolution: target_resolution_time,
-                transport_scan: execution.transport_scan_time,
-                followup_probes: execution.followup_probe_time,
-                total: started.elapsed(),
-            });
-
-            log_open_port_summary(config.quiet, &execution.report);
-
-            if args.format.is_json() {
-                let json_report = filtered_scan_report(&execution.report, config.show_all_states);
-                let json = serde_json::to_string_pretty(&json_report)?;
-                println!("{json}");
-            } else {
-                print!(
-                    "{}",
-                    render_human_scan_report(&execution.report, config.show_all_states)
-                );
-            }
-
-            progress(
-                config.progress_mode,
-                config.quiet,
-                &format!(
-                    "nrev v{} completed in {}",
-                    env!("CARGO_PKG_VERSION"),
-                    format_duration(
-                        execution
-                            .report
-                            .metadata
-                            .timings
-                            .as_ref()
-                            .map(|timings| timings.total)
-                            .unwrap_or_else(|| started.elapsed())
-                    )
-                ),
-            );
-
-            if let Some(path) = &args.output {
-                let json_report = filtered_scan_report(&execution.report, config.show_all_states);
-                write_json_report(&json_report, path)?;
-            }
+            run_port_scan(&args, &arg_sources).await?;
+        }
+        Command::Task(_) => {
+            let (_, args, arg_sources) = task.expect("task should be preloaded");
+            run_port_scan(&args, &arg_sources).await?;
         }
         Command::Host(args) => {
             let started = std::time::Instant::now();
@@ -307,9 +239,15 @@ fn log_scan_event(quiet: bool, event: ScanEvent) {
     }
 }
 
-fn command_logging_mode(command: &Command) -> (ProgressMode, bool) {
+fn command_logging_mode(
+    command: &Command,
+    task: Option<&(ScanTask, nrev::cli::ScanArgs, ScanArgSources)>,
+) -> (ProgressMode, bool) {
     match command {
         Command::Port(args) => (args.progress, args.quiet),
+        Command::Task(_) => task
+            .map(|(_, args, _)| (args.progress, args.quiet))
+            .unwrap_or((ProgressMode::Auto, false)),
         Command::Host(args) => (args.progress, args.quiet),
         Command::Ping(args) => (args.progress, args.quiet),
         Command::Trace(args) => (args.progress, args.quiet),
@@ -438,8 +376,91 @@ fn scan_arg_sources(matches: Option<&clap::ArgMatches>) -> ScanArgSources {
         data: is_cli("data"),
         recipe: is_cli("recipe"),
         probes: is_cli("probes"),
-        no_builtin_probes: is_cli("no_builtin_probes"),
+        builtin_probes: is_cli("no_builtin_probes"),
         format: is_cli("format"),
         output: is_cli("output"),
     }
+}
+
+async fn run_port_scan(
+    args: &nrev::cli::ScanArgs,
+    arg_sources: &ScanArgSources,
+) -> anyhow::Result<()> {
+    let started = std::time::Instant::now();
+    let registry = DataRegistry::load(args.data.as_deref())?;
+    let config = ScanConfig::from_scan_args_with_sources(args, &registry, arg_sources)?;
+    debug!(
+        transport = %config.transport.as_str(),
+        concurrency = config.concurrency,
+        connect_timeout_ms = config.connect_timeout.as_millis(),
+        probe_timeout_ms = config.probe_timeout.as_millis(),
+        retries = config.retries,
+        "Port scan configuration resolved"
+    );
+    progress(
+        config.progress_mode,
+        config.quiet,
+        &format!("nrev v{} started", env!("CARGO_PKG_VERSION")),
+    );
+
+    let target_resolution_started = std::time::Instant::now();
+    let targets = TargetResolver::new(config.default_ports.clone()).resolve(&args.targets)?;
+    let target_resolution_time = target_resolution_started.elapsed();
+    let target_count = targets.len();
+    let requested_port_count: usize = targets.iter().map(|(_, ports)| ports.len()).sum();
+    progress(
+        config.progress_mode,
+        config.quiet,
+        &format!(
+            "Resolved {target_count} host(s), {requested_port_count} port assignment(s) in {}",
+            format_duration(target_resolution_time)
+        ),
+    );
+
+    let mut execution = Scanner::new(config.clone(), registry, SocketConnector)
+        .scan_with_progress(targets, |event| log_scan_event(config.quiet, event))
+        .await?;
+    execution.report.metadata.timings = Some(ScanTimings {
+        target_resolution: target_resolution_time,
+        transport_scan: execution.transport_scan_time,
+        followup_probes: execution.followup_probe_time,
+        total: started.elapsed(),
+    });
+
+    log_open_port_summary(config.quiet, &execution.report);
+
+    if args.format.is_json() {
+        let json_report = filtered_scan_report(&execution.report, config.show_all_states);
+        println!("{}", serde_json::to_string_pretty(&json_report)?);
+    } else {
+        print!(
+            "{}",
+            render_human_scan_report(&execution.report, config.show_all_states)
+        );
+    }
+
+    progress(
+        config.progress_mode,
+        config.quiet,
+        &format!(
+            "nrev v{} completed in {}",
+            env!("CARGO_PKG_VERSION"),
+            format_duration(
+                execution
+                    .report
+                    .metadata
+                    .timings
+                    .as_ref()
+                    .map(|timings| timings.total)
+                    .unwrap_or_else(|| started.elapsed())
+            )
+        ),
+    );
+
+    if let Some(path) = &args.output {
+        let json_report = filtered_scan_report(&execution.report, config.show_all_states);
+        write_json_report(&json_report, path)?;
+    }
+
+    Ok(())
 }

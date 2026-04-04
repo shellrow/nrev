@@ -1,10 +1,12 @@
 use std::{
-    collections::BTreeSet,
+    collections::{BTreeSet, HashSet},
+    fs,
     net::{IpAddr, SocketAddr, ToSocketAddrs},
+    path::{Path, PathBuf},
     sync::OnceLock,
 };
 
-use ipnet::Ipv4Net;
+use ipnet::IpNet;
 
 use crate::{
     error::{NrevError, Result},
@@ -47,32 +49,50 @@ impl TargetResolver {
     }
 
     pub fn resolve(&self, inputs: &[String]) -> Result<Vec<(Target, Vec<u16>)>> {
+        let mut seen_files = HashSet::new();
+        let tokens = collect_target_tokens(inputs, &mut seen_files)?;
         let mut resolved = Vec::new();
-        for input in inputs {
-            if let Some((host, port)) = split_host_port(input) {
+        for input in tokens {
+            if let Some((host, port)) = split_host_port(&input) {
                 for target in resolve_host(&host)? {
-                    resolved.push((target_with_original(target, input), vec![port]));
+                    resolved.push((target_with_original(target, &input), vec![port]));
                 }
                 continue;
             }
 
-            if let Ok(network) = input.parse::<Ipv4Net>() {
-                for ip in network.hosts() {
-                    resolved.push((
-                        Target {
-                            original: input.clone(),
-                            hostname: None,
-                            address: IpAddr::V4(ip),
-                        },
-                        self.default_ports.clone(),
-                    ));
+            if let Ok(network) = input.parse::<IpNet>() {
+                match network {
+                    IpNet::V4(network) => {
+                        for ip in network.hosts() {
+                            resolved.push((
+                                Target {
+                                    original: input.clone(),
+                                    hostname: None,
+                                    address: IpAddr::V4(ip),
+                                },
+                                self.default_ports.clone(),
+                            ));
+                        }
+                    }
+                    IpNet::V6(network) => {
+                        for ip in network.hosts() {
+                            resolved.push((
+                                Target {
+                                    original: input.clone(),
+                                    hostname: None,
+                                    address: IpAddr::V6(ip),
+                                },
+                                self.default_ports.clone(),
+                            ));
+                        }
+                    }
                 }
                 continue;
             }
 
-            for target in resolve_host(input)? {
+            for target in resolve_host(&input)? {
                 resolved.push((
-                    target_with_original(target, input),
+                    target_with_original(target, &input),
                     self.default_ports.clone(),
                 ));
             }
@@ -84,6 +104,54 @@ impl TargetResolver {
 
         Ok(resolved)
     }
+}
+
+fn canonicalize_for_seen(path: &Path) -> PathBuf {
+    fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
+}
+
+fn collect_target_tokens(
+    inputs: &[String],
+    seen_files: &mut HashSet<PathBuf>,
+) -> Result<Vec<String>> {
+    let mut tokens = Vec::new();
+
+    for raw in inputs {
+        let value = raw.trim();
+        if value.is_empty() {
+            continue;
+        }
+
+        let (is_file_hint, path_str) = if let Some(stripped) = value.strip_prefix('@') {
+            (true, stripped)
+        } else {
+            (false, value)
+        };
+
+        let path = Path::new(path_str);
+        if is_file_hint || path.is_file() {
+            let canonical = canonicalize_for_seen(path);
+            if !seen_files.insert(canonical) {
+                continue;
+            }
+
+            let text = fs::read_to_string(path)?;
+            let nested_inputs = text
+                .lines()
+                .map(str::trim)
+                .filter(|line| !line.is_empty() && !line.starts_with('#'))
+                .map(ToString::to_string)
+                .collect::<Vec<_>>();
+
+            let mut nested = collect_target_tokens(&nested_inputs, seen_files)?;
+            tokens.append(&mut nested);
+            continue;
+        }
+
+        tokens.push(value.to_string());
+    }
+
+    Ok(tokens)
 }
 
 fn target_with_original(mut target: Target, original: &str) -> Target {
@@ -236,5 +304,31 @@ mod tests {
                 IpAddr::V4(Ipv4Addr::new(192, 168, 1, 2))
             ]
         );
+    }
+
+    #[test]
+    fn resolves_targets_from_file() {
+        let path = std::env::temp_dir().join("nrev-port-targets.txt");
+        fs::write(&path, "127.0.0.1\n192.168.1.0/30\n").expect("write target file");
+
+        let targets = TargetResolver::new(vec![80])
+            .resolve(&[format!("@{}", path.display())])
+            .expect("targets");
+
+        assert!(targets.iter().any(|(target, ports)| target.address
+            == "127.0.0.1".parse::<IpAddr>().unwrap()
+            && ports == &vec![80]));
+        assert!(
+            targets
+                .iter()
+                .any(|(target, _)| target.address == "192.168.1.1".parse::<IpAddr>().unwrap())
+        );
+        assert!(
+            targets
+                .iter()
+                .any(|(target, _)| target.address == "192.168.1.2".parse::<IpAddr>().unwrap())
+        );
+
+        fs::remove_file(path).ok();
     }
 }

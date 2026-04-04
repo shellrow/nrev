@@ -11,6 +11,7 @@ Usage: nrev <COMMAND>
 
 Commands:
   port    Scan ports and collect structured observations
+  task    Run a port-scan task from a JSON or TOML file
   host    Discover reachable hosts with ICMP, UDP, or TCP probes
   ping    Send repeated probes to a target with ICMP, UDP, TCP, or QUIC
   trace   Trace the path to a target with UDP or ICMP probes
@@ -236,6 +237,55 @@ Run a built-in sample recipe:
 nrev port 192.168.10.10 --data ./samples/recipes --recipe web-balanced
 nrev port 192.168.10.0/24 --data ./samples/recipes --recipe fast-syn-triage
 ```
+
+Command-line targets and recipe selection remain supported:
+
+```sh
+nrev port 192.168.10.10 --data ./samples/recipes --recipe web-balanced
+```
+
+## Tasks
+
+Run a task file that includes its own targets and scan settings:
+
+```sh
+nrev task ./samples/tasks/web-balanced.toml
+```
+
+Example task file:
+
+```toml
+name = "web-balanced"
+targets = ["192.168.10.10", "@./targets.txt"]
+data = "../recipes"
+recipe = "web-balanced"
+format = "json"
+output = "./web-balanced-report.json"
+```
+
+Task files support the same port-scan settings as `nrev port`, including:
+
+- `targets` or `target`
+- `ports`
+- `transport`
+- `interface`
+- `concurrency`
+- `connect_timeout_ms`
+- `probe_timeout_ms`
+- `http_body_preview_bytes`
+- `retries`
+- `probes`
+- `builtin_probes`
+- `profile`
+- `data`
+- `recipe`
+- `all_states`
+- `quiet`
+- `progress`
+- `format`
+- `output`
+
+Relative paths in `profile`, `data`, and `output` are resolved from the task file location.
 
 ## External Data Packs
 

@@ -1,12 +1,15 @@
-use std::{path::Path, time::Duration};
+use std::{
+    path::{Path, PathBuf},
+    time::Duration,
+};
 
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 
 use crate::{
     cli::{
-        HostArgs, HostDiscoveryMode, NeighborArgs, NeighborMethod as CliNeighborMethod, PingArgs,
-        PingMethod as CliPingMethod, ProgressMode, ScanArgSources, ScanArgs, ScanTransport,
-        TraceArgs, TraceMethod as CliTraceMethod,
+        HostArgs, HostDiscoveryMode, NeighborArgs, NeighborMethod as CliNeighborMethod,
+        OutputFormat, PingArgs, PingMethod as CliPingMethod, ProgressMode, ScanArgSources,
+        ScanArgs, ScanTransport, TaskArgs, TraceArgs, TraceMethod as CliTraceMethod,
     },
     data::DataRegistry,
     error::{NrevError, Result},
@@ -49,6 +52,35 @@ pub struct ScanRecipe {
     pub builtin_probes: Option<bool>,
     #[serde(default)]
     pub tags: Vec<String>,
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct ScanTask {
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub target: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_targets")]
+    pub targets: Vec<String>,
+    pub ports: Option<String>,
+    pub transport: Option<ProfileTransport>,
+    pub interface: Option<String>,
+    pub concurrency: Option<usize>,
+    pub connect_timeout_ms: Option<u64>,
+    pub probe_timeout_ms: Option<u64>,
+    pub http_body_preview_bytes: Option<usize>,
+    pub retries: Option<u8>,
+    pub probes: Option<Vec<String>>,
+    pub builtin_probes: Option<bool>,
+    #[serde(default)]
+    pub tags: Vec<String>,
+    pub profile: Option<PathBuf>,
+    pub data: Option<PathBuf>,
+    pub recipe: Option<String>,
+    pub all_states: Option<bool>,
+    pub quiet: Option<bool>,
+    pub progress: Option<ProgressMode>,
+    pub format: Option<OutputFormat>,
+    pub output: Option<PathBuf>,
 }
 
 #[derive(Clone, Debug)]
@@ -110,6 +142,81 @@ pub struct NeighborConfig {
     pub method: Option<NeighborMethod>,
     pub timeout: Duration,
     pub interface: Option<String>,
+}
+
+impl ScanTask {
+    pub fn from_task_args(args: &TaskArgs) -> Result<(Self, ScanArgs, ScanArgSources)> {
+        let task = load_task(&args.file)?;
+        let scan_args = task.scan_args(&args.file);
+        let sources = task.scan_arg_sources();
+        Ok((task, scan_args, sources))
+    }
+
+    pub fn scan_args(&self, task_path: &Path) -> ScanArgs {
+        let mut targets = Vec::new();
+        if let Some(target) = &self.target {
+            targets.push(resolve_task_target(task_path, target));
+        }
+        targets.extend(
+            self.targets
+                .iter()
+                .map(|target| resolve_task_target(task_path, target)),
+        );
+
+        ScanArgs {
+            targets,
+            ports: self.ports.clone().unwrap_or_else(|| "top-100".to_string()),
+            transport: self.transport.map(Into::into).unwrap_or(ScanTransport::Tcp),
+            concurrency: self.concurrency.unwrap_or(512),
+            all_states: self.all_states.unwrap_or(false),
+            quiet: self.quiet.unwrap_or(false),
+            progress: self.progress.unwrap_or(ProgressMode::Auto),
+            interface: self.interface.clone(),
+            connect_timeout_ms: self.connect_timeout_ms,
+            probe_timeout_ms: self.probe_timeout_ms.unwrap_or(2000),
+            http_body_preview_bytes: self.http_body_preview_bytes.unwrap_or(4096),
+            retries: self.retries.unwrap_or(0),
+            profile: self
+                .profile
+                .as_ref()
+                .map(|path| resolve_task_path(task_path, path)),
+            data: self
+                .data
+                .as_ref()
+                .map(|path| resolve_task_path(task_path, path)),
+            recipe: self.recipe.clone(),
+            probes: self.probes.clone().unwrap_or_default(),
+            no_builtin_probes: matches!(self.builtin_probes, Some(false)),
+            format: self.format.unwrap_or(OutputFormat::Human),
+            output: self
+                .output
+                .as_ref()
+                .map(|path| resolve_task_path(task_path, path)),
+        }
+    }
+
+    pub fn scan_arg_sources(&self) -> ScanArgSources {
+        ScanArgSources {
+            ports: self.ports.is_some(),
+            transport: self.transport.is_some(),
+            concurrency: self.concurrency.is_some(),
+            all_states: self.all_states.is_some(),
+            quiet: self.quiet.is_some(),
+            progress: self.progress.is_some(),
+            interface: self.interface.is_some(),
+            connect_timeout_ms: self.connect_timeout_ms.is_some(),
+            probe_timeout_ms: self.probe_timeout_ms.is_some(),
+            http_body_preview_bytes: self.http_body_preview_bytes.is_some(),
+            retries: self.retries.is_some(),
+            profile: self.profile.is_some(),
+            data: self.data.is_some(),
+            recipe: self.recipe.is_some(),
+            probes: self.probes.is_some(),
+            builtin_probes: self.builtin_probes.is_some(),
+            format: self.format.is_some(),
+            output: self.output.is_some(),
+        }
+    }
 }
 
 impl ScanConfig {
@@ -238,7 +345,7 @@ impl ScanConfig {
                     .unwrap_or(args.retries)
             },
             enabled_probes,
-            builtin_probes: if sources.no_builtin_probes {
+            builtin_probes: if sources.builtin_probes {
                 !args.no_builtin_probes
             } else {
                 recipe
@@ -273,6 +380,17 @@ impl From<ScanTransport> for Transport {
 }
 
 impl From<ProfileTransport> for Transport {
+    fn from(value: ProfileTransport) -> Self {
+        match value {
+            ProfileTransport::Tcp => Self::Tcp,
+            ProfileTransport::Udp => Self::Udp,
+            ProfileTransport::Syn => Self::Syn,
+            ProfileTransport::Quic => Self::Quic,
+        }
+    }
+}
+
+impl From<ProfileTransport> for ScanTransport {
     fn from(value: ProfileTransport) -> Self {
         match value {
             ProfileTransport::Tcp => Self::Tcp,
@@ -406,6 +524,68 @@ pub fn load_profile(path: &Path) -> Result<ScanProfile> {
     }
 }
 
+pub fn load_task(path: &Path) -> Result<ScanTask> {
+    let content = std::fs::read_to_string(path)?;
+    let task = match path.extension().and_then(|ext| ext.to_str()) {
+        Some("json") => serde_json::from_str(&content)?,
+        Some("toml") => toml::from_str(&content)?,
+        _ => {
+            return Err(crate::error::NrevError::UnsupportedFileExtension(
+                path.to_path_buf(),
+            ));
+        }
+    };
+    validate_task(task)
+}
+
+fn validate_task(task: ScanTask) -> Result<ScanTask> {
+    if task.target.is_none() && task.targets.is_empty() {
+        return Err(NrevError::InvalidTask(
+            "task file must define at least one target".to_string(),
+        ));
+    }
+    Ok(task)
+}
+
+fn resolve_task_path(task_path: &Path, path: &Path) -> PathBuf {
+    if path.is_absolute() {
+        return path.to_path_buf();
+    }
+
+    task_path
+        .parent()
+        .unwrap_or_else(|| Path::new("."))
+        .join(path)
+}
+
+fn resolve_task_target(task_path: &Path, target: &str) -> String {
+    let Some(path) = target.strip_prefix('@') else {
+        return target.to_string();
+    };
+
+    let resolved = resolve_task_path(task_path, Path::new(path));
+    format!("@{}", resolved.display())
+}
+
+fn deserialize_targets<'de, D>(deserializer: D) -> std::result::Result<Vec<String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Targets {
+        One(String),
+        Many(Vec<String>),
+    }
+
+    let value = Option::<Targets>::deserialize(deserializer)?;
+    Ok(match value {
+        Some(Targets::One(target)) => vec![target],
+        Some(Targets::Many(targets)) => targets,
+        None => Vec::new(),
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -512,7 +692,7 @@ mod tests {
             http_body_preview_bytes: true,
             retries: true,
             probes: true,
-            no_builtin_probes: true,
+            builtin_probes: true,
             ..ScanArgSources::default()
         };
         let registry = DataRegistry {
@@ -575,5 +755,115 @@ mod tests {
         let config = ScanConfig::from_scan_args(&args, &DataRegistry::default()).expect("config");
         assert_eq!(config.transport, Transport::Quic);
         assert_eq!(config.default_ports, vec![443]);
+    }
+
+    #[test]
+    fn task_loads_targets_and_resolves_relative_paths() {
+        let dir = std::env::temp_dir().join("nrev-task-loads");
+        std::fs::create_dir_all(&dir).expect("create dir");
+        let task_path = dir.join("web.toml");
+        std::fs::write(
+            &task_path,
+            r#"
+targets = ["192.0.2.10", "@targets.txt"]
+recipe = "web-balanced"
+data = "../recipes"
+profile = "./profile.toml"
+output = "result.json"
+format = "json"
+"#,
+        )
+        .expect("write task");
+
+        let task = load_task(&task_path).expect("load task");
+        let args = task.scan_args(&task_path);
+        let sources = task.scan_arg_sources();
+
+        assert_eq!(
+            args.targets,
+            vec![
+                "192.0.2.10".to_string(),
+                format!("@{}", dir.join("targets.txt").display())
+            ]
+        );
+        assert_eq!(args.recipe.as_deref(), Some("web-balanced"));
+        assert_eq!(args.format, OutputFormat::Json);
+        assert_eq!(args.data.as_deref(), Some(dir.join("../recipes").as_path()));
+        assert_eq!(
+            args.profile.as_deref(),
+            Some(dir.join("./profile.toml").as_path())
+        );
+        assert_eq!(
+            args.output.as_deref(),
+            Some(dir.join("result.json").as_path())
+        );
+        assert!(sources.recipe);
+        assert!(sources.data);
+        assert!(sources.profile);
+        assert!(sources.output);
+
+        std::fs::remove_dir_all(dir).ok();
+    }
+
+    #[test]
+    fn task_requires_at_least_one_target() {
+        let path = std::env::temp_dir().join("nrev-task-empty.toml");
+        std::fs::write(&path, r#"recipe = "web-balanced""#).expect("write task");
+        let error = load_task(&path).expect_err("expected error");
+        assert!(matches!(error, NrevError::InvalidTask(_)));
+        std::fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn explicit_task_builtin_probe_setting_overrides_recipe_defaults() {
+        let task = ScanTask {
+            name: None,
+            description: None,
+            target: Some("127.0.0.1".to_string()),
+            targets: Vec::new(),
+            ports: None,
+            transport: None,
+            interface: None,
+            concurrency: None,
+            connect_timeout_ms: None,
+            probe_timeout_ms: None,
+            http_body_preview_bytes: None,
+            retries: None,
+            probes: None,
+            builtin_probes: Some(true),
+            tags: Vec::new(),
+            profile: None,
+            data: None,
+            recipe: Some("enterprise".to_string()),
+            all_states: None,
+            quiet: None,
+            progress: None,
+            format: None,
+            output: None,
+        };
+        let args = task.scan_args(Path::new("task.toml"));
+        let sources = task.scan_arg_sources();
+        let registry = DataRegistry {
+            recipes: vec![ScanRecipe {
+                name: "enterprise".to_string(),
+                description: None,
+                ports: Some("1433".to_string()),
+                transport: Some(ProfileTransport::Tcp),
+                interface: None,
+                concurrency: None,
+                connect_timeout_ms: None,
+                probe_timeout_ms: None,
+                http_body_preview_bytes: None,
+                retries: None,
+                probes: None,
+                builtin_probes: Some(false),
+                tags: Vec::new(),
+            }],
+            ..DataRegistry::default()
+        };
+
+        let config =
+            ScanConfig::from_scan_args_with_sources(&args, &registry, &sources).expect("config");
+        assert!(config.builtin_probes);
     }
 }

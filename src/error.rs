@@ -10,6 +10,8 @@ pub enum NrevError {
     InvalidPortSpec(String),
     #[error("unknown recipe: {0}")]
     InvalidRecipe(String),
+    #[error("invalid task: {0}")]
+    InvalidTask(String),
     #[error("unsupported file extension for {0}")]
     UnsupportedFileExtension(PathBuf),
     #[error("failed to resolve {0}")]

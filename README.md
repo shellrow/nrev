@@ -12,6 +12,7 @@ It focuses on:
 - built-in service observation for common protocols
 - structured JSON output for automation
 - external data packs for probes, fingerprint rules, profiles, and recipes
+- task files for repeatable target lists and scan executions
 
 ## Commands
 
@@ -20,6 +21,7 @@ Usage: nrev <COMMAND>
 
 Commands:
   port    Scan ports and collect structured observations
+  task    Run a port-scan task from a JSON or TOML file
   host    Discover reachable hosts with ICMP, UDP, or TCP probes
   ping    Send repeated probes to a target with ICMP, UDP, TCP, or QUIC
   trace   Trace the path to a target with UDP or ICMP probes
@@ -56,6 +58,7 @@ The repository includes sample data under [samples/](samples):
 
 - [samples/recipes/](samples/recipes) for recipe-only examples
 - [samples/data-pack/](samples/data-pack) for mixed external data pack examples
+- [samples/tasks/](samples/tasks) for runnable task-file examples
 
 ## Documentation
 

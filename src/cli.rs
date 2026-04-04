@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
 use clap::{ArgAction, Args, Parser, Subcommand, ValueEnum, value_parser};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -17,6 +18,8 @@ pub struct Cli {
 pub enum Command {
     /// Scan ports and collect structured observations.
     Port(Box<ScanArgs>),
+    /// Run a port-scan task from a JSON or TOML file.
+    Task(TaskArgs),
     /// Discover reachable hosts with ICMP, UDP, or TCP probes.
     Host(Box<HostArgs>),
     /// Send repeated probes to a target with ICMP, UDP, TCP, or QUIC.
@@ -31,7 +34,8 @@ pub enum Command {
     Recipe(RecipeArgs),
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum OutputFormat {
     Human,
     Json,
@@ -51,7 +55,8 @@ pub enum ScanTransport {
     Quic,
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
 pub enum ProgressMode {
     Auto,
     Quiet,
@@ -114,6 +119,13 @@ impl NeighborMethod {
             Self::Ndp => "ndp",
         }
     }
+}
+
+#[derive(Debug, Args)]
+pub struct TaskArgs {
+    /// Task file in JSON or TOML format.
+    #[arg(value_name = "FILE", value_parser = value_parser!(PathBuf))]
+    pub file: PathBuf,
 }
 
 #[derive(Debug, Args)]
@@ -212,7 +224,7 @@ pub struct ScanArgSources {
     pub data: bool,
     pub recipe: bool,
     pub probes: bool,
-    pub no_builtin_probes: bool,
+    pub builtin_probes: bool,
     pub format: bool,
     pub output: bool,
 }
@@ -462,6 +474,16 @@ mod tests {
             args.output.as_deref(),
             Some(PathBuf::from("report.json").as_path())
         );
+    }
+
+    #[test]
+    fn task_command_accepts_a_task_file() {
+        let cli = Cli::try_parse_from(["nrev", "task", "samples/tasks/web.toml"]).expect("task");
+
+        let Command::Task(args) = cli.command else {
+            panic!("expected task command");
+        };
+        assert_eq!(args.file, PathBuf::from("samples/tasks/web.toml"));
     }
 
     #[test]

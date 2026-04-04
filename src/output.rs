@@ -919,7 +919,11 @@ mod tests {
         let report = filtered_scan_report(&sample_report(), false);
         assert_eq!(report.targets[0].endpoints.len(), 1);
         assert_eq!(
-            report.targets[0].endpoints.get(&22).expect("endpoint").state,
+            report.targets[0]
+                .endpoints
+                .get(&22)
+                .expect("endpoint")
+                .state,
             EndpointState::Open
         );
     }
