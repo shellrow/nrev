@@ -75,6 +75,13 @@ Write JSON output:
 nrev port 192.168.10.10 --format json --output result.json
 ```
 
+JSON files are replaced atomically and include `metadata.schema_version`.
+Machine consumers should reject schema versions they do not support.
+
+Target expansion is capped at 65,536 unique addresses and 1,000,000 endpoint
+assignments per command. This catches accidental large CIDR and target/port
+Cartesian-product input before an unbounded scan is scheduled.
+
 ## Host Discovery
 
 Basic reachability scan:

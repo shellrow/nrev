@@ -70,6 +70,21 @@ Commands:
 - Stable JSON reports for downstream tooling
 - Phase timings for resolution, discovery, scanning, and follow-up probes
 
+JSON reports carry an explicit `schema_version`. Enum values use stable
+`snake_case` names so reports can be consumed without depending on Rust type
+names. File output is written atomically to avoid leaving a partial report.
+TLS and QUIC certificates are observed rather than trusted; reports mark
+`certificate_validation` as `not_performed` and must not be used as a trust
+decision.
+
+## Operational safety
+
+Only scan systems you own or are authorized to assess. Target expansion is
+limited to 65,536 unique addresses and 1,000,000 endpoint assignments per
+invocation so an accidental IPv6 network or target/port Cartesian product
+cannot exhaust memory. Split larger authorized inventories into task files and
+separate invocations.
+
 ## External Data
 
 `--data` accepts:
@@ -97,7 +112,8 @@ The repository includes sample data under [samples/](samples):
 - [Usage Guide](docs/USAGE.md)
 
 ## Privileges
-`nrev` uses a raw socket which require elevated privileges. Execute with administrator privileges.
+Raw-packet modes require elevated network privileges. TCP connect mode does not
+normally require administrator access.
 
 ### Note for Linux Users
 `nrev` requires elevated privileges to send/receive raw-packet. On Linux, you can configure these privileges using two main methods:
@@ -109,7 +125,7 @@ This method is recommended for single-user machines or in environments where all
 
 Assign necessary capabilities to the nrev binary
 ```sh
-sudo setcap 'cap_sys_ptrace,cap_dac_read_search,cap_net_raw,cap_net_admin+ep' $(command -v nrev)
+sudo setcap 'cap_net_raw,cap_net_admin+ep' "$(command -v nrev)"
 ```
 
 Run nrev as an unprivileged user:
@@ -117,9 +133,8 @@ Run nrev as an unprivileged user:
 nrev
 ```
 
-#### Capabilities Explained:
-- `cap_sys_ptrace,cap_dac_read_search`: Allows `nrev` to access `/proc/<pid>/fd/` to identify which open port belongs to which process.
-- `cap_net_raw,cap_net_admin`: Enables packet capturing capabilities.
+The `cap_net_raw` and `cap_net_admin` capabilities enable raw packet sending
+and capture. Grant them only on trusted systems and to trusted binaries.
 
 #### 2. Using `sudo` (for multi-user environments)
 For environments with multiple users, requiring privilege escalation each time nrev is run can enhance security.
@@ -150,8 +165,4 @@ sudo chmod-bpf install
 ### Note for Windows Users
 - Ensure that you have [Npcap](https://npcap.com/#download) installed, which is necessary for `nrev` to send/receive raw-packet on Windows
 - Download and install Npcap from [Npcap](https://npcap.com/#download). Choose the "Install Npcap in WinPcap API-compatible Mode" during installation.
-- Build Dependencies:
-    - Place the Packet.lib file from the [Npcap SDK](https://npcap.com/#download) or WinPcap Developers pack in a directory named lib at the root of this repository.
-    - You can use any of the locations listed in the %LIB% or $Env:LIB environment variables.
-    - For the 64-bit toolchain, the Packet.lib is located in <SDK>/Lib/x64/Packet.lib.
-    - For the 32-bit toolchain, the Packet.lib is located in <SDK>/Lib/Packet.lib.
+- Npcap is loaded at runtime; building `nrev` does not require the Npcap SDK.
