@@ -277,7 +277,7 @@ impl ScanConfig {
                 .or(args.connect_timeout_ms)
         };
 
-        Ok(Self {
+        let config = Self {
             profile_name: profile
                 .as_ref()
                 .map(|p| p.name.clone())
@@ -355,8 +355,39 @@ impl ScanConfig {
                     .unwrap_or(!args.no_builtin_probes)
             },
             tags: recipe.map(|r| r.tags).unwrap_or_default(),
-        })
+        };
+        validate_scan_config(&config)?;
+        Ok(config)
     }
+}
+
+fn validate_scan_config(config: &ScanConfig) -> Result<()> {
+    if !(1..=65_535).contains(&config.concurrency) {
+        return Err(NrevError::InvalidConfiguration(
+            "concurrency must be between 1 and 65535".to_string(),
+        ));
+    }
+    if !(Duration::from_millis(50)..=Duration::from_secs(30)).contains(&config.connect_timeout) {
+        return Err(NrevError::InvalidConfiguration(
+            "connect timeout must be between 50 and 30000 milliseconds".to_string(),
+        ));
+    }
+    if !(Duration::from_millis(50)..=Duration::from_secs(30)).contains(&config.probe_timeout) {
+        return Err(NrevError::InvalidConfiguration(
+            "probe timeout must be between 50 and 30000 milliseconds".to_string(),
+        ));
+    }
+    if !(256..=1_048_576).contains(&config.http_body_preview_bytes) {
+        return Err(NrevError::InvalidConfiguration(
+            "HTTP body preview must be between 256 and 1048576 bytes".to_string(),
+        ));
+    }
+    if config.retries > 5 {
+        return Err(NrevError::InvalidConfiguration(
+            "retries must be between 0 and 5".to_string(),
+        ));
+    }
+    Ok(())
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -433,6 +464,11 @@ impl From<CliTraceMethod> for TraceMethod {
 
 impl HostConfig {
     pub fn from_host_args(args: &HostArgs) -> Result<Self> {
+        if !(1..=65_535).contains(&args.concurrency) {
+            return Err(NrevError::InvalidConfiguration(
+                "concurrency must be between 1 and 65535".to_string(),
+            ));
+        }
         let method: HostDiscoveryMethod = args.method.into();
         let ports = if let Some(ports) = &args.ports {
             parse_ports(ports)?

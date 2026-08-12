@@ -3,12 +3,15 @@ use std::{collections::BTreeMap, net::IpAddr, time::Duration};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+pub const REPORT_SCHEMA_VERSION: u32 = 1;
+
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq, Ord, PartialOrd)]
 pub struct Port {
     pub number: u16,
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "snake_case")]
 pub enum Transport {
     Tcp,
     Udp,
@@ -28,8 +31,10 @@ impl Transport {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "snake_case")]
 pub enum EndpointState {
     Open,
+    OpenFiltered,
     Closed,
     Filtered,
     Unreachable,
@@ -37,6 +42,7 @@ pub enum EndpointState {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "snake_case")]
 pub enum Confidence {
     Low,
     Medium,
@@ -62,6 +68,13 @@ pub struct TlsObservation {
     pub server_name: Option<String>,
     pub certificate_subjects: Vec<String>,
     pub certificate_issuers: Vec<String>,
+    pub certificate_validation: TlsCertificateValidation,
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "snake_case")]
+pub enum TlsCertificateValidation {
+    NotPerformed,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
@@ -141,6 +154,7 @@ pub struct TargetReport {
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
 pub struct ScanMetadata {
+    pub schema_version: u32,
     pub version: String,
     pub profile: String,
     pub recipe: Option<String>,
@@ -157,6 +171,7 @@ pub struct ScanReport {
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "snake_case")]
 pub enum HostDiscoveryMethod {
     Icmp,
     Udp,
@@ -174,6 +189,7 @@ impl HostDiscoveryMethod {
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "snake_case")]
 pub enum PingMethod {
     Icmp,
     Udp,
@@ -218,6 +234,7 @@ pub struct PingSummary {
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
 pub struct PingMetadata {
+    pub schema_version: u32,
     pub version: String,
     pub target: Target,
     pub method: PingMethod,
@@ -237,6 +254,7 @@ pub struct PingReport {
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "snake_case")]
 pub enum TraceMethod {
     Icmp,
     Udp,
@@ -265,6 +283,7 @@ pub struct TraceHop {
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
 pub struct TraceMetadata {
+    pub schema_version: u32,
     pub version: String,
     pub target: Target,
     pub method: TraceMethod,
@@ -283,6 +302,7 @@ pub struct TraceReport {
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, Eq, PartialEq)]
+#[serde(rename_all = "snake_case")]
 pub enum NeighborMethod {
     Arp,
     Ndp,
@@ -299,6 +319,7 @@ impl NeighborMethod {
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
 pub struct NeighborMetadata {
+    pub schema_version: u32,
     pub version: String,
     pub target: Target,
     pub method: NeighborMethod,
@@ -344,6 +365,7 @@ pub struct HostResult {
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
 pub struct HostScanMetadata {
+    pub schema_version: u32,
     pub version: String,
     pub method: HostDiscoveryMethod,
     pub generated_at: DateTime<Utc>,
@@ -444,5 +466,7 @@ mod tests {
         };
         let value = serde_json::to_value(endpoint).expect("serialize endpoint");
         assert_eq!(value["latency"], 123);
+        assert_eq!(value["transport"], "tcp");
+        assert_eq!(value["state"], "open");
     }
 }

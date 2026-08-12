@@ -40,6 +40,7 @@ pub async fn resolve_neighbor(input: &str, config: &NeighborConfig) -> Result<Ne
 
     Ok(NeighborReport {
         metadata: NeighborMetadata {
+            schema_version: crate::model::REPORT_SCHEMA_VERSION,
             version: env!("CARGO_PKG_VERSION").to_string(),
             target,
             method,
@@ -60,16 +61,9 @@ async fn discover_arp(
         IpAddr::V6(_) => anyhow::bail!("ARP requires an IPv4 target"),
     };
     let packet = build_arp_packet(interface, target_ip)?;
-    let datalink_config = nex::datalink::Config {
-        write_buffer_size: 4096,
-        read_buffer_size: 4096,
-        read_timeout: Some(timeout_window),
-        write_timeout: None,
-        channel_type: nex::datalink::ChannelType::Layer2,
-        bpf_fd_attempts: 1000,
-        linux_fanout: None,
-        promiscuous: false,
-    };
+    let datalink_config = nex::datalink::Config::default()
+        .with_read_timeout(Some(timeout_window))
+        .with_promiscuous(false);
     let nex_interface = NexInterface::from(interface.clone());
     let AsyncChannel::Ethernet(mut tx, mut rx) =
         async_channel(&nex_interface, datalink_config).map_err(std::io::Error::other)?
@@ -134,16 +128,9 @@ async fn discover_ndp(
         .or_else(|| interface.ipv6.first().map(|network| network.addr()))
         .context("interface does not have an IPv6 address")?;
     let packet = build_ndp_packet(interface, src_ip, target_ip)?;
-    let datalink_config = nex::datalink::Config {
-        write_buffer_size: 4096,
-        read_buffer_size: 4096,
-        read_timeout: Some(timeout_window),
-        write_timeout: None,
-        channel_type: nex::datalink::ChannelType::Layer2,
-        bpf_fd_attempts: 1000,
-        linux_fanout: None,
-        promiscuous: false,
-    };
+    let datalink_config = nex::datalink::Config::default()
+        .with_read_timeout(Some(timeout_window))
+        .with_promiscuous(false);
     let nex_interface = NexInterface::from(interface.clone());
     let AsyncChannel::Ethernet(mut tx, mut rx) =
         async_channel(&nex_interface, datalink_config).map_err(std::io::Error::other)?
@@ -278,7 +265,7 @@ fn build_arp_packet(interface: &netdev::Interface, dst_ip: Ipv4Addr) -> Result<V
         .context("interface does not have an IPv4 address")?;
     let arp = ArpPacketBuilder::new(src_mac, src_ip, dst_ip)
         .operation(ArpOperation::Request)
-        .build();
+        .build()?;
     let ethernet = EthernetPacketBuilder::new()
         .source(src_mac)
         .destination(netdev::MacAddr::broadcast())
@@ -302,14 +289,14 @@ fn build_ndp_packet(
     let dst_mac = ipv6_multicast_mac(dst_ip);
     let ndp = NdpPacketBuilder::new(src_mac, src_ip, dst_ip)
         .dst_mac(dst_mac)
-        .build();
+        .build()?;
     let ipv6 = Ipv6PacketBuilder::new()
         .source(src_ip)
         .destination(dst_ip)
         .next_header(IpNextProtocol::Icmpv6)
         .hop_limit(255)
         .payload(ndp.to_bytes())
-        .build();
+        .build()?;
     let ethernet = EthernetPacketBuilder::new()
         .source(src_mac)
         .destination(dst_mac)

@@ -1,5 +1,5 @@
 use std::{
-    collections::{BTreeSet, HashSet},
+    collections::{BTreeMap, BTreeSet, HashSet},
     fs,
     net::{IpAddr, SocketAddr, ToSocketAddrs},
     path::{Path, PathBuf},
@@ -12,6 +12,10 @@ use crate::{
     error::{NrevError, Result},
     model::Target,
 };
+
+pub const DEFAULT_MAX_TARGETS: usize = 65_536;
+pub const DEFAULT_MAX_ENDPOINT_ASSIGNMENTS: usize = 1_000_000;
+type ResolvedTargets = BTreeMap<(IpAddr, Option<String>), (Target, BTreeSet<u16>)>;
 
 const TOP_100_PORTS_JSON: &str = include_str!("../resources/nrev-top-100-ports.json");
 const TOP_1000_PORTS_JSON: &str = include_str!("../resources/nrev-top-1000-ports.json");
@@ -41,21 +45,46 @@ fn well_known_ports() -> &'static Vec<u16> {
 
 pub struct TargetResolver {
     default_ports: Vec<u16>,
+    max_targets: usize,
+    max_endpoint_assignments: usize,
 }
 
 impl TargetResolver {
     pub fn new(default_ports: Vec<u16>) -> Self {
-        Self { default_ports }
+        Self {
+            default_ports,
+            max_targets: DEFAULT_MAX_TARGETS,
+            max_endpoint_assignments: DEFAULT_MAX_ENDPOINT_ASSIGNMENTS,
+        }
+    }
+
+    pub fn with_max_targets(mut self, max_targets: usize) -> Self {
+        self.max_targets = max_targets.max(1);
+        self
+    }
+
+    pub fn with_max_endpoint_assignments(mut self, max_endpoint_assignments: usize) -> Self {
+        self.max_endpoint_assignments = max_endpoint_assignments.max(1);
+        self
     }
 
     pub fn resolve(&self, inputs: &[String]) -> Result<Vec<(Target, Vec<u16>)>> {
         let mut seen_files = HashSet::new();
         let tokens = collect_target_tokens(inputs, &mut seen_files)?;
-        let mut resolved = Vec::new();
+        let mut resolved = ResolvedTargets::new();
+        let mut endpoint_assignments = 0usize;
         for input in tokens {
             if let Some((host, port)) = split_host_port(&input) {
                 for target in resolve_host(&host)? {
-                    resolved.push((target_with_original(target, &input), vec![port]));
+                    insert_target(
+                        &mut resolved,
+                        target_with_original(target, &input),
+                        &[port],
+                        &input,
+                        self.max_targets,
+                        &mut endpoint_assignments,
+                        self.max_endpoint_assignments,
+                    )?;
                 }
                 continue;
             }
@@ -64,26 +93,36 @@ impl TargetResolver {
                 match network {
                     IpNet::V4(network) => {
                         for ip in network.hosts() {
-                            resolved.push((
+                            insert_target(
+                                &mut resolved,
                                 Target {
                                     original: input.clone(),
                                     hostname: None,
                                     address: IpAddr::V4(ip),
                                 },
-                                self.default_ports.clone(),
-                            ));
+                                &self.default_ports,
+                                &input,
+                                self.max_targets,
+                                &mut endpoint_assignments,
+                                self.max_endpoint_assignments,
+                            )?;
                         }
                     }
                     IpNet::V6(network) => {
                         for ip in network.hosts() {
-                            resolved.push((
+                            insert_target(
+                                &mut resolved,
                                 Target {
                                     original: input.clone(),
                                     hostname: None,
                                     address: IpAddr::V6(ip),
                                 },
-                                self.default_ports.clone(),
-                            ));
+                                &self.default_ports,
+                                &input,
+                                self.max_targets,
+                                &mut endpoint_assignments,
+                                self.max_endpoint_assignments,
+                            )?;
                         }
                     }
                 }
@@ -91,10 +130,15 @@ impl TargetResolver {
             }
 
             for target in resolve_host(&input)? {
-                resolved.push((
+                insert_target(
+                    &mut resolved,
                     target_with_original(target, &input),
-                    self.default_ports.clone(),
-                ));
+                    &self.default_ports,
+                    &input,
+                    self.max_targets,
+                    &mut endpoint_assignments,
+                    self.max_endpoint_assignments,
+                )?;
             }
         }
 
@@ -102,8 +146,46 @@ impl TargetResolver {
             return Err(NrevError::ResolutionFailed(inputs.join(",")));
         }
 
-        Ok(resolved)
+        Ok(resolved
+            .into_values()
+            .map(|(target, ports)| (target, ports.into_iter().collect()))
+            .collect())
     }
+}
+
+fn insert_target(
+    targets: &mut ResolvedTargets,
+    target: Target,
+    ports: &[u16],
+    input: &str,
+    max_targets: usize,
+    endpoint_assignments: &mut usize,
+    max_endpoint_assignments: usize,
+) -> Result<()> {
+    let key = (target.address, target.hostname.clone());
+    if !targets.contains_key(&key) && targets.len() >= max_targets {
+        return Err(NrevError::TargetLimitExceeded {
+            input: input.to_string(),
+            limit: max_targets,
+        });
+    }
+    let additional_ports = targets
+        .get(&key)
+        .map(|(_, existing)| ports.iter().filter(|port| !existing.contains(port)).count())
+        .unwrap_or_else(|| ports.iter().copied().collect::<BTreeSet<_>>().len());
+    if endpoint_assignments.saturating_add(additional_ports) > max_endpoint_assignments {
+        return Err(NrevError::EndpointLimitExceeded {
+            input: input.to_string(),
+            limit: max_endpoint_assignments,
+        });
+    }
+    targets
+        .entry(key)
+        .or_insert_with(|| (target, BTreeSet::new()))
+        .1
+        .extend(ports.iter().copied());
+    *endpoint_assignments += additional_ports;
+    Ok(())
 }
 
 fn canonicalize_for_seen(path: &Path) -> PathBuf {
@@ -304,6 +386,48 @@ mod tests {
                 IpAddr::V4(Ipv4Addr::new(192, 168, 1, 2))
             ]
         );
+    }
+
+    #[test]
+    fn merges_duplicate_ip_targets_and_ports() {
+        let targets = TargetResolver::new(vec![80])
+            .resolve(&[
+                "192.0.2.1".to_string(),
+                "192.0.2.1:443".to_string(),
+                "192.0.2.0/30".to_string(),
+            ])
+            .expect("targets");
+
+        assert_eq!(targets.len(), 2);
+        let (_, ports) = targets
+            .iter()
+            .find(|(target, _)| target.address == Ipv4Addr::new(192, 0, 2, 1))
+            .expect("deduplicated target");
+        assert_eq!(ports, &vec![80, 443]);
+    }
+
+    #[test]
+    fn rejects_target_expansion_above_limit() {
+        let error = TargetResolver::new(vec![80])
+            .with_max_targets(2)
+            .resolve(&["192.0.2.0/29".to_string()])
+            .expect_err("target limit");
+        assert!(matches!(
+            error,
+            NrevError::TargetLimitExceeded { limit: 2, .. }
+        ));
+    }
+
+    #[test]
+    fn rejects_endpoint_expansion_above_limit() {
+        let error = TargetResolver::new(vec![80, 443])
+            .with_max_endpoint_assignments(2)
+            .resolve(&["192.0.2.1".to_string(), "192.0.2.2".to_string()])
+            .expect_err("endpoint limit");
+        assert!(matches!(
+            error,
+            NrevError::EndpointLimitExceeded { limit: 2, .. }
+        ));
     }
 
     #[test]

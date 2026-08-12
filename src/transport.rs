@@ -50,6 +50,12 @@ use crate::{
 const SYN_SOURCE_PORT: u16 = 44322;
 const ICMP_ECHO_IDENTIFIER: u16 = 0x4e52;
 
+fn datalink_config(timeout_window: Duration) -> nex::datalink::Config {
+    nex::datalink::Config::default()
+        .with_read_timeout(Some(timeout_window))
+        .with_promiscuous(false)
+}
+
 #[derive(Debug)]
 pub struct SynAckObservation {
     pub ttl_hint: Option<u8>,
@@ -224,16 +230,7 @@ pub async fn icmp_host_probe(
     interface_name: Option<&str>,
 ) -> std::io::Result<HostObservation> {
     let interface = resolve_interface(interface_name)?;
-    let config = nex::datalink::Config {
-        write_buffer_size: 4096,
-        read_buffer_size: 4096,
-        read_timeout: Some(timeout_window),
-        write_timeout: None,
-        channel_type: nex::datalink::ChannelType::Layer2,
-        bpf_fd_attempts: 1000,
-        linux_fanout: None,
-        promiscuous: false,
-    };
+    let config = datalink_config(timeout_window);
     let nex_interface = NexInterface::from(interface.clone());
 
     let AsyncChannel::Ethernet(mut tx, mut rx) =
@@ -290,16 +287,7 @@ pub async fn icmp_scan_targets(
     }
 
     let interface = resolve_interface(interface_name)?;
-    let config = nex::datalink::Config {
-        write_buffer_size: 4096,
-        read_buffer_size: 4096,
-        read_timeout: Some(timeout_window),
-        write_timeout: None,
-        channel_type: nex::datalink::ChannelType::Layer2,
-        bpf_fd_attempts: 1000,
-        linux_fanout: None,
-        promiscuous: false,
-    };
+    let config = datalink_config(timeout_window);
     let nex_interface = NexInterface::from(interface.clone());
 
     let AsyncChannel::Ethernet(mut tx, mut rx) =
@@ -491,6 +479,7 @@ async fn quic_connect(
                 server_name: Some(server_name),
                 certificate_subjects: Vec::new(),
                 certificate_issuers: Vec::new(),
+                certificate_validation: crate::model::TlsCertificateValidation::NotPerformed,
             },
             open_signal: Some(format!(
                 "quic-handshake-error={}",
@@ -506,13 +495,8 @@ async fn quic_connect(
 }
 
 fn quic_client_config() -> std::io::Result<ClientConfig> {
-    let mut roots = RootCertStore::empty();
-    for cert in rustls_native_certs::load_native_certs().map_err(std::io::Error::other)? {
-        let _ = roots.add(cert);
-    }
-
     let mut tls = RustlsClientConfig::builder()
-        .with_root_certificates(roots)
+        .with_root_certificates(RootCertStore::empty())
         .with_no_client_auth();
     tls.alpn_protocols = quic_alpn_protocols();
     tls.dangerous()
@@ -569,6 +553,7 @@ fn observe_quic_tls(connection: &Connection, server_name: &str) -> TlsObservatio
         server_name: Some(server_name.to_string()),
         certificate_subjects: subjects,
         certificate_issuers: issuers,
+        certificate_validation: crate::model::TlsCertificateValidation::NotPerformed,
     }
 }
 
@@ -661,16 +646,7 @@ async fn syn_probe(
     interface_name: Option<&str>,
 ) -> std::io::Result<SynAckObservation> {
     let interface = resolve_interface(interface_name)?;
-    let config = nex::datalink::Config {
-        write_buffer_size: 4096,
-        read_buffer_size: 4096,
-        read_timeout: Some(timeout_window),
-        write_timeout: None,
-        channel_type: nex::datalink::ChannelType::Layer2,
-        bpf_fd_attempts: 1000,
-        linux_fanout: None,
-        promiscuous: false,
-    };
+    let config = datalink_config(timeout_window);
     let nex_interface = NexInterface::from(interface.clone());
 
     let AsyncChannel::Ethernet(mut tx, mut rx) =
@@ -714,16 +690,7 @@ pub async fn syn_scan_target(
     interface_name: Option<&str>,
 ) -> std::io::Result<BTreeMap<u16, SynPortStatus>> {
     let interface = resolve_interface(interface_name)?;
-    let config = nex::datalink::Config {
-        write_buffer_size: 4096,
-        read_buffer_size: 4096,
-        read_timeout: Some(timeout_window),
-        write_timeout: None,
-        channel_type: nex::datalink::ChannelType::Layer2,
-        bpf_fd_attempts: 1000,
-        linux_fanout: None,
-        promiscuous: false,
-    };
+    let config = datalink_config(timeout_window);
     let nex_interface = NexInterface::from(interface.clone());
 
     let AsyncChannel::Ethernet(mut tx, mut rx) =
@@ -777,16 +744,7 @@ pub async fn syn_scan_targets(
     }
 
     let interface = resolve_interface(interface_name)?;
-    let config = nex::datalink::Config {
-        write_buffer_size: 4096,
-        read_buffer_size: 4096,
-        read_timeout: Some(timeout_window),
-        write_timeout: None,
-        channel_type: nex::datalink::ChannelType::Layer2,
-        bpf_fd_attempts: 1000,
-        linux_fanout: None,
-        promiscuous: false,
-    };
+    let config = datalink_config(timeout_window);
     let nex_interface = NexInterface::from(interface.clone());
 
     let AsyncChannel::Ethernet(mut tx, mut rx) =
@@ -1066,7 +1024,8 @@ fn build_tcp_syn_packet(
             TcpOptionPacket::timestamp(u32::MAX, u32::MIN),
             TcpOptionPacket::sack_perm(),
         ])
-        .build();
+        .build()
+        .map_err(std::io::Error::other)?;
 
     let ip_packet = match (src_ip, dst_ip) {
         (IpAddr::V4(src), IpAddr::V4(dst)) => Ipv4PacketBuilder::new()
@@ -1076,6 +1035,7 @@ fn build_tcp_syn_packet(
             .flags(Ipv4Flags::DontFragment)
             .payload(tcp_packet.to_bytes())
             .build()
+            .map_err(std::io::Error::other)?
             .to_bytes(),
         (IpAddr::V6(src), IpAddr::V6(dst)) => Ipv6PacketBuilder::new()
             .source(src)
@@ -1083,6 +1043,7 @@ fn build_tcp_syn_packet(
             .next_header(IpNextProtocol::Tcp)
             .payload(tcp_packet.to_bytes())
             .build()
+            .map_err(std::io::Error::other)?
             .to_bytes(),
         _ => {
             return Err(std::io::Error::new(
@@ -1128,7 +1089,7 @@ fn extract_tcp_option_signature(options: &[TcpOptionPacket]) -> TcpOptionSignatu
     for option in options {
         let token = match option.kind() {
             TcpOptionKind::MSS => {
-                mss = Some(option.get_mss());
+                mss = Some(option.maximum_segment_size());
                 Some("MSS")
             }
             TcpOptionKind::SACK_PERMITTED => {
@@ -1140,7 +1101,7 @@ fn extract_tcp_option_signature(options: &[TcpOptionPacket]) -> TcpOptionSignatu
                 Some("TS")
             }
             TcpOptionKind::WSCALE => {
-                window_scale = Some(option.get_wscale());
+                window_scale = Some(option.window_scale());
                 Some("WS")
             }
             TcpOptionKind::NOP => Some("NOP"),
@@ -1208,7 +1169,8 @@ fn build_icmp_echo_packet(interface: &Interface, dst_ip: IpAddr) -> std::io::Res
         (IpAddr::V4(src), IpAddr::V4(dst)) => {
             let icmp_packet = IcmpPacketBuilder::new(src, dst)
                 .echo_fields(ICMP_ECHO_IDENTIFIER, 1)
-                .build();
+                .build()
+                .map_err(std::io::Error::other)?;
             Ipv4PacketBuilder::new()
                 .source(src)
                 .destination(dst)
@@ -1216,18 +1178,21 @@ fn build_icmp_echo_packet(interface: &Interface, dst_ip: IpAddr) -> std::io::Res
                 .flags(Ipv4Flags::DontFragment)
                 .payload(icmp_packet.to_bytes())
                 .build()
+                .map_err(std::io::Error::other)?
                 .to_bytes()
         }
         (IpAddr::V6(src), IpAddr::V6(dst)) => {
             let icmp_packet = Icmpv6PacketBuilder::new(src, dst)
                 .echo_fields(ICMP_ECHO_IDENTIFIER, 1)
-                .build();
+                .build()
+                .map_err(std::io::Error::other)?;
             Ipv6PacketBuilder::new()
                 .source(src)
                 .destination(dst)
                 .next_header(IpNextProtocol::Icmpv6)
                 .payload(icmp_packet.to_bytes())
                 .build()
+                .map_err(std::io::Error::other)?
                 .to_bytes()
         }
         _ => {

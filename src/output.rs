@@ -1,5 +1,6 @@
-use std::path::Path;
+use std::{io::Write, path::Path};
 
+use serde::Serialize;
 use termtree::Tree;
 
 use crate::config::ScanRecipe;
@@ -63,8 +64,7 @@ pub fn render_human_scan_report(report: &ScanReport, show_all_states: bool) -> S
 }
 
 pub fn write_json_report(report: &ScanReport, path: &Path) -> anyhow::Result<()> {
-    std::fs::write(path, serde_json::to_vec_pretty(report)?)?;
-    Ok(())
+    write_json_atomically(report, path)
 }
 
 pub fn filtered_scan_report(report: &ScanReport, show_all_states: bool) -> ScanReport {
@@ -73,7 +73,7 @@ pub fn filtered_scan_report(report: &ScanReport, show_all_states: bool) -> ScanR
         for target in &mut filtered.targets {
             target
                 .endpoints
-                .retain(|_, endpoint| endpoint.state == EndpointState::Open);
+                .retain(|_, endpoint| is_visible_state(&endpoint.state));
         }
     }
     filtered
@@ -126,8 +126,7 @@ pub fn render_human_host_report(report: &HostScanReport, show_all_hosts: bool) -
 }
 
 pub fn write_json_host_report(report: &HostScanReport, path: &Path) -> anyhow::Result<()> {
-    std::fs::write(path, serde_json::to_vec_pretty(report)?)?;
-    Ok(())
+    write_json_atomically(report, path)
 }
 
 pub fn filtered_host_report(report: &HostScanReport, show_all_hosts: bool) -> HostScanReport {
@@ -185,8 +184,7 @@ pub fn render_human_ping_report(report: &PingReport) -> String {
 }
 
 pub fn write_json_ping_report(report: &PingReport, path: &Path) -> anyhow::Result<()> {
-    std::fs::write(path, serde_json::to_vec_pretty(report)?)?;
-    Ok(())
+    write_json_atomically(report, path)
 }
 
 pub fn render_human_trace_report(report: &TraceReport) -> String {
@@ -239,8 +237,7 @@ pub fn render_human_trace_report(report: &TraceReport) -> String {
 }
 
 pub fn write_json_trace_report(report: &TraceReport, path: &Path) -> anyhow::Result<()> {
-    std::fs::write(path, serde_json::to_vec_pretty(report)?)?;
-    Ok(())
+    write_json_atomically(report, path)
 }
 
 pub fn render_human_neighbor_report(report: &NeighborReport) -> String {
@@ -274,7 +271,19 @@ pub fn render_human_neighbor_report(report: &NeighborReport) -> String {
 }
 
 pub fn write_json_neighbor_report(report: &NeighborReport, path: &Path) -> anyhow::Result<()> {
-    std::fs::write(path, serde_json::to_vec_pretty(report)?)?;
+    write_json_atomically(report, path)
+}
+
+fn write_json_atomically<T: Serialize>(value: &T, path: &Path) -> anyhow::Result<()> {
+    let parent = path
+        .parent()
+        .filter(|parent| !parent.as_os_str().is_empty())
+        .unwrap_or_else(|| Path::new("."));
+    let mut temporary = tempfile::NamedTempFile::new_in(parent)?;
+    serde_json::to_writer_pretty(temporary.as_file_mut(), value)?;
+    temporary.as_file_mut().write_all(b"\n")?;
+    temporary.as_file_mut().sync_all()?;
+    temporary.persist(path).map_err(|error| error.error)?;
     Ok(())
 }
 
@@ -443,7 +452,7 @@ fn render_scan_target_tree(
     let visible_endpoints = target
         .endpoints
         .values()
-        .filter(|endpoint| show_all_states || endpoint.state == EndpointState::Open)
+        .filter(|endpoint| show_all_states || is_visible_state(&endpoint.state))
         .collect::<Vec<_>>();
 
     for endpoint in visible_endpoints {
@@ -623,11 +632,16 @@ fn primary_tls(endpoint: &EndpointResult) -> Option<String> {
 fn state_label(state: &EndpointState) -> &'static str {
     match state {
         EndpointState::Open => "Open",
+        EndpointState::OpenFiltered => "Open|Filtered",
         EndpointState::Closed => "Closed",
         EndpointState::Filtered => "Filtered",
         EndpointState::Unreachable => "Unreachable",
         EndpointState::Error => "Error",
     }
+}
+
+fn is_visible_state(state: &EndpointState) -> bool {
+    matches!(state, EndpointState::Open | EndpointState::OpenFiltered)
 }
 
 fn summarize_tls(tls: &TlsObservation) -> String {
@@ -722,6 +736,7 @@ mod tests {
         );
         ScanReport {
             metadata: ScanMetadata {
+                schema_version: crate::model::REPORT_SCHEMA_VERSION,
                 version: "test".to_string(),
                 profile: "default".to_string(),
                 recipe: None,
@@ -749,6 +764,24 @@ mod tests {
         assert!(rendered.contains("22/SYN"));
         assert!(rendered.contains("service: ssh"));
         assert!(rendered.contains("banner: SSH-2.0-test"));
+    }
+
+    #[test]
+    fn json_report_write_is_complete_and_leaves_no_temporary_file() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let path = directory.path().join("report.json");
+        write_json_report(&sample_report(), &path).expect("write report");
+
+        let written: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&path).expect("read report"))
+                .expect("valid JSON report");
+        assert_eq!(written["metadata"]["schema_version"], 1);
+        assert_eq!(
+            std::fs::read_dir(directory.path())
+                .expect("list directory")
+                .count(),
+            1
+        );
     }
 
     #[test]
@@ -842,6 +875,7 @@ mod tests {
     fn human_output_groups_cidr_targets_under_the_original_input() {
         let report = ScanReport {
             metadata: ScanMetadata {
+                schema_version: crate::model::REPORT_SCHEMA_VERSION,
                 version: "test".to_string(),
                 profile: "default".to_string(),
                 recipe: None,
@@ -979,6 +1013,7 @@ mod tests {
     fn human_host_output_hides_unreachable_by_default() {
         let report = HostScanReport {
             metadata: HostScanMetadata {
+                schema_version: crate::model::REPORT_SCHEMA_VERSION,
                 version: "test".to_string(),
                 method: HostDiscoveryMethod::Icmp,
                 generated_at: Utc::now(),
@@ -1026,6 +1061,7 @@ mod tests {
     fn json_host_output_hides_unreachable_by_default() {
         let report = HostScanReport {
             metadata: HostScanMetadata {
+                schema_version: crate::model::REPORT_SCHEMA_VERSION,
                 version: "test".to_string(),
                 method: HostDiscoveryMethod::Icmp,
                 generated_at: Utc::now(),
@@ -1064,6 +1100,7 @@ mod tests {
     fn json_host_output_keeps_unreachable_when_requested() {
         let report = HostScanReport {
             metadata: HostScanMetadata {
+                schema_version: crate::model::REPORT_SCHEMA_VERSION,
                 version: "test".to_string(),
                 method: HostDiscoveryMethod::Icmp,
                 generated_at: Utc::now(),

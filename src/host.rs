@@ -90,6 +90,7 @@ impl HostScanner {
         Ok(HostDiscoveryExecution {
             report: HostScanReport {
                 metadata: HostScanMetadata {
+                    schema_version: crate::model::REPORT_SCHEMA_VERSION,
                     version: env!("CARGO_PKG_VERSION").to_string(),
                     method: self.config.method,
                     generated_at: Utc::now(),
@@ -279,6 +280,13 @@ fn collect_target_tokens(
 }
 
 pub fn resolve_host_targets(inputs: &[String]) -> Result<Vec<Target>> {
+    resolve_host_targets_with_limit(inputs, crate::target::DEFAULT_MAX_TARGETS)
+}
+
+pub fn resolve_host_targets_with_limit(
+    inputs: &[String],
+    max_targets: usize,
+) -> Result<Vec<Target>> {
     let mut seen_files = HashSet::new();
     let tokens = collect_target_tokens(inputs, &mut seen_files)?;
 
@@ -293,6 +301,7 @@ pub fn resolve_host_targets(inputs: &[String]) -> Result<Vec<Target>> {
                             hostname: None,
                             address: IpAddr::V4(ip),
                         });
+                        ensure_target_limit(&by_ip, &token, max_targets)?;
                     }
                 }
                 IpNet::V6(net) => {
@@ -302,6 +311,7 @@ pub fn resolve_host_targets(inputs: &[String]) -> Result<Vec<Target>> {
                             hostname: None,
                             address: IpAddr::V6(ip),
                         });
+                        ensure_target_limit(&by_ip, &token, max_targets)?;
                     }
                 }
             },
@@ -311,6 +321,7 @@ pub fn resolve_host_targets(inputs: &[String]) -> Result<Vec<Target>> {
                     hostname: None,
                     address: ip,
                 });
+                ensure_target_limit(&by_ip, &token, max_targets)?;
             }
             TargetSpec::Hostname(name) => {
                 let socket = format!("{name}:0");
@@ -322,6 +333,7 @@ pub fn resolve_host_targets(inputs: &[String]) -> Result<Vec<Target>> {
                             hostname: Some(name.clone()),
                             address: addr.ip(),
                         });
+                        ensure_target_limit(&by_ip, &name, max_targets)?;
                     }
                 }
             }
@@ -329,6 +341,21 @@ pub fn resolve_host_targets(inputs: &[String]) -> Result<Vec<Target>> {
     }
 
     Ok(by_ip.into_values().collect())
+}
+
+fn ensure_target_limit(
+    targets: &BTreeMap<IpAddr, Target>,
+    input: &str,
+    max_targets: usize,
+) -> Result<()> {
+    if targets.len() > max_targets.max(1) {
+        return Err(crate::error::NrevError::TargetLimitExceeded {
+            input: input.to_string(),
+            limit: max_targets.max(1),
+        }
+        .into());
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -359,6 +386,13 @@ mod tests {
                 .any(|target| target.address == "192.168.0.2".parse::<IpAddr>().unwrap())
         );
         fs::remove_file(path).ok();
+    }
+
+    #[test]
+    fn rejects_host_expansion_above_limit() {
+        let error = resolve_host_targets_with_limit(&["192.0.2.0/29".to_string()], 2)
+            .expect_err("target limit");
+        assert!(error.to_string().contains("safety limit of 2"));
     }
 
     #[tokio::test]

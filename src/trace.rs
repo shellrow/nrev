@@ -25,16 +25,9 @@ const TRACE_SOURCE_PORT: u16 = 53445;
 pub async fn run_trace(input: &str, config: &TraceConfig) -> Result<TraceReport> {
     let target = resolve_single_target(input)?;
     let interface = resolve_interface(config.interface.as_deref())?;
-    let datalink_config = nex::datalink::Config {
-        write_buffer_size: 4096,
-        read_buffer_size: 4096,
-        read_timeout: Some(config.timeout),
-        write_timeout: None,
-        channel_type: nex::datalink::ChannelType::Layer2,
-        bpf_fd_attempts: 1000,
-        linux_fanout: None,
-        promiscuous: false,
-    };
+    let datalink_config = nex::datalink::Config::default()
+        .with_read_timeout(Some(config.timeout))
+        .with_promiscuous(false);
     let nex_interface = NexInterface::from(interface.clone());
     let AsyncChannel::Ethernet(mut tx, mut rx) =
         async_channel(&nex_interface, datalink_config).map_err(std::io::Error::other)?
@@ -116,6 +109,7 @@ pub async fn run_trace(input: &str, config: &TraceConfig) -> Result<TraceReport>
 
     Ok(TraceReport {
         metadata: TraceMetadata {
+            schema_version: crate::model::REPORT_SCHEMA_VERSION,
             version: env!("CARGO_PKG_VERSION").to_string(),
             target,
             method: config.method,
@@ -286,7 +280,7 @@ fn build_icmp_trace_packet(
         (IpAddr::V4(src), IpAddr::V4(dst)) => {
             let icmp = IcmpPacketBuilder::new(src, dst)
                 .echo_fields(0x4e52, ttl as u16)
-                .build();
+                .build()?;
             Ipv4PacketBuilder::new()
                 .source(src)
                 .destination(dst)
@@ -294,20 +288,20 @@ fn build_icmp_trace_packet(
                 .flags(Ipv4Flags::DontFragment)
                 .ttl(ttl)
                 .payload(icmp.to_bytes())
-                .build()
+                .build()?
                 .to_bytes()
         }
         (IpAddr::V6(src), IpAddr::V6(dst)) => {
             let icmp = Icmpv6PacketBuilder::new(src, dst)
                 .echo_fields(0x4e52, ttl as u16)
-                .build();
+                .build()?;
             Ipv6PacketBuilder::new()
                 .source(src)
                 .destination(dst)
                 .next_header(nex::packet::ip::IpNextProtocol::Icmpv6)
                 .hop_limit(ttl)
                 .payload(icmp.to_bytes())
-                .build()
+                .build()?
                 .to_bytes()
         }
         _ => anyhow::bail!("mismatched address family"),
@@ -364,7 +358,7 @@ fn build_udp_trace_packet(
     let udp = UdpPacketBuilder::new(src_ip, dst_ip)
         .source(TRACE_SOURCE_PORT)
         .destination(dst_port)
-        .build();
+        .build()?;
 
     let ip_packet = match (src_ip, dst_ip) {
         (IpAddr::V4(src), IpAddr::V4(dst)) => Ipv4PacketBuilder::new()
@@ -374,7 +368,7 @@ fn build_udp_trace_packet(
             .flags(Ipv4Flags::DontFragment)
             .ttl(ttl)
             .payload(udp.to_bytes())
-            .build()
+            .build()?
             .to_bytes(),
         (IpAddr::V6(src), IpAddr::V6(dst)) => Ipv6PacketBuilder::new()
             .source(src)
@@ -382,7 +376,7 @@ fn build_udp_trace_packet(
             .next_header(IpNextProtocol::Udp)
             .hop_limit(ttl)
             .payload(udp.to_bytes())
-            .build()
+            .build()?
             .to_bytes(),
         _ => anyhow::bail!("mismatched address family"),
     };

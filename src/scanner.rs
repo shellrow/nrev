@@ -35,7 +35,7 @@ pub struct ScanExecution {
     pub report: ScanReport,
     pub transport_scan_time: std::time::Duration,
     pub followup_probe_time: std::time::Duration,
-    pub open_endpoint_count: usize,
+    pub followup_endpoint_count: usize,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -49,7 +49,7 @@ pub enum ScanEvent {
         elapsed: std::time::Duration,
     },
     FollowupProbesStarted {
-        open_endpoint_count: usize,
+        endpoint_count: usize,
     },
     FollowupProbesCompleted {
         elapsed: std::time::Duration,
@@ -59,7 +59,7 @@ pub enum ScanEvent {
 struct TargetPhaseResult {
     target: crate::model::Target,
     endpoints: BTreeMap<u16, EndpointResult>,
-    open_ports: Vec<u16>,
+    probe_ports: Vec<u16>,
     reusable_connections: BTreeMap<u16, ProbeConnection>,
 }
 
@@ -148,19 +148,19 @@ where
             elapsed: transport_scan_time,
         });
 
-        let open_endpoint_count = transport_phase
+        let followup_endpoint_count = transport_phase
             .iter()
-            .map(|phase| phase.open_ports.len())
+            .map(|phase| phase.probe_ports.len())
             .sum();
 
         let followup_started = std::time::Instant::now();
-        if open_endpoint_count > 0 {
+        if followup_endpoint_count > 0 {
             on_event(ScanEvent::FollowupProbesStarted {
-                open_endpoint_count,
+                endpoint_count: followup_endpoint_count,
             });
         }
         let semaphore = Arc::new(Semaphore::new(config.concurrency.max(1)));
-        let target_reports =
+        let mut target_reports =
             stream::iter(transport_phase.into_iter())
                 .map(|phase| {
                     let connector = connector.clone();
@@ -174,8 +174,15 @@ where
                 .buffer_unordered(target_concurrency)
                 .collect::<Vec<_>>()
                 .await;
+        target_reports.sort_by(|left, right| {
+            left.target
+                .address
+                .cmp(&right.target.address)
+                .then_with(|| left.target.hostname.cmp(&right.target.hostname))
+                .then_with(|| left.target.original.cmp(&right.target.original))
+        });
         let followup_probe_time = followup_started.elapsed();
-        if open_endpoint_count > 0 {
+        if followup_endpoint_count > 0 {
             on_event(ScanEvent::FollowupProbesCompleted {
                 elapsed: followup_probe_time,
             });
@@ -184,6 +191,7 @@ where
         Ok(ScanExecution {
             report: ScanReport {
                 metadata: ScanMetadata {
+                    schema_version: crate::model::REPORT_SCHEMA_VERSION,
                     version: env!("CARGO_PKG_VERSION").to_string(),
                     profile: self.config.profile_name.clone(),
                     recipe: self.config.recipe_name.clone(),
@@ -195,7 +203,7 @@ where
             },
             transport_scan_time,
             followup_probe_time,
-            open_endpoint_count,
+            followup_endpoint_count,
         })
     }
 }
@@ -234,7 +242,7 @@ async fn scan_target_phase<C: Connector>(
     let mut open_ports = Vec::new();
     let mut reusable_connections = BTreeMap::new();
     for result in endpoint_results {
-        if result.endpoint.state == EndpointState::Open {
+        if is_probe_candidate(&result.endpoint.state) {
             open_ports.push(result.endpoint.port);
         }
         if let Some(connection) = result.reusable_connection {
@@ -246,7 +254,7 @@ async fn scan_target_phase<C: Connector>(
     TargetPhaseResult {
         target,
         endpoints,
-        open_ports,
+        probe_ports: open_ports,
         reusable_connections,
     }
 }
@@ -408,7 +416,7 @@ async fn scan_syn_target_phase<C: Connector>(
     TargetPhaseResult {
         target,
         endpoints,
-        open_ports,
+        probe_ports: open_ports,
         reusable_connections: BTreeMap::new(),
     }
 }
@@ -440,7 +448,7 @@ async fn scan_transport_endpoint<C: Connector>(
             Ok(outcome) => {
                 let state = classify_open_state(config.transport, &outcome.connection);
                 let fingerprint = build_fingerprint(config.transport, &outcome.connection, false);
-                let reusable_connection = if state == EndpointState::Open
+                let reusable_connection = if is_probe_candidate(&state)
                     && matches!(
                         config.transport,
                         Transport::Tcp | Transport::Udp | Transport::Quic
@@ -499,8 +507,8 @@ async fn run_followup_phase<C: Connector>(
     let mut endpoints = phase.endpoints;
     let mut reusable_connections = phase.reusable_connections;
 
-    if !phase.open_ports.is_empty() {
-        let followups = stream::iter(phase.open_ports.into_iter())
+    if !phase.probe_ports.is_empty() {
+        let followups = stream::iter(phase.probe_ports.into_iter())
             .map(|port| {
                 let target = target.clone();
                 let config = config.clone();
@@ -532,6 +540,11 @@ async fn run_followup_phase<C: Connector>(
             if let Some(endpoint) = endpoints.get_mut(&port) {
                 endpoint.observations = followup.observations;
                 endpoint.errors.extend(followup.errors);
+                if endpoint.state == EndpointState::OpenFiltered
+                    && !endpoint.observations.is_empty()
+                {
+                    endpoint.state = EndpointState::Open;
+                }
                 if let Some(fingerprint) = endpoint.fingerprint.as_mut() {
                     fingerprint.response_observed = !endpoint.observations.is_empty();
                     endpoint.fingerprint_matches =
@@ -539,10 +552,6 @@ async fn run_followup_phase<C: Connector>(
                 }
             }
         }
-    }
-
-    for endpoint in endpoints.values_mut() {
-        let _ = endpoint;
     }
 
     let (target_fingerprint, stack_matches) =
@@ -961,10 +970,14 @@ fn classify_open_state(transport: Transport, connection: &ProbeConnection) -> En
         Transport::Syn => EndpointState::Open,
         Transport::Quic => EndpointState::Open,
         Transport::Udp => match connection {
-            ProbeConnection::Udp(_) => EndpointState::Open,
+            ProbeConnection::Udp(_) => EndpointState::OpenFiltered,
             _ => EndpointState::Filtered,
         },
     }
+}
+
+fn is_probe_candidate(state: &EndpointState) -> bool {
+    matches!(state, EndpointState::Open | EndpointState::OpenFiltered)
 }
 
 fn classify_error(transport: Transport, error: Option<&std::io::Error>) -> EndpointState {
@@ -1109,7 +1122,7 @@ async fn scan_syn_transport_phase(
             TargetPhaseResult {
                 target,
                 endpoints,
-                open_ports,
+                probe_ports: open_ports,
                 reusable_connections: BTreeMap::new(),
             }
         })
@@ -1174,7 +1187,7 @@ mod tests {
     use async_trait::async_trait;
     use tokio::{
         io::AsyncWriteExt,
-        net::{TcpListener, TcpStream},
+        net::{TcpListener, TcpStream, UdpSocket},
         sync::Mutex,
     };
 
@@ -1188,6 +1201,15 @@ mod tests {
 
     #[derive(Clone, Default)]
     struct TestConnector;
+
+    #[tokio::test]
+    async fn udp_connect_without_response_is_open_filtered() {
+        let socket = UdpSocket::bind("127.0.0.1:0").await.expect("UDP socket");
+        assert_eq!(
+            classify_open_state(Transport::Udp, &ProbeConnection::Udp(socket)),
+            EndpointState::OpenFiltered
+        );
+    }
 
     #[async_trait]
     impl Connector for TestConnector {
@@ -1453,11 +1475,19 @@ mod tests {
             })
             .collect();
 
-        let _ = scanner.scan(targets).await.expect("scan");
+        let execution = scanner.scan(targets).await.expect("scan");
 
         assert!(
             *peak.lock().await <= 16,
             "observed peak inflight work exceeded requested global concurrency"
+        );
+        assert!(
+            execution
+                .report
+                .targets
+                .windows(2)
+                .all(|pair| pair[0].target.address < pair[1].target.address),
+            "report targets must be sorted independently of scan scheduling"
         );
     }
 

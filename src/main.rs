@@ -1,3 +1,5 @@
+use std::io::{self, Write};
+
 use clap::{CommandFactory, FromArgMatches, parser::ValueSource};
 use tracing::{Level, debug, info};
 use tracing_subscriber::fmt::time::ChronoLocal;
@@ -31,6 +33,7 @@ use nrev::{
 async fn main() {
     let exit_code = match run().await {
         Ok(()) => 0,
+        Err(error) if is_broken_pipe(&error) => 0,
         Err(error) => {
             eprintln!("nrev: {error}");
             1
@@ -99,12 +102,12 @@ async fn run() -> anyhow::Result<()> {
 
             if args.format.is_json() {
                 let json_report = filtered_host_report(&execution.report, config.show_all_hosts);
-                println!("{}", serde_json::to_string_pretty(&json_report)?);
+                write_stdout(&serde_json::to_string_pretty(&json_report)?)?;
             } else {
-                print!(
-                    "{}",
-                    render_human_host_report(&execution.report, config.show_all_hosts)
-                );
+                write_stdout(&render_human_host_report(
+                    &execution.report,
+                    config.show_all_hosts,
+                ))?;
             }
 
             progress(
@@ -134,9 +137,9 @@ async fn run() -> anyhow::Result<()> {
             let config = PingConfig::from_ping_args(&args);
             let report = run_ping(&args.target, &config).await?;
             if args.format.is_json() {
-                println!("{}", serde_json::to_string_pretty(&report)?);
+                write_stdout(&serde_json::to_string_pretty(&report)?)?;
             } else {
-                print!("{}", render_human_ping_report(&report));
+                write_stdout(&render_human_ping_report(&report))?;
             }
             if let Some(path) = &args.output {
                 write_json_ping_report(&report, path)?;
@@ -146,9 +149,9 @@ async fn run() -> anyhow::Result<()> {
             let config = TraceConfig::from_trace_args(&args);
             let report = run_trace(&args.target, &config).await?;
             if args.format.is_json() {
-                println!("{}", serde_json::to_string_pretty(&report)?);
+                write_stdout(&serde_json::to_string_pretty(&report)?)?;
             } else {
-                print!("{}", render_human_trace_report(&report));
+                write_stdout(&render_human_trace_report(&report))?;
             }
             if let Some(path) = &args.output {
                 write_json_trace_report(&report, path)?;
@@ -158,9 +161,9 @@ async fn run() -> anyhow::Result<()> {
             let config = NeighborConfig::from_neighbor_args(&args);
             let report = resolve_neighbor(&args.target, &config).await?;
             if args.format.is_json() {
-                println!("{}", serde_json::to_string_pretty(&report)?);
+                write_stdout(&serde_json::to_string_pretty(&report)?)?;
             } else {
-                print!("{}", render_human_neighbor_report(&report));
+                write_stdout(&render_human_neighbor_report(&report))?;
             }
             if let Some(path) = &args.output {
                 write_json_neighbor_report(&report, path)?;
@@ -169,29 +172,23 @@ async fn run() -> anyhow::Result<()> {
         Command::Probe(args) => {
             let registry = DataRegistry::load(args.data.as_deref())?;
             if args.json {
-                println!(
-                    "{}",
-                    serde_json::to_string_pretty(&serde_json::json!({
-                        "builtin": registry.builtin_catalog(),
-                        "external": registry.external_probes,
-                    }))?
-                );
+                write_stdout(&serde_json::to_string_pretty(&serde_json::json!({
+                    "builtin": registry.builtin_catalog(),
+                    "external": registry.external_probes,
+                }))?)?;
             } else {
-                print!(
-                    "{}",
-                    render_human_probe_catalog(
-                        registry.builtin_catalog().probes(),
-                        &registry.external_probes,
-                    )
-                );
+                write_stdout(&render_human_probe_catalog(
+                    registry.builtin_catalog().probes(),
+                    &registry.external_probes,
+                ))?;
             }
         }
         Command::Recipe(args) => {
             let registry = DataRegistry::load(args.data.as_deref())?;
             if args.json {
-                println!("{}", serde_json::to_string_pretty(&registry.recipes)?);
+                write_stdout(&serde_json::to_string_pretty(&registry.recipes)?)?;
             } else {
-                print!("{}", render_human_recipe_catalog(&registry.recipes));
+                write_stdout(&render_human_recipe_catalog(&registry.recipes))?;
             }
         }
     }
@@ -224,12 +221,10 @@ fn log_scan_event(quiet: bool, event: ScanEvent) {
             quiet,
             &format!("Transport scan completed in {}", format_duration(elapsed)),
         ),
-        ScanEvent::FollowupProbesStarted {
-            open_endpoint_count,
-        } => progress(
+        ScanEvent::FollowupProbesStarted { endpoint_count } => progress(
             ProgressMode::Auto,
             quiet,
-            &format!("Starting follow-up probes on {open_endpoint_count} open endpoint(s)"),
+            &format!("Starting follow-up probes on {endpoint_count} candidate endpoint(s)"),
         ),
         ScanEvent::FollowupProbesCompleted { elapsed } => progress(
             ProgressMode::Auto,
@@ -332,8 +327,17 @@ fn log_open_port_summary(quiet: bool, report: &nrev::model::ScanReport) {
         let open_ports = target
             .endpoints
             .values()
-            .filter(|endpoint| endpoint.state == EndpointState::Open)
-            .map(|endpoint| endpoint.port.to_string())
+            .filter(|endpoint| {
+                matches!(
+                    endpoint.state,
+                    EndpointState::Open | EndpointState::OpenFiltered
+                )
+            })
+            .map(|endpoint| match endpoint.state {
+                EndpointState::Open => endpoint.port.to_string(),
+                EndpointState::OpenFiltered => format!("{}/open|filtered", endpoint.port),
+                _ => unreachable!("filtered above"),
+            })
             .collect::<Vec<_>>();
         if open_ports.is_empty() {
             continue;
@@ -342,7 +346,7 @@ fn log_open_port_summary(quiet: bool, report: &nrev::model::ScanReport) {
             ProgressMode::Auto,
             quiet,
             &format!(
-                "{}: Open ports: [{}]",
+                "{}: Open or open|filtered ports: [{}]",
                 target.target.address,
                 open_ports.join(", ")
             ),
@@ -431,12 +435,12 @@ async fn run_port_scan(
 
     if args.format.is_json() {
         let json_report = filtered_scan_report(&execution.report, config.show_all_states);
-        println!("{}", serde_json::to_string_pretty(&json_report)?);
+        write_stdout(&serde_json::to_string_pretty(&json_report)?)?;
     } else {
-        print!(
-            "{}",
-            render_human_scan_report(&execution.report, config.show_all_states)
-        );
+        write_stdout(&render_human_scan_report(
+            &execution.report,
+            config.show_all_states,
+        ))?;
     }
 
     progress(
@@ -463,4 +467,21 @@ async fn run_port_scan(
     }
 
     Ok(())
+}
+
+fn write_stdout(output: &str) -> io::Result<()> {
+    let stdout = io::stdout();
+    let mut stdout = stdout.lock();
+    stdout.write_all(output.as_bytes())?;
+    if !output.ends_with('\n') {
+        stdout.write_all(b"\n")?;
+    }
+    stdout.flush()
+}
+
+fn is_broken_pipe(error: &anyhow::Error) -> bool {
+    error
+        .chain()
+        .filter_map(|cause| cause.downcast_ref::<io::Error>())
+        .any(|error| error.kind() == io::ErrorKind::BrokenPipe)
 }

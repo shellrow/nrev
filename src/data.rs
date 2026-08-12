@@ -15,6 +15,8 @@ use crate::{
     service_db::{LegacyServiceDb, LegacyServiceSignature, builtin_service_signatures},
 };
 
+const MAX_EXTERNAL_DATA_FILE_BYTES: u64 = 16 * 1024 * 1024;
+
 #[derive(Clone, Debug, Default, Serialize, Deserialize)]
 pub struct ExternalDataFile {
     #[serde(default)]
@@ -76,6 +78,12 @@ impl DataRegistry {
     }
 
     fn extend_from_file(&mut self, path: &Path) -> Result<()> {
+        if fs::metadata(path)?.len() > MAX_EXTERNAL_DATA_FILE_BYTES {
+            return Err(NrevError::DataFileTooLarge {
+                path: path.to_path_buf(),
+                limit_bytes: MAX_EXTERNAL_DATA_FILE_BYTES,
+            });
+        }
         let content = fs::read_to_string(path)?;
         let file = match path.extension().and_then(|ext| ext.to_str()) {
             Some("json") => parse_json_data_file(&content)?,
@@ -163,6 +171,18 @@ mod tests {
         let registry = DataRegistry::load(None).expect("load registry");
         assert!(!registry.os_signatures.is_empty());
         assert!(!registry.service_signatures.is_empty());
+    }
+
+    #[test]
+    fn rejects_oversized_external_data_before_reading_it() {
+        let directory = tempfile::tempdir().expect("temporary directory");
+        let path = directory.path().join("oversized.json");
+        let file = std::fs::File::create(&path).expect("create sparse data file");
+        file.set_len(MAX_EXTERNAL_DATA_FILE_BYTES + 1)
+            .expect("resize sparse data file");
+
+        let error = DataRegistry::load(Some(&path)).expect_err("data size limit");
+        assert!(matches!(error, NrevError::DataFileTooLarge { .. }));
     }
 
     #[test]

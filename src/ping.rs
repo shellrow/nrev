@@ -56,6 +56,7 @@ pub async fn run_ping(input: &str, config: &PingConfig) -> Result<PingReport> {
 
     Ok(PingReport {
         metadata: PingMetadata {
+            schema_version: crate::model::REPORT_SCHEMA_VERSION,
             version: env!("CARGO_PKG_VERSION").to_string(),
             target,
             method: config.method,
@@ -252,16 +253,9 @@ async fn run_quic_ping(target: &Target, config: &PingConfig) -> Vec<PingReply> {
 
 async fn run_icmp_ping(target: &Target, config: &PingConfig) -> Result<Vec<PingReply>> {
     let interface = resolve_interface(config.interface.as_deref())?;
-    let datalink_config = nex::datalink::Config {
-        write_buffer_size: 4096,
-        read_buffer_size: 4096,
-        read_timeout: Some(config.timeout),
-        write_timeout: None,
-        channel_type: nex::datalink::ChannelType::Layer2,
-        bpf_fd_attempts: 1000,
-        linux_fanout: None,
-        promiscuous: false,
-    };
+    let datalink_config = nex::datalink::Config::default()
+        .with_read_timeout(Some(config.timeout))
+        .with_promiscuous(false);
     let nex_interface = NexInterface::from(interface.clone());
     let AsyncChannel::Ethernet(mut tx, mut rx) =
         async_channel(&nex_interface, datalink_config).map_err(std::io::Error::other)?
@@ -427,26 +421,26 @@ fn build_icmp_packet(interface: &netdev::Interface, dst_ip: IpAddr) -> Result<Ve
         (IpAddr::V4(src), IpAddr::V4(dst)) => {
             let icmp = IcmpPacketBuilder::new(src, dst)
                 .echo_fields(0x4e52, 1)
-                .build();
+                .build()?;
             Ipv4PacketBuilder::new()
                 .source(src)
                 .destination(dst)
                 .protocol(IpNextProtocol::Icmp)
                 .flags(Ipv4Flags::DontFragment)
                 .payload(icmp.to_bytes())
-                .build()
+                .build()?
                 .to_bytes()
         }
         (IpAddr::V6(src), IpAddr::V6(dst)) => {
             let icmp = Icmpv6PacketBuilder::new(src, dst)
                 .echo_fields(0x4e52, 1)
-                .build();
+                .build()?;
             Ipv6PacketBuilder::new()
                 .source(src)
                 .destination(dst)
                 .next_header(IpNextProtocol::Icmpv6)
                 .payload(icmp.to_bytes())
-                .build()
+                .build()?
                 .to_bytes()
         }
         _ => anyhow::bail!("mismatched address family"),
