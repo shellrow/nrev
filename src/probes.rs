@@ -9,7 +9,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
-    time::timeout,
+    time::{Instant, timeout, timeout_at},
 };
 
 use crate::{
@@ -145,8 +145,11 @@ pub fn select_builtin_probes(
         .into_iter()
         .filter(|probe| {
             probe.transport() == transport
-                && probe.matches(port)
-                && (enabled_set.is_empty() || enabled_set.contains(probe.id()))
+                && if enabled_set.is_empty() {
+                    probe.matches(port)
+                } else {
+                    enabled_set.contains(probe.id())
+                }
         })
         .collect()
 }
@@ -216,7 +219,7 @@ impl Probe for TlsProbe {
         let (tls, tls_stream) = handshake_tls(stream, Some(context.host), context.timeout).await?;
         let request = format!(
             "GET / HTTP/1.1\r\nHost: {}\r\nUser-Agent: nrev\r\nAccept: */*\r\nRange: bytes=0-4095\r\nConnection: close\r\n\r\n",
-            context.host
+            http_authority(context.host, context.port)
         );
 
         let mut evidence = vec![Evidence {
@@ -279,7 +282,7 @@ impl Probe for HttpProbe {
     ) -> Result<ProbeObservation> {
         let request = format!(
             "GET / HTTP/1.1\r\nHost: {}\r\nUser-Agent: nrev\r\nAccept: */*\r\nRange: bytes=0-255\r\nConnection: close\r\n\r\n",
-            context.host
+            http_authority(context.host, context.port)
         );
         let response = read_http_response(
             connection,
@@ -875,7 +878,7 @@ impl Probe for QuicProbe {
                 .is_some_and(|protocol| protocol.starts_with("h3"))
             && let Ok(response) = read_http3_response(
                 connection,
-                context.host,
+                &http_authority(context.host, context.port),
                 context.timeout,
                 context.http_body_preview_bytes,
             )
@@ -1182,6 +1185,22 @@ async fn exchange_string(
     )
 }
 
+// Dropping a JoinHandle detaches its task; probing must cancel the driver instead.
+struct AbortOnDrop(tokio::task::JoinHandle<()>);
+impl Drop for AbortOnDrop {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
+fn http_authority(host: &str, port: u16) -> String {
+    if host.parse::<std::net::Ipv6Addr>().is_ok() {
+        format!("[{host}]:{port}")
+    } else {
+        format!("{host}:{port}")
+    }
+}
+
 struct HttpResponsePreview {
     header_text: String,
     body_preview: Option<String>,
@@ -1212,9 +1231,9 @@ async fn read_http3_response(
     let (mut driver, mut send_request) = client::new(h3_connection)
         .await
         .map_err(|error| NrevError::Tls(error.to_string()))?;
-    let driver_task = tokio::spawn(async move {
+    let _driver_task = AbortOnDrop(tokio::spawn(async move {
         let _ = poll_fn(|cx| driver.poll_close(cx)).await;
-    });
+    }));
 
     let request = Request::builder()
         .method(Method::GET)
@@ -1255,8 +1274,6 @@ async fn read_http3_response(
         ));
     }
 
-    driver_task.abort();
-
     Ok(HttpResponsePreview {
         header_text,
         body_preview: (!body.is_empty()).then_some(body),
@@ -1272,53 +1289,71 @@ async fn read_http_response_stream<S>(
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
-    timeout(timeout_window, stream.write_all(payload))
+    const HEADER_LIMIT: usize = 64 * 1024;
+    let deadline = Instant::now() + timeout_window;
+    timeout_at(deadline, stream.write_all(payload))
         .await
         .map_err(|_| std::io::Error::new(std::io::ErrorKind::TimedOut, "write timeout"))??;
 
     let mut buf = Vec::new();
-    let mut chunk = vec![0_u8; 1024];
+    let mut chunk = [0_u8; 4096];
     let mut header_end = None;
+    let mut expected_body = body_limit;
     loop {
-        let size = timeout(timeout_window, stream.read(&mut chunk))
-            .await
-            .map_err(|_| std::io::Error::new(std::io::ErrorKind::TimedOut, "read timeout"))??;
+        let limit = header_end.map_or(HEADER_LIMIT, |end| end + expected_body);
+        let remaining = limit.saturating_sub(buf.len());
+        if remaining == 0 {
+            break;
+        }
+        let read_len = remaining.min(chunk.len());
+        let size = match timeout_at(deadline, stream.read(&mut chunk[..read_len])).await {
+            Ok(result) => result?,
+            Err(_) if header_end.is_some() => break,
+            Err(_) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "HTTP header read timed out",
+                )
+                .into());
+            }
+        };
         if size == 0 {
             break;
         }
         buf.extend_from_slice(&chunk[..size]);
-
         if header_end.is_none() {
             header_end = find_http_header_end(&buf);
-        }
-
-        if let Some(end) = header_end
-            && buf.len().saturating_sub(end) >= body_limit
-        {
-            break;
-        }
-
-        if buf.len() >= 8192 {
-            break;
+            if let Some(end) = header_end {
+                let headers = String::from_utf8_lossy(&buf[..end]);
+                // Transfer-Encoding takes precedence over Content-Length.
+                let chunked = headers.lines().any(|line| {
+                    line.split_once(':')
+                        .is_some_and(|(key, _)| key.eq_ignore_ascii_case("transfer-encoding"))
+                });
+                if !chunked
+                    && let Some(length) = headers.lines().find_map(|line| {
+                        let (key, value) = line.split_once(':')?;
+                        key.eq_ignore_ascii_case("content-length")
+                            .then(|| value.trim().parse::<usize>().ok())
+                            .flatten()
+                    })
+                {
+                    expected_body = expected_body.min(length);
+                }
+            }
         }
     }
-
-    let header_end = header_end.unwrap_or(buf.len());
-    let header_text = String::from_utf8_lossy(&buf[..header_end]).to_string();
-    let body_preview = if header_end < buf.len() {
-        Some(
-            String::from_utf8_lossy(&buf[header_end..])
-                .chars()
-                .take(body_limit)
-                .collect::<String>(),
+    let end = header_end.ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "incomplete HTTP headers or header limit exceeded",
         )
-    } else {
-        None
-    };
-
+    })?;
+    let header_text = String::from_utf8_lossy(&buf[..end]).to_string();
+    let body = &buf[end..buf.len().min(end + expected_body)];
     Ok(HttpResponsePreview {
         header_text,
-        body_preview,
+        body_preview: (!body.is_empty()).then(|| String::from_utf8_lossy(body).into_owned()),
     })
 }
 
@@ -1436,6 +1471,13 @@ async fn exchange_bytes(
             let size = timeout(timeout_window, stream.read(&mut buf))
                 .await
                 .map_err(|_| std::io::Error::new(std::io::ErrorKind::TimedOut, "read timeout"))??;
+            if size == 0 {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    "peer closed without a response",
+                )
+                .into());
+            }
             Ok(buf[..size].to_vec())
         }
         ProbeConnection::Udp(socket) => {
@@ -1692,5 +1734,84 @@ mod tests {
         ];
         let banner = parse_rdp_banner(&raw).expect("banner");
         assert!(banner.contains("selected_protocol=hybrid"));
+    }
+    #[test]
+    fn explicitly_selected_probe_supports_nonstandard_ports() {
+        let probes = select_builtin_probes(2222, Transport::Tcp, &["ssh".into()]);
+        assert_eq!(probes.len(), 1);
+        assert_eq!(probes[0].id(), "ssh");
+        assert_eq!(http_authority("::1", 8080), "[::1]:8080");
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn http_drip_feed_cannot_extend_deadline() {
+        let (client, mut server) = tokio::io::duplex(65536);
+        let sender = tokio::spawn(async move {
+            loop {
+                if server.write_all(b"H").await.is_err() {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        });
+        let started = Instant::now();
+        assert!(
+            read_http_response_stream(client, b"", Duration::from_millis(100), 256)
+                .await
+                .is_err()
+        );
+        assert_eq!(started.elapsed(), Duration::from_millis(100));
+        sender.abort();
+    }
+
+    #[tokio::test]
+    async fn http_body_preview_can_exceed_eight_kilobytes() {
+        let (client, mut server) = tokio::io::duplex(65536);
+        server
+            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 20000\r\n\r\n")
+            .await
+            .unwrap();
+        server.write_all(&vec![b'x'; 20000]).await.unwrap();
+        let response = read_http_response_stream(client, b"", Duration::from_secs(1), 16000)
+            .await
+            .unwrap();
+        assert_eq!(response.body_preview.unwrap().len(), 16000);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn http_content_length_avoids_waiting_for_keep_alive_eof() {
+        let (client, mut server) = tokio::io::duplex(1024);
+        server
+            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
+            .await
+            .unwrap();
+        let started = Instant::now();
+        let response = read_http_response_stream(client, b"", Duration::from_secs(1), 4096)
+            .await
+            .unwrap();
+        assert_eq!(response.body_preview.as_deref(), Some("ok"));
+        assert_eq!(started.elapsed(), Duration::ZERO);
+    }
+
+    #[tokio::test]
+    async fn http_body_limit_counts_bytes() {
+        let (client, mut server) = tokio::io::duplex(1024);
+        server
+            .write_all("HTTP/1.1 200 OK\r\n\r\néééé".as_bytes())
+            .await
+            .unwrap();
+        let response = read_http_response_stream(client, b"", Duration::from_secs(1), 4)
+            .await
+            .unwrap();
+        assert_eq!(response.body_preview.as_deref(), Some("éé"));
+    }
+
+    #[tokio::test]
+    async fn dropping_driver_guard_cancels_task() {
+        let handle = tokio::spawn(std::future::pending());
+        let abort = handle.abort_handle();
+        drop(AbortOnDrop(handle));
+        tokio::task::yield_now().await;
+        assert!(abort.is_finished());
     }
 }

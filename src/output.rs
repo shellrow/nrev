@@ -10,6 +10,28 @@ use crate::model::{
 };
 use crate::probes::{BuiltinProbeMetadata, ExternalProbeDefinition};
 
+fn render_safe_tree(mut tree: Tree<String>) -> String {
+    fn sanitize(tree: &mut Tree<String>) {
+        tree.root = tree
+            .root
+            .chars()
+            .map(|c| {
+                if c.is_control() || matches!(c, '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}')
+                {
+                    c.escape_default().to_string()
+                } else {
+                    c.to_string()
+                }
+            })
+            .collect();
+        for leaf in &mut tree.leaves {
+            sanitize(leaf);
+        }
+    }
+    sanitize(&mut tree);
+    format!("{tree}\n")
+}
+
 pub fn render_human_scan_report(report: &ScanReport, show_all_states: bool) -> String {
     let mut root = Tree::new("Scan report(s)".to_string());
     let mut rendered_targets = 0usize;
@@ -60,7 +82,7 @@ pub fn render_human_scan_report(report: &ScanReport, show_all_states: bool) -> S
         }));
     }
 
-    format!("{root}\n")
+    render_safe_tree(root)
 }
 
 pub fn write_json_report(report: &ScanReport, path: &Path) -> anyhow::Result<()> {
@@ -122,7 +144,7 @@ pub fn render_human_host_report(report: &HostScanReport, show_all_hosts: bool) -
         }));
     }
 
-    format!("{root}\n")
+    render_safe_tree(root)
 }
 
 pub fn write_json_host_report(report: &HostScanReport, path: &Path) -> anyhow::Result<()> {
@@ -180,7 +202,7 @@ pub fn render_human_ping_report(report: &PingReport) -> String {
             root.push(Tree::new(format!("error: {error}")));
         }
     }
-    format!("{root}\n")
+    render_safe_tree(root)
 }
 
 pub fn write_json_ping_report(report: &PingReport, path: &Path) -> anyhow::Result<()> {
@@ -233,7 +255,7 @@ pub fn render_human_trace_report(report: &TraceReport) -> String {
             root.push(Tree::new(format!("error: {error}")));
         }
     }
-    format!("{root}\n")
+    render_safe_tree(root)
 }
 
 pub fn write_json_trace_report(report: &TraceReport, path: &Path) -> anyhow::Result<()> {
@@ -267,7 +289,7 @@ pub fn render_human_neighbor_report(report: &NeighborReport) -> String {
             root.push(Tree::new(format!("error: {error}")));
         }
     }
-    format!("{root}\n")
+    render_safe_tree(root)
 }
 
 pub fn write_json_neighbor_report(report: &NeighborReport, path: &Path) -> anyhow::Result<()> {
@@ -328,7 +350,7 @@ pub fn render_human_recipe_catalog(recipes: &[ScanRecipe]) -> String {
         root.push(Tree::new("no recipes".to_string()));
     }
 
-    format!("{root}\n")
+    render_safe_tree(root)
 }
 
 pub fn render_human_probe_catalog(
@@ -389,7 +411,7 @@ pub fn render_human_probe_catalog(
         root.push(Tree::new("no probes".to_string()));
     }
 
-    format!("{root}\n")
+    render_safe_tree(root)
 }
 
 fn render_endpoint_tree(endpoint: &EndpointResult) -> Tree<String> {
@@ -439,6 +461,9 @@ fn render_endpoint_tree(endpoint: &EndpointResult) -> Tree<String> {
     }
     if let Some(tls) = primary_tls(endpoint) {
         node.push(Tree::new(format!("tls: {tls}")));
+    }
+    for error in &endpoint.errors {
+        node.push(Tree::new(format!("error: {error}")));
     }
     node
 }
@@ -1132,5 +1157,15 @@ mod tests {
 
         let filtered = filtered_host_report(&report, true);
         assert_eq!(filtered.targets.len(), 2);
+    }
+    #[test]
+    fn human_output_escapes_terminal_and_direction_controls() {
+        let text = render_safe_tree(Tree::new(
+            "peer\u{1b}]52;c;secret\u{7}\nforged\u{202e}".into(),
+        ));
+        assert!(!text.contains('\u{1b}'));
+        assert!(!text.contains('\u{7}'));
+        assert!(!text.contains('\u{202e}'));
+        assert!(text.contains("\\nforged"));
     }
 }

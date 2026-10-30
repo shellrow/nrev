@@ -4,7 +4,8 @@ use anyhow::Result;
 use chrono::Utc;
 use futures::{StreamExt, stream};
 use rand::seq::SliceRandom;
-use tokio::sync::Semaphore;
+use tokio::sync::{OwnedSemaphorePermit, Semaphore};
+use tokio::time::timeout;
 
 use crate::{
     config::ScanConfig,
@@ -60,7 +61,7 @@ struct TargetPhaseResult {
     target: crate::model::Target,
     endpoints: BTreeMap<u16, EndpointResult>,
     probe_ports: Vec<u16>,
-    reusable_connections: BTreeMap<u16, ProbeConnection>,
+    reusable_connections: BTreeMap<u16, (ProbeConnection, OwnedSemaphorePermit)>,
 }
 
 struct FollowupResult {
@@ -70,7 +71,7 @@ struct FollowupResult {
 
 struct TransportEndpointScan {
     endpoint: EndpointResult,
-    reusable_connection: Option<ProbeConnection>,
+    reusable_connection: Option<(ProbeConnection, OwnedSemaphorePermit)>,
 }
 
 impl<C> Scanner<C>
@@ -109,7 +110,7 @@ where
 
         let connector = self.connector.clone();
         let config = self.config.clone();
-        let registry = self.registry.clone();
+        let registry = &self.registry;
         let target_count = targets.len();
         let port_count = targets.iter().map(|(_, ports)| ports.len()).sum();
         let target_concurrency = effective_target_concurrency(&config, target_count);
@@ -119,6 +120,7 @@ where
             port_count,
             transport: config.transport,
         });
+        let connection_cache = Arc::new(Semaphore::new(config.concurrency.max(1)));
         let transport_started = std::time::Instant::now();
         let transport_phase = if config.transport == Transport::Syn {
             scan_syn_transport_phase(targets, &config).await
@@ -127,6 +129,7 @@ where
                 .map(|(target, ports)| {
                     let connector = connector.clone();
                     let config = config.clone();
+                    let connection_cache = connection_cache.clone();
                     async move {
                         scan_target_phase(
                             target,
@@ -135,6 +138,7 @@ where
                             connector,
                             target_concurrency,
                             target_count,
+                            connection_cache,
                         )
                         .await
                     }
@@ -165,10 +169,9 @@ where
                 .map(|phase| {
                     let connector = connector.clone();
                     let config = config.clone();
-                    let registry = registry.clone();
                     let semaphore = semaphore.clone();
                     async move {
-                        run_followup_phase(phase, &config, &registry, connector, semaphore).await
+                        run_followup_phase(phase, &config, registry, connector, semaphore).await
                     }
                 })
                 .buffer_unordered(target_concurrency)
@@ -215,6 +218,7 @@ async fn scan_target_phase<C: Connector>(
     connector: C,
     target_concurrency: usize,
     scan_target_count: usize,
+    connection_cache: Arc<Semaphore>,
 ) -> TargetPhaseResult {
     let mut target_config = config.clone();
     if target_config.adaptive_connect_timeout {
@@ -232,7 +236,10 @@ async fn scan_target_phase<C: Connector>(
             let connector = connector.clone();
             let config = target_config.clone();
             let target = target.clone();
-            async move { scan_transport_endpoint(target, port, &config, connector).await }
+            let connection_cache = connection_cache.clone();
+            async move {
+                scan_transport_endpoint(target, port, &config, connector, connection_cache).await
+            }
         })
         .buffer_unordered(endpoint_concurrency)
         .collect::<Vec<_>>()
@@ -265,7 +272,7 @@ async fn adaptive_connect_timeout_for_target(
     ports: &[u16],
     scan_target_count: usize,
 ) -> std::time::Duration {
-    if config.transport != Transport::Tcp {
+    if config.transport != Transport::Tcp || config.interface.is_some() {
         return config.connect_timeout;
     }
     let probe_ports = select_rtt_probe_ports(ports);
@@ -426,6 +433,7 @@ async fn scan_transport_endpoint<C: Connector>(
     port: u16,
     config: &ScanConfig,
     connector: C,
+    connection_cache: Arc<Semaphore>,
 ) -> TransportEndpointScan {
     let mut errors = Vec::new();
     let mut last_error = None;
@@ -438,10 +446,12 @@ async fn scan_transport_endpoint<C: Connector>(
                 config.transport,
                 config.connect_timeout,
                 config.interface.as_deref(),
-                target
-                    .hostname
-                    .as_deref()
-                    .or(Some(target.original.as_str())),
+                Some(
+                    &target
+                        .hostname
+                        .clone()
+                        .unwrap_or_else(|| target.address.to_string()),
+                ),
             )
             .await
         {
@@ -453,7 +463,12 @@ async fn scan_transport_endpoint<C: Connector>(
                         config.transport,
                         Transport::Tcp | Transport::Udp | Transport::Quic
                     ) {
-                    Some(outcome.connection)
+                    // Never wait for cache space: follow-up starts after scanning.
+                    connection_cache
+                        .clone()
+                        .try_acquire_owned()
+                        .ok()
+                        .map(|permit| (outcome.connection, permit))
                 } else {
                     None
                 };
@@ -512,7 +527,6 @@ async fn run_followup_phase<C: Connector>(
             .map(|port| {
                 let target = target.clone();
                 let config = config.clone();
-                let registry = registry.clone();
                 let connector = connector.clone();
                 let semaphore = semaphore.clone();
                 let reusable_connection = reusable_connections.remove(&port);
@@ -524,9 +538,9 @@ async fn run_followup_phase<C: Connector>(
                             &target,
                             port,
                             &config,
-                            &registry,
+                            registry,
                             connector,
-                            reusable_connection,
+                            reusable_connection.map(|(connection, _permit)| connection),
                         )
                         .await,
                     )
@@ -585,7 +599,8 @@ async fn collect_followup_observations<C: Connector>(
     let mut observations = Vec::new();
     let mut errors = Vec::new();
     let followup_transport = probe_transport(config.transport);
-    let host = target.hostname.as_deref().unwrap_or(&target.original);
+    let address = target.address.to_string();
+    let host = target.hostname.as_deref().unwrap_or(&address);
     let mut reusable_connection = reusable_connection;
 
     if config.builtin_probes {
@@ -600,10 +615,7 @@ async fn collect_followup_observations<C: Connector>(
                         followup_transport,
                         config.connect_timeout,
                         config.interface.as_deref(),
-                        target
-                            .hostname
-                            .as_deref()
-                            .or(Some(target.original.as_str())),
+                        Some(host),
                     )
                     .await
                     .map(|outcome| outcome.connection)
@@ -611,8 +623,9 @@ async fn collect_followup_observations<C: Connector>(
 
             match connection {
                 Ok(probe_connection) => {
-                    if let Ok(observation) = probe
-                        .execute(
+                    match timeout(
+                        config.probe_timeout,
+                        probe.execute(
                             probe_connection,
                             ProbeContext {
                                 host,
@@ -620,14 +633,19 @@ async fn collect_followup_observations<C: Connector>(
                                 timeout: config.probe_timeout,
                                 http_body_preview_bytes: config.http_body_preview_bytes,
                             },
-                        )
-                        .await
+                        ),
+                    )
+                    .await
                     {
-                        let stop = should_stop_after_observation(&observation);
-                        observations.push(observation);
-                        if stop {
-                            break;
+                        Ok(Ok(observation)) => {
+                            let stop = should_stop_after_observation(&observation);
+                            observations.push(observation);
+                            if stop {
+                                break;
+                            }
                         }
+                        Ok(Err(error)) => errors.push(format!("{}: {error}", probe.id())),
+                        Err(_) => errors.push(format!("{}: probe timed out", probe.id())),
                     }
                 }
                 Err(error) => errors.push(error.to_string()),
@@ -639,6 +657,9 @@ async fn collect_followup_observations<C: Connector>(
         .external_probes
         .iter()
         .filter(|probe| probe.matches(port, followup_transport))
+        .filter(|probe| {
+            config.enabled_probes.is_empty() || config.enabled_probes.contains(&probe.id)
+        })
     {
         let connection = if let Some(connection) = reusable_connection.take() {
             Ok(connection)
@@ -650,10 +671,7 @@ async fn collect_followup_observations<C: Connector>(
                     followup_transport,
                     config.connect_timeout,
                     config.interface.as_deref(),
-                    target
-                        .hostname
-                        .as_deref()
-                        .or(Some(target.original.as_str())),
+                    Some(host),
                 )
                 .await
                 .map(|outcome| outcome.connection)
@@ -661,9 +679,15 @@ async fn collect_followup_observations<C: Connector>(
 
         match connection {
             Ok(probe_connection) => {
-                if let Ok(observation) = probe.execute(probe_connection, config.probe_timeout).await
+                match timeout(
+                    config.probe_timeout,
+                    probe.execute(probe_connection, config.probe_timeout),
+                )
+                .await
                 {
-                    observations.push(observation);
+                    Ok(Ok(observation)) => observations.push(observation),
+                    Ok(Err(error)) => errors.push(error.to_string()),
+                    Err(_) => errors.push("external probe timed out".to_string()),
                 }
             }
             Err(error) => errors.push(error.to_string()),
@@ -1595,5 +1619,119 @@ mod tests {
             .map(|item| item.family.as_str())
             .collect::<Vec<_>>();
         assert_eq!(families, vec!["microsoft:windows"]);
+    }
+    fn test_config() -> ScanConfig {
+        use clap::Parser;
+        let cli = crate::cli::Cli::parse_from(["nrev", "port", "127.0.0.1"]);
+        let crate::cli::Command::Port(args) = cli.command else {
+            panic!("port command")
+        };
+        ScanConfig::from_scan_args(&args, &DataRegistry::default()).unwrap()
+    }
+
+    #[tokio::test]
+    async fn connection_cache_is_bounded_without_blocking_scan() {
+        let mut config = test_config();
+        config.adaptive_connect_timeout = false;
+        let cache = Arc::new(Semaphore::new(2));
+        let results = stream::iter(1..=20)
+            .map(|port| {
+                let cache = cache.clone();
+                let config = &config;
+                async move {
+                    scan_transport_endpoint(
+                        Target {
+                            original: "127.0.0.1".into(),
+                            hostname: None,
+                            address: "127.0.0.1".parse().unwrap(),
+                        },
+                        port,
+                        config,
+                        SlowConnector,
+                        cache,
+                    )
+                    .await
+                }
+            })
+            .buffer_unordered(20)
+            .collect::<Vec<_>>()
+            .await;
+        assert_eq!(
+            results
+                .iter()
+                .filter(|result| result.reusable_connection.is_some())
+                .count(),
+            2
+        );
+        assert!(
+            results
+                .iter()
+                .all(|result| result.endpoint.state == EndpointState::Open)
+        );
+        assert_eq!(cache.available_permits(), 0);
+        drop(results);
+        assert_eq!(cache.available_permits(), 2);
+    }
+
+    #[derive(Clone)]
+    struct HostnameConnector;
+    #[async_trait]
+    impl Connector for HostnameConnector {
+        async fn connect(
+            &self,
+            address: IpAddr,
+            _port: u16,
+            _transport: Transport,
+            _timeout: Duration,
+            _interface: Option<&str>,
+            server_name: Option<&str>,
+        ) -> std::io::Result<ConnectOutcome> {
+            assert_eq!(server_name, Some(address.to_string().as_str()));
+            Err(std::io::Error::new(
+                std::io::ErrorKind::ConnectionRefused,
+                "closed",
+            ))
+        }
+    }
+
+    #[tokio::test]
+    async fn connection_uses_resolved_ip_instead_of_target_expression() {
+        let config = test_config();
+        for original in ["192.0.2.0/24", "192.0.2.1:443"] {
+            scan_transport_endpoint(
+                Target {
+                    original: original.into(),
+                    hostname: None,
+                    address: "192.0.2.1".parse().unwrap(),
+                },
+                443,
+                &config,
+                HostnameConnector,
+                Arc::new(Semaphore::new(1)),
+            )
+            .await;
+        }
+    }
+
+    #[tokio::test]
+    async fn probe_failures_are_reported() {
+        let mut config = test_config();
+        config.enabled_probes = vec!["ssh".into()];
+        let target = Target {
+            original: "127.0.0.1".into(),
+            hostname: None,
+            address: "127.0.0.1".parse().unwrap(),
+        };
+        let result = collect_followup_observations(
+            &target,
+            2222,
+            &config,
+            &DataRegistry::default(),
+            SlowConnector,
+            None,
+        )
+        .await;
+        assert!(result.observations.is_empty());
+        assert!(result.errors.iter().any(|error| error.contains("ssh:")));
     }
 }

@@ -259,12 +259,11 @@ impl ScanConfig {
 
         let enabled_probes = if sources.probes || !args.probes.is_empty() {
             args.probes.clone()
-        } else if let Some(recipe) = &recipe {
-            recipe.probes.clone().unwrap_or_default()
         } else {
-            profile
+            recipe
                 .as_ref()
-                .and_then(|p| p.probes.clone())
+                .and_then(|r| r.probes.clone())
+                .or_else(|| profile.as_ref().and_then(|p| p.probes.clone()))
                 .unwrap_or_default()
         };
         let explicit_connect_timeout = if sources.connect_timeout_ms {
@@ -357,6 +356,16 @@ impl ScanConfig {
             tags: recipe.map(|r| r.tags).unwrap_or_default(),
         };
         validate_scan_config(&config)?;
+        let catalog = registry.builtin_catalog();
+        for id in &config.enabled_probes {
+            if !catalog.probes().iter().any(|probe| probe.id == id)
+                && !registry.external_probes.iter().any(|probe| &probe.id == id)
+            {
+                return Err(NrevError::InvalidConfiguration(format!(
+                    "unknown probe: {id}"
+                )));
+            }
+        }
         Ok(config)
     }
 }
@@ -901,5 +910,43 @@ format = "json"
         let config =
             ScanConfig::from_scan_args_with_sources(&args, &registry, &sources).expect("config");
         assert!(config.builtin_probes);
+    }
+    #[test]
+    fn recipe_without_probes_inherits_profile_selection() {
+        use clap::Parser;
+        let dir = tempfile::tempdir().unwrap();
+        let profile = dir.path().join("profile.toml");
+        std::fs::write(&profile, "name = 'test'\nprobes = ['ssh']\n").unwrap();
+        let cli = crate::cli::Cli::parse_from([
+            "nrev",
+            "port",
+            "127.0.0.1",
+            "--profile",
+            profile.to_str().unwrap(),
+            "--recipe",
+            "test",
+        ]);
+        let crate::cli::Command::Port(args) = cli.command else {
+            panic!("port command")
+        };
+        let mut registry = DataRegistry::default();
+        registry
+            .recipes
+            .push(toml::from_str("name = 'test'").unwrap());
+        let config = ScanConfig::from_scan_args(&args, &registry).unwrap();
+        assert_eq!(config.enabled_probes, vec!["ssh"]);
+    }
+
+    #[test]
+    fn rejects_unknown_probe_names() {
+        use clap::Parser;
+        let cli = crate::cli::Cli::parse_from(["nrev", "port", "127.0.0.1", "--probes", "typo"]);
+        let crate::cli::Command::Port(args) = cli.command else {
+            panic!("port command")
+        };
+        assert!(matches!(
+            ScanConfig::from_scan_args(&args, &DataRegistry::default()),
+            Err(NrevError::InvalidConfiguration(_))
+        ));
     }
 }

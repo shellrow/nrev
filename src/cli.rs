@@ -158,7 +158,7 @@ pub struct ScanArgs {
     #[arg(long, value_enum, default_value_t = ProgressMode::Auto)]
     pub progress: ProgressMode,
 
-    /// Interface name to use for UDP or SYN scanning.
+    /// Interface for raw packets or source address selection in socket scans.
     #[arg(short = 'i', long)]
     pub interface: Option<String>,
 
@@ -174,7 +174,7 @@ pub struct ScanArgs {
     #[arg(long, default_value_t = 4096)]
     pub http_body_preview_bytes: usize,
 
-    /// Retries for connect/probe actions.
+    /// Additional transport connection attempts.
     #[arg(long, default_value_t = 0, value_parser = value_parser!(u8).range(0..=5))]
     pub retries: u8,
 
@@ -190,7 +190,7 @@ pub struct ScanArgs {
     #[arg(short = 'r', long)]
     pub recipe: Option<String>,
 
-    /// Override the enabled built-in probe ids.
+    /// Select built-in or external probe IDs; built-in probes also run on nonstandard ports.
     #[arg(long, value_delimiter = ',', num_args = 1..)]
     pub probes: Vec<String>,
 
