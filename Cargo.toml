@@ -19,29 +19,32 @@ async-trait = "0.1.92"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["time", "chrono"] }
 serde = { version = "1.0.229", features = ["derive"] }
-serde_json = "1.0.151"
-thiserror = "2.0.20"
-toml = "1.1.4"
-netdev = { version = "0.46.0", features = ["serde"] }
-nex = { version = "0.27.0", features = ["async", "serde"] }
+serde_json = "1.0.154"
+thiserror = "2.0.21"
+toml = "1.1.8"
+netdev = { version = "0.47.0", features = ["serde"] }
+nex = { version = "0.28.0", features = ["async", "serde"] }
 futures = "0.3.34"
-rustls = { version = "0.23.32", default-features = false, features = ["ring", "std"] }
+rustls = { version = "0.23.46", default-features = false, features = ["ring", "std"] }
 rustls-pki-types = "1.15.1"
 x509-parser = "0.18.1"
-tokio = { version = "1.53.1", features = ["macros", "rt-multi-thread", "time", "net", "io-util", "sync"] }
-tokio-rustls = { version = "0.26.4", default-features = false, features = ["ring"] }
+tokio = { version = "1.54.1", features = ["macros", "rt-multi-thread", "time", "net", "io-util", "sync"] }
+tokio-rustls = { version = "0.26.6", default-features = false, features = ["ring"] }
 chrono = { version = "0.4.45", features = ["serde"] }
-rand = "0.10.0"
-clap = { version = "4.6.6", features = ["derive", "cargo"] }
-ipnet = "2.12.1"
+rand = "0.10.3"
+clap = { version = "4.6.7", features = ["derive", "cargo"] }
+ipnet = "2.12.2"
 termtree = "1.0.0"
 regex = "1.13.1"
-quinn = "0.11.11"
+quinn = "0.11.12"
 h3 = "0.0.8"
 h3-quinn = "0.0.10"
 http = "1.5.0"
 bytes = "1.12.1"
 tempfile = "3.27.0"
+
+[dev-dependencies]
+tokio = { version = "1.54.1", features = ["test-util"] }
 
 # The profile that 'dist' will build with
 [profile.dist]
