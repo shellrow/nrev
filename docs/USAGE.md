@@ -1,7 +1,5 @@
 # nrev Usage
 
-This guide shows common command patterns for `nrev`.
-
 Replace example targets with systems you own or are authorized to test.
 
 ## Command Overview
@@ -76,11 +74,10 @@ nrev port 192.168.10.10 --format json --output result.json
 ```
 
 JSON files are replaced atomically and include `metadata.schema_version`.
-Machine consumers should reject schema versions they do not support.
+Check `metadata.schema_version` before parsing reports in scripts or applications.
 
 Target expansion is capped at 65,536 unique addresses and 1,000,000 endpoint
-assignments per command. This catches accidental large CIDR and target/port
-Cartesian-product input before an unbounded scan is scheduled.
+assignments per command. Split larger target lists across separate commands.
 
 ## Host Discovery
 
@@ -93,7 +90,7 @@ nrev host 192.168.10.0/24
 TCP-based discovery on selected ports:
 
 ```sh
-nrev host yourcorpone.com --method tcp --ports 80,443
+nrev host example.com --method tcp --ports 80,443
 ```
 
 UDP-based discovery:
@@ -218,16 +215,25 @@ nrev port 192.168.10.10 --connect-timeout-ms 1200 --probe-timeout-ms 3000 --retr
 
 ## Profiles
 
-Load a profile file:
+Save scan defaults in a profile file, such as `profile-web.toml`:
+
+```toml
+name = "web"
+ports = "80,443,8080,8443"
+connect_timeout_ms = 1200
+probe_timeout_ms = 3000
+```
+
+Load the profile:
 
 ```sh
-nrev port 192.168.10.10 --profile ./tmp/manual-tests/profile-web.toml
+nrev port 192.168.10.10 --profile ./profile-web.toml
 ```
 
 CLI flags override profile values:
 
 ```sh
-nrev port 192.168.10.10 --profile ./tmp/manual-tests/profile-web.toml --ports 80,443
+nrev port 192.168.10.10 --profile ./profile-web.toml --ports 80,443
 ```
 
 ## Recipes
@@ -238,17 +244,11 @@ List sample recipes:
 nrev recipe --data ./samples/recipes
 ```
 
-Run a built-in sample recipe:
+Run a sample recipe:
 
 ```sh
 nrev port 192.168.10.10 --data ./samples/recipes --recipe web-balanced
 nrev port 192.168.10.0/24 --data ./samples/recipes --recipe fast-syn-triage
-```
-
-Command-line targets and recipe selection remain supported:
-
-```sh
-nrev port 192.168.10.10 --data ./samples/recipes --recipe web-balanced
 ```
 
 ## Tasks
@@ -334,3 +334,59 @@ nrev nei 192.168.10.1 -m arp -t 1000 -f json -o neighbor.json
 nrev probe -d ./samples/data-pack -j
 nrev recipe -d ./samples/recipes -j
 ```
+
+## Target Files and IPv6 Endpoints
+
+Use bracketed IPv6 addresses when specifying a port:
+
+```sh
+nrev port '[::1]:443' --probes tls
+```
+
+Target files can include other files using `@relative/path.txt`. Nested paths
+are resolved relative to the containing file. Repeated or cyclic includes are
+read once. Both `port` and `host` share the same expansion behavior. Inputs are
+limited to 1,024 files, 16 MiB of combined file content, and 65,536 target tokens,
+in addition to the address and endpoint limits.
+
+## Probe Selection
+
+Use `--probes` to run a probe on a nonstandard port:
+
+```sh
+nrev port 127.0.0.1 --ports 2222 --probes ssh
+```
+
+Explicit built-in probe names apply to all selected ports of the matching
+transport, including nonstandard ports. Without `--probes`, default port
+matching applies. Unknown probe names are rejected. External probes still use
+their configured ports and transport; `--probes` also filters external probe IDs.
+A recipe that omits `probes` inherits the profile's selection. An explicit empty
+list selects the normal automatic defaults.
+
+## Limits and Diagnostics
+
+`--probe-timeout-ms` limits the total duration of each service probe. HTTP/1 headers
+are limited to 64 KiB, and body previews consume at most
+`--http-body-preview-bytes` input bytes. Chunked transfer framing and compression
+are not decoded. JSON strings use UTF-8 replacement characters for invalid input,
+so their encoded size may differ from the raw byte budget.
+
+`--concurrency` limits active work. Up to that many additional connections may
+be retained for service probing, so allow extra file descriptors for these
+connections and packet capture. Lower `--concurrency` if the operating system
+reports too many open files.
+
+Probe failures appear in endpoint `errors` and in human-readable reports.
+
+TCP and QUIC port scans bind to a source address on the requested `--interface`.
+An interface without an address in the target family is an error. This is source
+address selection; routing remains under operating-system control.
+
+Human-readable trees escape control and bidirectional formatting characters in
+remote responses. JSON retains the observation data using JSON escaping.
+
+Raw capture retains at most 65,536 matching frames and 64 MiB of matching packet
+bytes per capture. Exceeding either budget or encountering a receiver error
+stops the capture with an error. The response window for a batch continues for
+the configured timeout after its final send.
