@@ -34,7 +34,7 @@ use rustls::{
 };
 use std::convert::TryFrom;
 use tokio::{
-    net::{TcpStream, UdpSocket},
+    net::{TcpSocket, TcpStream, UdpSocket},
     sync::oneshot,
     time::timeout,
 };
@@ -298,7 +298,9 @@ pub async fn icmp_scan_targets(
 
     let mut options = PacketCaptureOptions::from_interface_index(interface.index)
         .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "interface not found"))?;
-    options.capture_timeout = timeout_window;
+    // The response window starts after the final send, not before the batch.
+    // Dropping stop_tx on send failure or cancellation also stops capture.
+    options.capture_timeout = Duration::MAX;
     options.read_timeout = timeout_window;
     options.src_ips.extend(addresses.iter().copied());
     options.ip_protocols.insert(IpNextProtocol::Icmp);
@@ -325,7 +327,7 @@ pub async fn icmp_scan_targets(
 
     let captured = capture_task
         .await
-        .map_err(|err| std::io::Error::other(err.to_string()))?;
+        .map_err(|err| std::io::Error::other(err.to_string()))??;
     Ok(parse_icmp_scan_frames(
         &interface,
         addresses,
@@ -365,7 +367,15 @@ impl Connector for SocketConnector {
             Transport::Tcp => {
                 let socket = SocketAddr::new(address, port);
                 let start = Instant::now();
-                let stream = timeout(timeout_window, TcpStream::connect(socket))
+                let tcp = if address.is_ipv4() {
+                    TcpSocket::new_v4()?
+                } else {
+                    TcpSocket::new_v6()?
+                };
+                if interface_name.is_some() {
+                    tcp.bind(local_bind_addr(address, interface_name)?)?;
+                }
+                let stream = timeout(timeout_window, tcp.connect(socket))
                     .await
                     .map_err(|_| {
                         std::io::Error::new(std::io::ErrorKind::TimedOut, "connect timeout")
@@ -400,7 +410,9 @@ impl Connector for SocketConnector {
             }
             Transport::Quic => {
                 let start = Instant::now();
-                let connection = quic_connect(address, port, timeout_window, server_name).await?;
+                let connection =
+                    quic_connect(address, port, timeout_window, server_name, interface_name)
+                        .await?;
                 Ok(ConnectOutcome {
                     connection: ProbeConnection::Quic(connection),
                     latency: start.elapsed(),
@@ -443,14 +455,9 @@ async fn quic_connect(
     port: u16,
     timeout_window: Duration,
     server_name: Option<&str>,
+    interface_name: Option<&str>,
 ) -> std::io::Result<QuicConnection> {
-    let bind_addr = SocketAddr::new(
-        match address {
-            IpAddr::V4(_) => IpAddr::V4(Ipv4Addr::UNSPECIFIED),
-            IpAddr::V6(_) => IpAddr::V6(Ipv6Addr::UNSPECIFIED),
-        },
-        0,
-    );
+    let bind_addr = local_bind_addr(address, interface_name)?;
     let mut endpoint = Endpoint::client(bind_addr).map_err(std::io::Error::other)?;
     endpoint.set_default_client_config(quic_client_config()?);
 
@@ -657,7 +664,9 @@ async fn syn_probe(
 
     let mut options = PacketCaptureOptions::from_interface_index(interface.index)
         .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "interface not found"))?;
-    options.capture_timeout = timeout_window;
+    // The response window starts after the final send, not before the batch.
+    // Dropping stop_tx on send failure or cancellation also stops capture.
+    options.capture_timeout = Duration::MAX;
     options.read_timeout = timeout_window;
     options.src_ips.insert(address);
     options.src_ports.insert(port);
@@ -679,7 +688,7 @@ async fn syn_probe(
 
     let frames = capture_task
         .await
-        .map_err(|err| std::io::Error::other(err.to_string()))?;
+        .map_err(|err| std::io::Error::other(err.to_string()))??;
     parse_syn_frames(address, port, SYN_SOURCE_PORT, frames)
 }
 
@@ -701,7 +710,9 @@ pub async fn syn_scan_target(
 
     let mut options = PacketCaptureOptions::from_interface_index(interface.index)
         .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "interface not found"))?;
-    options.capture_timeout = timeout_window;
+    // The response window starts after the final send, not before the batch.
+    // Dropping stop_tx on send failure or cancellation also stops capture.
+    options.capture_timeout = Duration::MAX;
     options.read_timeout = timeout_window;
     options.src_ips.insert(address);
     options.src_ports.extend(ports.iter().copied());
@@ -725,7 +736,7 @@ pub async fn syn_scan_target(
 
     let frames = capture_task
         .await
-        .map_err(|err| std::io::Error::other(err.to_string()))?;
+        .map_err(|err| std::io::Error::other(err.to_string()))??;
     Ok(parse_syn_scan_frames(
         address,
         ports,
@@ -755,7 +766,9 @@ pub async fn syn_scan_targets(
 
     let mut options = PacketCaptureOptions::from_interface_index(interface.index)
         .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "interface not found"))?;
-    options.capture_timeout = timeout_window;
+    // The response window starts after the final send, not before the batch.
+    // Dropping stop_tx on send failure or cancellation also stops capture.
+    options.capture_timeout = Duration::MAX;
     options.read_timeout = timeout_window;
     options
         .src_ips
@@ -785,7 +798,7 @@ pub async fn syn_scan_targets(
 
     let frames = capture_task
         .await
-        .map_err(|err| std::io::Error::other(err.to_string()))?;
+        .map_err(|err| std::io::Error::other(err.to_string()))??;
     Ok(parse_syn_scan_frames_multi(
         targets,
         SYN_SOURCE_PORT,
@@ -1422,7 +1435,12 @@ fn local_bind_addr(address: IpAddr, interface_name: Option<&str>) -> std::io::Re
                 .ipv4
                 .first()
                 .map(|ip| IpAddr::V4(ip.addr()))
-                .unwrap_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED)),
+                .ok_or_else(|| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::AddrNotAvailable,
+                        "interface has no IPv4 address",
+                    )
+                })?,
             0,
         )),
         (IpAddr::V6(_), Some(interface)) => Ok(SocketAddr::new(
@@ -1430,10 +1448,38 @@ fn local_bind_addr(address: IpAddr, interface_name: Option<&str>) -> std::io::Re
                 .ipv6
                 .first()
                 .map(|ip| IpAddr::V6(ip.addr()))
-                .unwrap_or(IpAddr::V6(Ipv6Addr::UNSPECIFIED)),
+                .ok_or_else(|| {
+                    std::io::Error::new(
+                        std::io::ErrorKind::AddrNotAvailable,
+                        "interface has no IPv6 address",
+                    )
+                })?,
             0,
         )),
         (IpAddr::V4(_), None) => Ok(SocketAddr::from(([0, 0, 0, 0], 0))),
         (IpAddr::V6(_), None) => Ok(SocketAddr::from(([0_u16; 8], 0))),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn socket_transports_reject_missing_interfaces_before_connecting() {
+        for transport in [Transport::Tcp, Transport::Udp, Transport::Quic] {
+            let error = SocketConnector
+                .connect(
+                    "127.0.0.1".parse().unwrap(),
+                    9,
+                    transport,
+                    Duration::from_millis(50),
+                    Some("nrev-test-nonexistent-interface"),
+                    Some("127.0.0.1"),
+                )
+                .await
+                .unwrap_err();
+            assert_eq!(error.kind(), std::io::ErrorKind::NotFound);
+        }
     }
 }

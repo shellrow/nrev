@@ -153,12 +153,12 @@ pub async fn start_capture(
     capture_options: PacketCaptureOptions,
     ready_tx: oneshot::Sender<()>,
     stop_rx: &mut oneshot::Receiver<()>,
-) -> Vec<Frame> {
-    start_capture_timed(rx, capture_options, ready_tx, stop_rx)
-        .await
+) -> std::io::Result<Vec<Frame>> {
+    Ok(start_capture_timed(rx, capture_options, ready_tx, stop_rx)
+        .await?
         .into_iter()
         .map(|captured| captured.frame)
-        .collect()
+        .collect())
 }
 
 pub async fn start_capture_timed(
@@ -166,15 +166,24 @@ pub async fn start_capture_timed(
     capture_options: PacketCaptureOptions,
     ready_tx: oneshot::Sender<()>,
     stop_rx: &mut oneshot::Receiver<()>,
-) -> Vec<CapturedFrame> {
+) -> std::io::Result<Vec<CapturedFrame>> {
     let mut frames = Vec::new();
-    let start_time = Instant::now();
+    let mut captured_bytes = 0usize;
+    let deadline = tokio::time::Instant::now().checked_add(capture_options.capture_timeout);
+    let expiration = async {
+        if let Some(deadline) = deadline {
+            tokio::time::sleep_until(deadline).await;
+        } else {
+            std::future::pending::<()>().await;
+        }
+    };
+    tokio::pin!(expiration);
     let _ = ready_tx.send(());
     loop {
         tokio::select! {
+            biased;
             _ = &mut *stop_rx => break,
-            // Check if capture timeout is reached
-            // Read next packet
+            _ = &mut expiration => break,
             next_read = rx.next() => {
                 match next_read {
                     Some(Ok(packet)) => {
@@ -186,6 +195,10 @@ pub async fn start_capture_timed(
                         }
                         if let Some(frame) = Frame::from_buf(&packet, parse_option) {
                             if filter_packet(&frame, &capture_options) {
+                                captured_bytes = captured_bytes.saturating_add(packet.len());
+                                if frames.len() >= 65_536 || captured_bytes > 64 * 1024 * 1024 {
+                                    return Err(std::io::Error::other("packet capture budget exceeded; reduce the target batch or capture duration"));
+                                }
                                 frames.push(CapturedFrame {
                                     frame,
                                     captured_at: Instant::now(),
@@ -196,18 +209,14 @@ pub async fn start_capture_timed(
                         }
                     }
                     Some(Err(e)) => {
-                        tracing::error!("Error reading packet: {}", e);
-                        break;
+                        return Err(e);
                     }
-                    None => {}
-                }
-                if start_time.elapsed() >= capture_options.capture_timeout {
-                    break;
+                    None => break,
                 }
             }
         }
     }
-    frames
+    Ok(frames)
 }
 
 fn filter_packet(frame: &Frame, capture_options: &PacketCaptureOptions) -> bool {
@@ -272,14 +281,16 @@ fn filter_host(src_ip: IpAddr, dst_ip: IpAddr, capture_options: &PacketCaptureOp
     if capture_options.src_ips.is_empty() && capture_options.dst_ips.is_empty() {
         return true;
     }
-    capture_options.src_ips.contains(&src_ip) || capture_options.dst_ips.contains(&dst_ip)
+    (capture_options.src_ips.is_empty() || capture_options.src_ips.contains(&src_ip))
+        && (capture_options.dst_ips.is_empty() || capture_options.dst_ips.contains(&dst_ip))
 }
 
 fn filter_port(src_port: u16, dst_port: u16, capture_options: &PacketCaptureOptions) -> bool {
     if capture_options.src_ports.is_empty() && capture_options.dst_ports.is_empty() {
         return true;
     }
-    capture_options.src_ports.contains(&src_port) || capture_options.dst_ports.contains(&dst_port)
+    (capture_options.src_ports.is_empty() || capture_options.src_ports.contains(&src_port))
+        && (capture_options.dst_ports.is_empty() || capture_options.dst_ports.contains(&dst_port))
 }
 
 fn filter_ether_type(ether_type: EtherType, capture_options: &PacketCaptureOptions) -> bool {
@@ -288,4 +299,81 @@ fn filter_ether_type(ether_type: EtherType, capture_options: &PacketCaptureOptio
 
 fn filter_ip_protocol(protocol: IpNextProtocol, capture_options: &PacketCaptureOptions) -> bool {
     capture_options.ip_protocols.is_empty() || capture_options.ip_protocols.contains(&protocol)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn options() -> PacketCaptureOptions {
+        PacketCaptureOptions {
+            interface_index: 0,
+            interface_name: "test".into(),
+            src_ips: HashSet::new(),
+            dst_ips: HashSet::new(),
+            src_ports: HashSet::new(),
+            dst_ports: HashSet::new(),
+            ether_types: HashSet::new(),
+            ip_protocols: HashSet::new(),
+            capture_timeout: Duration::from_millis(100),
+            read_timeout: Duration::from_millis(10),
+            promiscuous: false,
+            receive_undefined: false,
+            tunnel: false,
+            loopback: false,
+        }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn idle_capture_expires_without_packets() {
+        let mut rx: Box<dyn AsyncRawReceiver> = Box::new(futures::stream::pending());
+        let (ready, _ready_rx) = oneshot::channel();
+        let (_stop, mut stop_rx) = oneshot::channel();
+        let started = tokio::time::Instant::now();
+        let frames = start_capture_timed(&mut rx, options(), ready, &mut stop_rx)
+            .await
+            .unwrap();
+        assert!(frames.is_empty());
+        assert_eq!(started.elapsed(), Duration::from_millis(100));
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn exhausted_capture_returns_immediately() {
+        let mut rx: Box<dyn AsyncRawReceiver> = Box::new(futures::stream::empty());
+        let (ready, _ready_rx) = oneshot::channel();
+        let (_stop, mut stop_rx) = oneshot::channel();
+        let started = tokio::time::Instant::now();
+        start_capture_timed(&mut rx, options(), ready, &mut stop_rx)
+            .await
+            .unwrap();
+        assert_eq!(started.elapsed(), Duration::ZERO);
+    }
+
+    #[test]
+    fn filters_require_both_endpoints_when_specified() {
+        let mut options = options();
+        options.src_ports.insert(443);
+        options.dst_ports.insert(12345);
+        assert!(filter_port(443, 12345, &options));
+        assert!(!filter_port(443, 9999, &options));
+        assert!(!filter_port(80, 12345, &options));
+        let source = "192.0.2.1".parse().unwrap();
+        let dest = "192.0.2.2".parse().unwrap();
+        options.src_ips.insert(source);
+        options.dst_ips.insert(dest);
+        assert!(filter_host(source, dest, &options));
+        assert!(!filter_host(source, source, &options));
+    }
+    #[tokio::test]
+    async fn capture_read_errors_are_not_reported_as_empty_results() {
+        let mut rx: Box<dyn AsyncRawReceiver> = Box::new(futures::stream::iter(vec![Err(
+            std::io::Error::new(std::io::ErrorKind::PermissionDenied, "capture denied"),
+        )]));
+        let (ready, _ready_rx) = oneshot::channel();
+        let (_stop, mut stop_rx) = oneshot::channel();
+        let error = start_capture_timed(&mut rx, options(), ready, &mut stop_rx)
+            .await
+            .unwrap_err();
+        assert_eq!(error.kind(), std::io::ErrorKind::PermissionDenied);
+    }
 }
