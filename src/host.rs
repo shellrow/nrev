@@ -1,8 +1,6 @@
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
-    fs,
     net::{IpAddr, ToSocketAddrs},
-    path::{Path, PathBuf},
     time::Duration,
 };
 
@@ -231,54 +229,6 @@ impl TargetSpec {
     }
 }
 
-fn canonicalize_for_seen(path: &Path) -> PathBuf {
-    fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
-}
-
-fn collect_target_tokens(
-    inputs: &[String],
-    seen_files: &mut HashSet<PathBuf>,
-) -> Result<Vec<String>> {
-    let mut tokens = Vec::new();
-
-    for raw in inputs {
-        let value = raw.trim();
-        if value.is_empty() {
-            continue;
-        }
-
-        let (is_file_hint, path_str) = if let Some(stripped) = value.strip_prefix('@') {
-            (true, stripped)
-        } else {
-            (false, value)
-        };
-
-        let path = Path::new(path_str);
-        if is_file_hint || path.is_file() {
-            let canonical = canonicalize_for_seen(path);
-            if !seen_files.insert(canonical) {
-                continue;
-            }
-
-            let text = fs::read_to_string(path)?;
-            let nested_inputs = text
-                .lines()
-                .map(str::trim)
-                .filter(|line| !line.is_empty() && !line.starts_with('#'))
-                .map(ToString::to_string)
-                .collect::<Vec<_>>();
-
-            let mut nested = collect_target_tokens(&nested_inputs, seen_files)?;
-            tokens.append(&mut nested);
-            continue;
-        }
-
-        tokens.push(value.to_string());
-    }
-
-    Ok(tokens)
-}
-
 pub fn resolve_host_targets(inputs: &[String]) -> Result<Vec<Target>> {
     resolve_host_targets_with_limit(inputs, crate::target::DEFAULT_MAX_TARGETS)
 }
@@ -288,7 +238,7 @@ pub fn resolve_host_targets_with_limit(
     max_targets: usize,
 ) -> Result<Vec<Target>> {
     let mut seen_files = HashSet::new();
-    let tokens = collect_target_tokens(inputs, &mut seen_files)?;
+    let tokens = crate::target::collect_target_tokens(inputs, &mut seen_files)?;
 
     let mut by_ip = BTreeMap::new();
     for token in tokens {
@@ -360,6 +310,7 @@ fn ensure_target_limit(
 
 #[cfg(test)]
 mod tests {
+    use std::fs;
     use std::time::Duration;
 
     use super::*;

@@ -1,6 +1,7 @@
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
     fs,
+    io::Read,
     net::{IpAddr, SocketAddr, ToSocketAddrs},
     path::{Path, PathBuf},
     sync::OnceLock,
@@ -52,7 +53,11 @@ pub struct TargetResolver {
 impl TargetResolver {
     pub fn new(default_ports: Vec<u16>) -> Self {
         Self {
-            default_ports,
+            default_ports: default_ports
+                .into_iter()
+                .collect::<BTreeSet<_>>()
+                .into_iter()
+                .collect(),
             max_targets: DEFAULT_MAX_TARGETS,
             max_endpoint_assignments: DEFAULT_MAX_ENDPOINT_ASSIGNMENTS,
         }
@@ -188,51 +193,66 @@ fn insert_target(
     Ok(())
 }
 
-fn canonicalize_for_seen(path: &Path) -> PathBuf {
-    fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
-}
-
-fn collect_target_tokens(
+/// Expand target files relative to their parent, without recursive stack growth.
+pub(crate) fn collect_target_tokens(
     inputs: &[String],
     seen_files: &mut HashSet<PathBuf>,
 ) -> Result<Vec<String>> {
+    const MAX_INPUT_BYTES: u64 = 16 * 1024 * 1024;
+    const MAX_FILES: usize = 1024;
+    let mut remaining_bytes = MAX_INPUT_BYTES;
+    let mut pending: Vec<_> = inputs
+        .iter()
+        .rev()
+        .map(|input| (input.clone(), PathBuf::new()))
+        .collect();
     let mut tokens = Vec::new();
-
-    for raw in inputs {
+    while let Some((raw, parent)) = pending.pop() {
         let value = raw.trim();
         if value.is_empty() {
             continue;
         }
-
-        let (is_file_hint, path_str) = if let Some(stripped) = value.strip_prefix('@') {
-            (true, stripped)
-        } else {
-            (false, value)
-        };
-
-        let path = Path::new(path_str);
-        if is_file_hint || path.is_file() {
-            let canonical = canonicalize_for_seen(path);
+        let hint = value.strip_prefix('@');
+        let path = parent.join(hint.unwrap_or(value));
+        if hint.is_some() || path.is_file() {
+            let canonical = fs::canonicalize(&path)?;
             if !seen_files.insert(canonical) {
                 continue;
             }
-
-            let text = fs::read_to_string(path)?;
-            let nested_inputs = text
-                .lines()
-                .map(str::trim)
-                .filter(|line| !line.is_empty() && !line.starts_with('#'))
-                .map(ToString::to_string)
-                .collect::<Vec<_>>();
-
-            let mut nested = collect_target_tokens(&nested_inputs, seen_files)?;
-            tokens.append(&mut nested);
-            continue;
+            if seen_files.len() > MAX_FILES {
+                return Err(NrevError::InvalidTarget(
+                    "too many target files (maximum 1024)".into(),
+                ));
+            }
+            let mut text = String::new();
+            fs::File::open(&path)?
+                .take(remaining_bytes + 1)
+                .read_to_string(&mut text)?;
+            if text.len() as u64 > remaining_bytes {
+                return Err(NrevError::DataFileTooLarge {
+                    path,
+                    limit_bytes: MAX_INPUT_BYTES,
+                });
+            }
+            remaining_bytes -= text.len() as u64;
+            let parent = path.parent().unwrap_or(Path::new(".")).to_path_buf();
+            pending.extend(
+                text.lines()
+                    .rev()
+                    .map(str::trim)
+                    .filter(|line| !line.is_empty() && !line.starts_with('#'))
+                    .map(|line| (line.to_string(), parent.clone())),
+            );
+        } else {
+            if tokens.len() >= DEFAULT_MAX_TARGETS {
+                return Err(NrevError::TargetLimitExceeded {
+                    input: value.into(),
+                    limit: DEFAULT_MAX_TARGETS,
+                });
+            }
+            tokens.push(value.to_string());
         }
-
-        tokens.push(value.to_string());
     }
-
     Ok(tokens)
 }
 
@@ -317,6 +337,9 @@ pub fn parse_ports(input: &str) -> Result<Vec<u16>> {
 }
 
 fn split_host_port(input: &str) -> Option<(String, u16)> {
+    if let Ok(socket) = input.parse::<SocketAddr>() {
+        return Some((socket.ip().to_string(), socket.port()));
+    }
     if input.matches(':').count() != 1 {
         return None;
     }
@@ -454,5 +477,57 @@ mod tests {
         );
 
         fs::remove_file(path).ok();
+    }
+    #[test]
+    fn resolves_ipv6_socket_and_merges_ports() {
+        let targets = TargetResolver::new(vec![80])
+            .resolve(&["::1".into(), "[::1]:443".into()])
+            .unwrap();
+        assert_eq!(targets.len(), 1);
+        assert_eq!(targets[0].1, vec![80, 443]);
+    }
+
+    #[test]
+    fn nested_files_are_relative_and_cycles_are_deduplicated() {
+        let dir = tempfile::tempdir().unwrap();
+        fs::create_dir(dir.path().join("nested")).unwrap();
+        fs::write(dir.path().join("root.txt"), "@nested/child.txt\n192.0.2.1").unwrap();
+        fs::write(
+            dir.path().join("nested/child.txt"),
+            "@../root.txt\n192.0.2.2",
+        )
+        .unwrap();
+        let inputs = vec![format!("@{}", dir.path().join("root.txt").display())];
+        assert_eq!(
+            TargetResolver::new(vec![80])
+                .resolve(&inputs)
+                .unwrap()
+                .len(),
+            2
+        );
+        assert_eq!(crate::host::resolve_host_targets(&inputs).unwrap().len(), 2);
+    }
+
+    #[test]
+    fn duplicate_default_ports_do_not_consume_endpoint_budget() {
+        let targets = TargetResolver::new(vec![80, 443, 443])
+            .with_max_endpoint_assignments(2)
+            .resolve(&["192.0.2.1:80".into(), "192.0.2.1".into()])
+            .unwrap();
+        assert_eq!(targets[0].1, vec![80, 443]);
+    }
+
+    #[test]
+    fn rejects_oversized_target_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("targets.txt");
+        fs::File::create(&path)
+            .unwrap()
+            .set_len(16 * 1024 * 1024 + 1)
+            .unwrap();
+        assert!(matches!(
+            TargetResolver::new(vec![80]).resolve(&[format!("@{}", path.display())]),
+            Err(NrevError::DataFileTooLarge { .. })
+        ));
     }
 }
