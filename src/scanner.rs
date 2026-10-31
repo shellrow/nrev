@@ -136,7 +136,7 @@ where
         let transport_phase = if config.transport == Transport::Syn {
             scan_syn_transport_phase(targets, &config).await
         } else {
-            stream::iter(targets.into_iter())
+            stream::iter(targets)
                 .map(|(target, ports)| {
                     let connector = connector.clone();
                     let config = config.clone();
@@ -176,7 +176,7 @@ where
         }
         let semaphore = Arc::new(Semaphore::new(config.concurrency.max(1)));
         let mut target_reports =
-            stream::iter(transport_phase.into_iter())
+            stream::iter(transport_phase)
                 .map(|phase| {
                     let connector = connector.clone();
                     let config = config.clone();
@@ -260,7 +260,7 @@ async fn scan_target_phase<C: Connector>(
     }
 
     let endpoint_concurrency = effective_transport_concurrency(&target_config, target_concurrency);
-    let endpoint_results = stream::iter(ports.into_iter())
+    let endpoint_results = stream::iter(ports)
         .map(|port| {
             let connector = connector.clone();
             let config = target_config.clone();
@@ -576,7 +576,7 @@ async fn run_followup_phase<C: Connector>(
     let mut reusable_connections = phase.reusable_connections;
 
     if !phase.probe_ports.is_empty() {
-        let followups = stream::iter(phase.probe_ports.into_iter())
+        let followups = stream::iter(phase.probe_ports)
             .map(|port| {
                 let target = target.clone();
                 let config = config.clone();

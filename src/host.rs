@@ -70,7 +70,7 @@ impl HostScanner {
             discover_targets_icmp(targets, &self.config).await
         } else {
             let concurrency = effective_host_concurrency(&self.config);
-            stream::iter(targets.into_iter())
+            stream::iter(targets)
                 .map(|target| {
                     let config = self.config.clone();
                     async move { discover_target(target, &config).await }

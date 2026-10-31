@@ -358,7 +358,7 @@ pub fn match_legacy_os_signatures(
             (score > 0).then_some((signature, score, matched_on))
         })
         .collect::<Vec<_>>();
-    ranked.sort_by(|left, right| right.1.cmp(&left.1));
+    ranked.sort_by_key(|item| std::cmp::Reverse(item.1));
 
     ranked
         .into_iter()
