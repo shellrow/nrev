@@ -139,6 +139,9 @@ nrev host 192.168.10.0/24 --method tcp --ports 443 --output hosts.json
 ```
 
 Use `--quiet` to disable progress or `--progress verbose` for more detail.
+Progress and diagnostics use color when stderr is a terminal. Use `--no-color`
+(or `--color never`) to disable it, or `--color always` to force it. Automatic
+color respects `NO_COLOR` and `TERM=dumb`. Reports and JSON remain uncolored.
 Probe failures appear in endpoint `errors` and in the tree output.
 
 JSON files are replaced atomically. Check `metadata.schema_version` when parsing

@@ -1,4 +1,7 @@
-use std::io::{self, Write};
+use std::io::{self, IsTerminal, Write};
+use std::sync::atomic::{AtomicBool, Ordering};
+
+static COLOR_DIAGNOSTICS: AtomicBool = AtomicBool::new(false);
 
 use clap::{CommandFactory, FromArgMatches, parser::ValueSource};
 use tracing::{Level, debug, info};
@@ -35,7 +38,11 @@ async fn main() {
         Ok(()) => 0,
         Err(error) if is_broken_pipe(&error) => 0,
         Err(error) => {
-            eprintln!("nrev: {error}");
+            if COLOR_DIAGNOSTICS.load(Ordering::Relaxed) {
+                eprintln!("\x1b[31mnrev:\x1b[0m {error}");
+            } else {
+                eprintln!("nrev: {error}");
+            }
             1
         }
     };
@@ -46,12 +53,19 @@ async fn run() -> anyhow::Result<()> {
     let command = Cli::command();
     let matches = command.get_matches();
     let cli = Cli::from_arg_matches(&matches)?;
+    let color = !cli.no_color
+        && cli.color.enabled(
+            io::stderr().is_terminal(),
+            std::env::var_os("NO_COLOR").is_some_and(|value| !value.is_empty()),
+            std::env::var_os("TERM").is_some_and(|value| value == "dumb"),
+        );
+    COLOR_DIAGNOSTICS.store(color, Ordering::Relaxed);
     let task = match &cli.command {
         Command::Task(args) => Some(ScanTask::from_task_args(args)?),
         _ => None,
     };
     let (progress_mode, quiet) = command_logging_mode(&cli.command, task.as_ref());
-    init_logging(progress_mode, quiet)?;
+    init_logging(progress_mode, quiet, color)?;
     match cli.command {
         Command::Port(args) => {
             let arg_sources = scan_arg_sources(matches.subcommand_matches("port"));
@@ -263,7 +277,7 @@ fn command_logging_mode(
     }
 }
 
-fn init_logging(progress_mode: ProgressMode, quiet: bool) -> anyhow::Result<()> {
+fn init_logging(progress_mode: ProgressMode, quiet: bool, color: bool) -> anyhow::Result<()> {
     let allow_debug = !quiet && progress_mode == ProgressMode::Verbose;
     let allow_info = !quiet && progress_mode != ProgressMode::Quiet;
 
@@ -284,7 +298,7 @@ fn init_logging(progress_mode: ProgressMode, quiet: bool) -> anyhow::Result<()> 
         .with(
             fmt::layer()
                 .with_writer(io::stderr)
-                .with_ansi(false)
+                .with_ansi(color)
                 .with_target(false)
                 .with_timer(ChronoLocal::new("%H:%M:%S%.3f%:z".to_string()))
                 .with_filter(filter),

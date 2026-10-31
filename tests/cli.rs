@@ -390,3 +390,51 @@ executable = "./fake nmap"
         assert!(String::from_utf8_lossy(&output.stderr).contains("requires a TCP or SYN scan"));
     }
 }
+
+#[test]
+fn progress_color_is_optional_and_never_changes_json_output() {
+    let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+    let address = listener.local_addr().unwrap().to_string();
+    for (flags, no_color, colored) in [
+        (vec![], false, false),
+        (vec!["--color", "always"], false, true),
+        (vec!["--color", "never"], false, false),
+        (vec!["--no-color"], false, false),
+        (vec![], true, false),
+        (vec!["--color", "always"], true, true),
+    ] {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_nrev"));
+        command.env_remove("NO_COLOR").env_remove("TERM");
+        if no_color {
+            command.env("NO_COLOR", "1");
+        }
+        let output = command
+            .args(["port", &address, "--no-builtin-probes", "--format", "json"])
+            .args(flags)
+            .output()
+            .unwrap();
+        assert!(output.status.success(), "{:?}", output.stderr);
+        assert_eq!(output.stderr.contains(&0x1b), colored);
+        assert!(!output.stdout.contains(&0x1b));
+        serde_json::from_slice::<serde_json::Value>(&output.stdout).unwrap();
+    }
+}
+
+#[test]
+fn diagnostic_color_option_works_before_the_subcommand() {
+    for (mode, colored) in [("always", true), ("never", false)] {
+        let output = Command::new(env!("CARGO_BIN_EXE_nrev"))
+            .args([
+                "--color",
+                mode,
+                "port",
+                "127.0.0.1",
+                "--probes",
+                "unknown-probe",
+            ])
+            .output()
+            .unwrap();
+        assert!(!output.status.success());
+        assert_eq!(output.stderr.contains(&0x1b), colored);
+    }
+}

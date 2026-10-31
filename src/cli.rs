@@ -10,8 +10,31 @@ use serde::{Deserialize, Serialize};
     about = "Observation-first reconnaissance engine"
 )]
 pub struct Cli {
+    /// Color progress and diagnostic output on stderr.
+    #[arg(long, global = true, value_enum, default_value_t = ColorMode::Auto)]
+    pub color: ColorMode,
+    /// Disable colored progress and diagnostic output.
+    #[arg(long, global = true, conflicts_with = "color")]
+    pub no_color: bool,
     #[command(subcommand)]
     pub command: Command,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+pub enum ColorMode {
+    Auto,
+    Always,
+    Never,
+}
+
+impl ColorMode {
+    pub fn enabled(self, terminal: bool, no_color: bool, dumb_terminal: bool) -> bool {
+        match self {
+            Self::Always => true,
+            Self::Never => false,
+            Self::Auto => terminal && !no_color && !dumb_terminal,
+        }
+    }
 }
 
 #[derive(Debug, Subcommand)]
@@ -547,5 +570,14 @@ mod tests {
             Some(PathBuf::from("recipes").as_path())
         );
         assert!(args.json);
+    }
+    #[test]
+    fn automatic_color_requires_a_capable_terminal() {
+        assert!(ColorMode::Auto.enabled(true, false, false));
+        assert!(!ColorMode::Auto.enabled(false, false, false));
+        assert!(!ColorMode::Auto.enabled(true, true, false));
+        assert!(!ColorMode::Auto.enabled(true, false, true));
+        assert!(ColorMode::Always.enabled(false, true, true));
+        assert!(!ColorMode::Never.enabled(true, false, false));
     }
 }
