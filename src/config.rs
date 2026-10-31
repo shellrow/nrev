@@ -56,6 +56,8 @@ pub struct ScanRecipe {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ScanTask {
+    #[serde(default)]
+    pub identification: crate::nmap::IdentificationOptions,
     pub name: Option<String>,
     pub description: Option<String>,
     pub target: Option<String>,
@@ -85,6 +87,7 @@ pub struct ScanTask {
 
 #[derive(Clone, Debug)]
 pub struct ScanConfig {
+    pub identification: crate::nmap::IdentificationOptions,
     pub profile_name: String,
     pub recipe_name: Option<String>,
     pub transport: Transport,
@@ -164,6 +167,13 @@ impl ScanTask {
         );
 
         ScanArgs {
+            identification: {
+                let mut options = self.identification.clone();
+                if options.executable.is_relative() && options.executable.components().count() > 1 {
+                    options.executable = resolve_task_path(task_path, &options.executable);
+                }
+                options
+            },
             targets,
             ports: self.ports.clone().unwrap_or_else(|| "top-100".to_string()),
             transport: self.transport.map(Into::into).unwrap_or(ScanTransport::Tcp),
@@ -277,6 +287,7 @@ impl ScanConfig {
         };
 
         let config = Self {
+            identification: args.identification.clone(),
             profile_name: profile
                 .as_ref()
                 .map(|p| p.name.clone())
@@ -371,6 +382,10 @@ impl ScanConfig {
 }
 
 fn validate_scan_config(config: &ScanConfig) -> Result<()> {
+    config
+        .identification
+        .validate(config.transport)
+        .map_err(|error| NrevError::InvalidConfiguration(error.to_string()))?;
     if !(1..=65_535).contains(&config.concurrency) {
         return Err(NrevError::InvalidConfiguration(
             "concurrency must be between 1 and 65535".to_string(),
@@ -661,6 +676,7 @@ mod tests {
     #[test]
     fn recipe_overrides_profile() {
         let args = ScanArgs {
+            identification: Default::default(),
             targets: vec!["127.0.0.1".to_string()],
             ports: "80".to_string(),
             transport: ScanTransport::Tcp,
@@ -707,6 +723,7 @@ mod tests {
     #[test]
     fn explicit_cli_values_override_recipe_defaults() {
         let args = ScanArgs {
+            identification: Default::default(),
             targets: vec!["127.0.0.1".to_string()],
             ports: "443".to_string(),
             transport: ScanTransport::Udp,
@@ -776,6 +793,7 @@ mod tests {
     #[test]
     fn supports_quic_transport_from_cli() {
         let args = ScanArgs {
+            identification: Default::default(),
             targets: vec!["example.com".to_string()],
             ports: "443".to_string(),
             transport: ScanTransport::Quic,
@@ -862,6 +880,7 @@ format = "json"
     #[test]
     fn explicit_task_builtin_probe_setting_overrides_recipe_defaults() {
         let task = ScanTask {
+            identification: Default::default(),
             name: None,
             description: None,
             target: Some("127.0.0.1".to_string()),
@@ -948,5 +967,33 @@ format = "json"
             ScanConfig::from_scan_args(&args, &DataRegistry::default()),
             Err(NrevError::InvalidConfiguration(_))
         ));
+    }
+    #[test]
+    fn native_and_external_concurrency_are_independent() {
+        use clap::Parser;
+        let cli = crate::cli::Cli::parse_from([
+            "nrev",
+            "port",
+            "127.0.0.1",
+            "--concurrency",
+            "8",
+            "--nmap-concurrency",
+            "3",
+            "--nmap-scope",
+            "all",
+        ]);
+        let crate::cli::Command::Port(args) = cli.command else {
+            panic!("port command")
+        };
+        let config = ScanConfig::from_scan_args(&args, &DataRegistry::default()).unwrap();
+        assert_eq!(config.concurrency, 8);
+        assert_eq!(config.identification.concurrency, 3);
+        assert_eq!(
+            config.identification.scope,
+            crate::nmap::IdentificationScope::All
+        );
+        let options: crate::nmap::IdentificationOptions =
+            toml::from_str("services = true\nconcurrency = 0").unwrap();
+        assert!(options.validate(Transport::Tcp).is_err());
     }
 }

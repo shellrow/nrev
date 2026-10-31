@@ -22,3 +22,5 @@ pub mod target;
 pub mod tls;
 pub mod trace;
 pub mod transport;
+
+pub mod nmap;

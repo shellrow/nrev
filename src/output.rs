@@ -51,7 +51,12 @@ pub fn render_human_scan_report(report: &ScanReport, show_all_states: bool) -> S
         if needs_grouping {
             let mut group = Tree::new(group_label);
             for target in targets {
-                if let Some(target_tree) = render_scan_target_tree(target, show_all_states, true) {
+                if let Some(target_tree) = render_scan_target_tree(
+                    target,
+                    show_all_states,
+                    true,
+                    report.identification.as_ref(),
+                ) {
                     group.push(target_tree);
                 }
             }
@@ -67,7 +72,12 @@ pub fn render_human_scan_report(report: &ScanReport, show_all_states: bool) -> S
             root.push(group);
             rendered_targets += 1;
         } else if let Some(target) = targets.first()
-            && let Some(target_tree) = render_scan_target_tree(target, show_all_states, false)
+            && let Some(target_tree) = render_scan_target_tree(
+                target,
+                show_all_states,
+                false,
+                report.identification.as_ref(),
+            )
         {
             root.push(target_tree);
             rendered_targets += 1;
@@ -82,6 +92,19 @@ pub fn render_human_scan_report(report: &ScanReport, show_all_states: bool) -> S
         }));
     }
 
+    if let Some(details) = &report.identification {
+        if details.requests.is_empty() && details.hosts.is_empty() && details.complete {
+            root.push(Tree::new("no candidate endpoints".to_string()));
+        }
+        for warning in &details.warnings {
+            root.push(Tree::new(format!("Nmap warning: {warning}")));
+        }
+        if details.failures.is_empty()
+            && let Some(error) = &details.error
+        {
+            root.push(Tree::new(format!("Nmap error: {error}")));
+        }
+    }
     render_safe_tree(root)
 }
 
@@ -468,20 +491,160 @@ fn render_endpoint_tree(endpoint: &EndpointResult) -> Tree<String> {
     node
 }
 
+fn matches_external_port(endpoint: &EndpointResult, port: &crate::nmap::PortDetails) -> bool {
+    let protocol = match endpoint.transport {
+        crate::model::Transport::Tcp | crate::model::Transport::Syn => "tcp",
+        crate::model::Transport::Udp | crate::model::Transport::Quic => "udp",
+    };
+    endpoint.port == port.port && protocol == port.protocol
+}
+
+fn is_visible_external_port(port: &crate::nmap::PortDetails) -> bool {
+    matches!(port.state.state.as_str(), "open" | "open|filtered")
+}
+
+fn append_external_port(
+    node: &mut Tree<String>,
+    port: &crate::nmap::PortDetails,
+    native: Option<&EndpointResult>,
+) {
+    if !native.is_some_and(|endpoint| {
+        state_label(&endpoint.state).eq_ignore_ascii_case(&port.state.state)
+    }) {
+        node.push(Tree::new(format!("state: {}", port.state.state)));
+    }
+    let native_service = native.and_then(primary_service);
+    if let Some(reason) = &port.state.reason {
+        node.push(Tree::new(format!("reason: {reason}")));
+    }
+    if let Some(service) = &port.service {
+        for (label, value) in [
+            ("service", &service.name),
+            ("tunnel", &service.tunnel),
+            ("product", &service.product),
+            ("version", &service.version),
+            ("info", &service.extra_info),
+            ("hostname", &service.hostname),
+            ("OS type", &service.os_type),
+            ("device type", &service.device_type),
+            ("method", &service.method),
+        ] {
+            if let Some(value) = value {
+                if label == "service"
+                    && native_service
+                        .as_deref()
+                        .is_some_and(|name| name.eq_ignore_ascii_case(value))
+                {
+                    continue;
+                }
+                node.push(Tree::new(format!("{label}: {value}")));
+            }
+        }
+        if !service.cpes.is_empty() {
+            let mut cpes = Tree::new("cpes".to_string());
+            for cpe in &service.cpes {
+                cpes.push(Tree::new(cpe.clone()));
+            }
+            node.push(cpes);
+        }
+    }
+}
+
+fn preferred_os_match(matches: &[crate::nmap::OsMatch]) -> Option<&crate::nmap::OsMatch> {
+    fn rank(candidate: &crate::nmap::OsMatch) -> (u8, bool, bool) {
+        let general_purpose = !candidate.classes.is_empty()
+            && candidate
+                .classes
+                .iter()
+                .all(|class| class.device_type.as_deref() == Some("general purpose"));
+        let generic_linux = (candidate.name == "Linux"
+            || candidate
+                .name
+                .strip_prefix("Linux ")
+                .is_some_and(|version| version.starts_with(|c: char| c.is_ascii_digit())))
+            && (candidate.classes.is_empty() || general_purpose);
+        (candidate.accuracy, generic_linux, general_purpose)
+    }
+
+    // Preserve source order for equally ranked matches. Accuracy always wins;
+    // broader OS descriptions break ties without inferring a distribution.
+    matches.iter().fold(None, |best, candidate| match best {
+        Some(current) if rank(current) >= rank(candidate) => Some(current),
+        _ => Some(candidate),
+    })
+}
+
 fn render_scan_target_tree(
     target: &crate::model::TargetReport,
     show_all_states: bool,
     grouped: bool,
+    identification: Option<&crate::nmap::Identification>,
 ) -> Option<Tree<String>> {
     let mut target_tree = Tree::new(render_target_label(target, grouped));
-    let visible_endpoints = target
-        .endpoints
-        .values()
-        .filter(|endpoint| show_all_states || is_visible_state(&endpoint.state))
-        .collect::<Vec<_>>();
-
-    for endpoint in visible_endpoints {
-        target_tree.push(render_endpoint_tree(endpoint));
+    let host = identification.and_then(|details| {
+        details
+            .hosts
+            .iter()
+            .find(|host| host.ip == target.target.address)
+    });
+    let external_ports: std::collections::BTreeMap<_, _> = host
+        .into_iter()
+        .flat_map(|host| &host.ports)
+        .map(|port| ((port.port, port.protocol.as_str()), port))
+        .collect();
+    for endpoint in target.endpoints.values() {
+        let protocol = match endpoint.transport {
+            crate::model::Transport::Tcp | crate::model::Transport::Syn => "tcp",
+            crate::model::Transport::Udp | crate::model::Transport::Quic => "udp",
+        };
+        let external = external_ports.get(&(endpoint.port, protocol)).copied();
+        if show_all_states
+            || is_visible_state(&endpoint.state)
+            || external.is_some_and(is_visible_external_port)
+        {
+            let mut node = render_endpoint_tree(endpoint);
+            if let Some(port) = external {
+                append_external_port(&mut node, port, Some(endpoint));
+            }
+            target_tree.push(node);
+        }
+    }
+    if let Some(host) = host {
+        for port in &host.ports {
+            if !target
+                .endpoints
+                .get(&port.port)
+                .is_some_and(|endpoint| matches_external_port(endpoint, port))
+                && (show_all_states || is_visible_external_port(port))
+            {
+                let mut node = Tree::new(format!("{}/{}", port.port, port.protocol.to_uppercase()));
+                append_external_port(&mut node, port, None);
+                target_tree.push(node);
+            }
+        }
+        for summary in &host.port_summaries {
+            let mut node = Tree::new(format!(
+                "Nmap port summary: {} port(s): {}",
+                summary.count, summary.state
+            ));
+            for reason in &summary.reasons {
+                node.push(Tree::new(format!(
+                    "{}: {} port(s)",
+                    reason.reason, reason.count
+                )));
+            }
+            target_tree.push(node);
+        }
+        if let Some(os) = preferred_os_match(&host.os_matches) {
+            target_tree.push(Tree::new(format!("OS: {} ({}%)", os.name, os.accuracy)));
+        }
+    }
+    if let Some(details) = identification {
+        for failure in &details.failures {
+            if failure.ip == target.target.address {
+                target_tree.push(Tree::new(format!("Nmap error: {}", failure.error)));
+            }
+        }
     }
 
     if let Some(fingerprint) = &target.fingerprint {
@@ -760,6 +923,7 @@ mod tests {
             },
         );
         ScanReport {
+            identification: None,
             metadata: ScanMetadata {
                 schema_version: crate::model::REPORT_SCHEMA_VERSION,
                 version: "test".to_string(),
@@ -781,6 +945,190 @@ mod tests {
                 endpoints,
             }],
         }
+    }
+
+    fn identified_report() -> ScanReport {
+        let mut report = sample_report();
+        report.identification = Some(
+            serde_json::from_value(serde_json::json!({
+                "source": "nmap", "version": "test", "complete": true, "error": null,
+                "hosts": [{
+                    "ip": "127.0.0.1",
+                    "ports": [
+                        {"port": 22, "protocol": "tcp", "state": {"state": "open"},
+                         "service": {"name": "ssh", "product": "OpenSSH", "version": "9.9"}},
+                        {"port": 80, "protocol": "tcp", "state": {"state": "open"}}
+                    ],
+                    "os_matches": [{"name": "Linux", "accuracy": 98}]
+                }]
+            }))
+            .unwrap(),
+        );
+        report
+    }
+
+    #[test]
+    fn external_identification_merges_into_native_host_and_port_nodes() {
+        let report = identified_report();
+        let before = serde_json::to_value(&report).unwrap();
+        let rendered = render_human_scan_report(&report, false);
+        assert_eq!(rendered.matches("127.0.0.1").count(), 1);
+        assert_eq!(rendered.matches("22/SYN").count(), 1);
+        assert!(!rendered.contains("22/TCP"));
+        let ssh = rendered
+            .split("22/SYN")
+            .nth(1)
+            .unwrap()
+            .split("80/TCP")
+            .next()
+            .unwrap();
+        assert!(ssh.contains("banner: SSH-2.0-test"));
+        assert!(ssh.contains("product: OpenSSH"));
+        assert!(ssh.contains("version: 9.9"));
+        assert!(rendered.contains("OS: Linux (98%)"));
+        // A later external response must not erase the native filtered state.
+        let http = rendered.split("80/TCP").nth(1).unwrap();
+        assert!(http.contains("state: Filtered"));
+        assert!(http.contains("state: open"));
+        assert_eq!(before, serde_json::to_value(&report).unwrap());
+    }
+
+    #[test]
+    fn merged_fields_prefer_native_values_without_hiding_disagreements() {
+        let mut report = identified_report();
+        let rendered = render_human_scan_report(&report, false);
+        let ssh = rendered
+            .split("22/SYN")
+            .nth(1)
+            .unwrap()
+            .split("80/TCP")
+            .next()
+            .unwrap();
+        assert_eq!(ssh.matches("state:").count(), 1);
+        assert_eq!(ssh.matches("service:").count(), 1);
+        assert!(ssh.contains("state: Open"));
+        assert!(ssh.contains("service: ssh"));
+        assert!(!rendered.contains("(Nmap)"));
+
+        let endpoint = report.targets[0].endpoints.get_mut(&22).unwrap();
+        endpoint.state = EndpointState::OpenFiltered;
+        let port = &mut report.identification.as_mut().unwrap().hosts[0].ports[0];
+        port.state.state = "open|filtered".into();
+        port.service.as_mut().unwrap().name = Some("SSH".into());
+        let rendered = render_human_scan_report(&report, false);
+        let ssh = rendered
+            .split("22/SYN")
+            .nth(1)
+            .unwrap()
+            .split("80/TCP")
+            .next()
+            .unwrap();
+        assert_eq!(ssh.matches("state:").count(), 1);
+        assert_eq!(ssh.matches("service:").count(), 1);
+        assert!(ssh.contains("state: Open|Filtered"));
+
+        let port = &mut report.identification.as_mut().unwrap().hosts[0].ports[0];
+        port.state.state = "closed".into();
+        port.service.as_mut().unwrap().name = Some("other".into());
+        let rendered = render_human_scan_report(&report, false);
+        let ssh = rendered
+            .split("22/SYN")
+            .nth(1)
+            .unwrap()
+            .split("80/TCP")
+            .next()
+            .unwrap();
+        assert!(ssh.contains("state: Open|Filtered"));
+        assert!(ssh.contains("state: closed"));
+        assert!(ssh.contains("service: ssh"));
+        assert!(ssh.contains("service: other"));
+    }
+
+    #[test]
+    fn os_display_selects_one_match_and_prefers_generic_linux_on_accuracy_ties() {
+        let mut report = identified_report();
+        let matches = &mut report.identification.as_mut().unwrap().hosts[0].os_matches;
+        *matches = [
+            ("OpenWrt 21.02 (Linux 5.4)", 97),
+            ("MikroTik RouterOS 7.2 - 7.5 (Linux 5.6.3)", 97),
+            ("Linux 4.15 - 5.19", 97),
+            ("Linux 6.0", 96),
+            ("Linux 4.19", 96),
+        ]
+        .into_iter()
+        .map(|(name, accuracy)| crate::nmap::OsMatch {
+            name: name.into(),
+            accuracy,
+            classes: vec![],
+        })
+        .collect();
+        let before = serde_json::to_value(&report).unwrap();
+        let rendered = render_human_scan_report(&report, false);
+        assert_eq!(rendered.matches("OS:").count(), 1);
+        assert!(rendered.contains("OS: Linux 4.15 - 5.19 (97%)"));
+        assert!(!rendered.contains("OpenWrt"));
+        assert!(!rendered.contains("Linux 6.0"));
+        assert_eq!(before, serde_json::to_value(&report).unwrap());
+
+        let matches = &mut report.identification.as_mut().unwrap().hosts[0].os_matches;
+        matches[0].accuracy = 98;
+        assert_eq!(preferred_os_match(matches).unwrap().name, matches[0].name);
+        matches.clear();
+        assert!(preferred_os_match(matches).is_none());
+    }
+
+    #[test]
+    fn external_ports_match_wire_protocol_and_respect_visibility() {
+        let mut report = identified_report();
+        let ports = &mut report.identification.as_mut().unwrap().hosts[0].ports;
+        ports[0].protocol = "udp".into();
+        ports[1].state.state = "closed".into();
+        let rendered = render_human_scan_report(&report, false);
+        assert!(rendered.contains("22/UDP"));
+        let native = rendered
+            .split("22/SYN")
+            .nth(1)
+            .unwrap()
+            .split("22/UDP")
+            .next()
+            .unwrap();
+        assert!(!native.contains("product:"));
+        assert!(!rendered.contains("80/TCP"));
+        assert!(render_human_scan_report(&report, true).contains("state: closed"));
+        report.targets[0].endpoints.get_mut(&22).unwrap().transport = Transport::Quic;
+        let rendered = render_human_scan_report(&report, false);
+        assert!(rendered.contains("22/QUIC"));
+        assert!(!rendered.contains("22/UDP"));
+        assert!(rendered.contains("product: OpenSSH"));
+    }
+
+    #[test]
+    fn external_failures_and_summaries_remain_under_the_target() {
+        let mut report = identified_report();
+        report.targets[0].endpoints.clear();
+        let details = report.identification.as_mut().unwrap();
+        details.hosts[0].ports.clear();
+        details.hosts[0]
+            .port_summaries
+            .push(crate::nmap::PortSummary {
+                state: "closed".into(),
+                count: 10,
+                reasons: vec![],
+            });
+        let rendered = render_human_scan_report(&report, false);
+        assert!(rendered.contains("Nmap port summary: 10 port(s): closed"));
+        assert!(rendered.contains("OS: Linux"));
+        let details = report.identification.as_mut().unwrap();
+        details.hosts.clear();
+        details.complete = false;
+        details.failures.push(crate::nmap::IdentificationFailure {
+            ip: report.targets[0].target.address,
+            error: "timed out".into(),
+        });
+        let rendered = render_human_scan_report(&report, false);
+        assert!(rendered.contains("example (127.0.0.1)"));
+        assert!(rendered.contains("Nmap error: timed out"));
+        assert!(!rendered.contains("no open ports"));
     }
 
     #[test]
@@ -899,6 +1247,7 @@ mod tests {
     #[test]
     fn human_output_groups_cidr_targets_under_the_original_input() {
         let report = ScanReport {
+            identification: None,
             metadata: ScanMetadata {
                 schema_version: crate::model::REPORT_SCHEMA_VERSION,
                 version: "test".to_string(),

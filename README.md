@@ -6,13 +6,14 @@ Features:
 
 - Port scanning with TCP, UDP, TCP-SYN, and QUIC transports
 - Host discovery with ICMP, UDP, and TCP probes
-- Active ping with ICMP, UDP, TCP, and QUIC methods
+- Ping with ICMP, UDP, TCP, and QUIC probes
 - Traceroute with UDP and ICMP probes
 - Neighbor discovery with ARP and NDP
-- Built-in service observation for common protocols
+- Service probes, TLS metadata, and HTTP/3 support
+- Optional detailed service and OS identification through Nmap
 - Structured JSON output for automation
 - External data packs for probes, fingerprint rules, profiles, and recipes
-- Task files for repeatable target lists and scan executions
+- Task files for repeatable scans
 
 ## Supported platforms
 
@@ -68,51 +69,32 @@ Commands:
   recipe  Show externally loaded scan recipes
 ```
 
-## Output
+## Quick start
 
-Reports include:
+```sh
+nrev port 192.168.10.10 --ports 22,80,443
+nrev port 192.168.10.10 --transport quic --ports 443
+nrev host 192.168.10.0/24 --method tcp --ports 80,443
+nrev port 192.168.10.10 --format json --output result.json
+```
 
-- Human-readable output
-- JSON output with a versioned schema
-- Phase timings for resolution, discovery, scanning, and follow-up probes
+Add `--nmap` for service/version identification or `--os-detect` for OS
+identification. These options require Nmap to be installed separately.
 
-JSON reports include `metadata.schema_version` and use `snake_case` enum values.
-File output is written atomically to avoid leaving a partial report.
-TLS and QUIC certificates are observed rather than trusted; reports mark
-`certificate_validation` as `not_performed` and must not be used as a trust
-decision.
+```sh
+nrev port 192.168.10.10 --ports top-100 --nmap
+```
 
-## Operational safety
+Only scan systems you own or have permission to test.
 
-Only scan systems you own or are authorized to assess. Target expansion is
-limited to 65,536 unique addresses and 1,000,000 endpoint assignments per
-invocation. Split larger inventories across separate invocations.
+## Documentation and examples
 
-## External Data
+See the [usage guide](docs/USAGE.md) for scan options, output formats, and
+configuration. Run `nrev <command> --help` for the full option list.
 
-`--data` accepts:
-
-- A single `.json` file
-- A single `.toml` file
-- A directory containing multiple `.json` and `.toml` files
-
-Each file may contain any combination of:
-
-- `probes`
-- `fingerprint_rules`
-- `recipes`
-
-## Samples
-
-The repository includes sample data under [samples/](samples):
-
-- [samples/recipes/](samples/recipes) for recipe-only examples
-- [samples/data-pack/](samples/data-pack) for mixed external data pack examples
-- [samples/tasks/](samples/tasks) for runnable task-file examples
-
-## Documentation
-
-- [Usage Guide](docs/USAGE.md)
+- [Recipes](samples/recipes): reusable scan settings
+- [Data packs](samples/data-pack): custom probes, fingerprint rules, and recipes
+- [Tasks](samples/tasks): targets and scan settings in one file
 
 ## Privileges
 

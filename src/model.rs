@@ -166,6 +166,8 @@ pub struct ScanMetadata {
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
 pub struct ScanReport {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub identification: Option<crate::nmap::Identification>,
     pub metadata: ScanMetadata,
     pub targets: Vec<TargetReport>,
 }
@@ -381,6 +383,8 @@ pub struct HostScanReport {
 
 #[derive(Clone, Debug, Serialize, Deserialize, Eq, PartialEq)]
 pub struct ScanTimings {
+    #[serde(default, with = "duration_ms")]
+    pub identification: Duration,
     #[serde(with = "duration_ms")]
     pub target_resolution: Duration,
     #[serde(with = "duration_ms")]

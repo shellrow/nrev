@@ -28,7 +28,7 @@ futures = "0.3.34"
 rustls = { version = "0.23.46", default-features = false, features = ["ring", "std"] }
 rustls-pki-types = "1.15.1"
 x509-parser = "0.18.1"
-tokio = { version = "1.54.1", features = ["macros", "rt-multi-thread", "time", "net", "io-util", "sync"] }
+tokio = { version = "1.54.1", features = ["macros", "rt-multi-thread", "time", "net", "io-util", "sync", "process"] }
 tokio-rustls = { version = "0.26.6", default-features = false, features = ["ring"] }
 chrono = { version = "0.4.45", features = ["serde"] }
 rand = "0.10.3"
@@ -42,8 +42,13 @@ h3-quinn = "0.0.10"
 http = "1.5.0"
 bytes = "1.12.1"
 tempfile = "3.27.0"
+quick-xml = { version = "0.42.0", features = ["serialize"] }
+
+[target.'cfg(unix)'.dependencies]
+libc = "0.2.191"
 
 [dev-dependencies]
+rcgen = { version = "0.14.10", default-features = false, features = ["ring"] }
 tokio = { version = "1.54.1", features = ["test-util"] }
 
 # The profile that 'dist' will build with

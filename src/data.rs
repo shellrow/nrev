@@ -8,11 +8,9 @@ use serde::{Deserialize, Serialize};
 use crate::{
     config::ScanRecipe,
     error::{NrevError, Result},
-    fingerprint::{
-        FingerprintRule, LegacyOsDb, LegacyOsSignature, OsClassTtl, builtin_os_signatures,
-    },
+    fingerprint::{FingerprintRule, LegacyOsSignature, OsClassTtl},
     probes::{BuiltinProbeCatalog, ExternalProbeDefinition},
-    service_db::{LegacyServiceDb, LegacyServiceSignature, builtin_service_signatures},
+    service_db::LegacyServiceSignature,
 };
 
 const MAX_EXTERNAL_DATA_FILE_BYTES: u64 = 16 * 1024 * 1024;
@@ -33,7 +31,7 @@ pub struct ExternalDataFile {
     pub recipes: Vec<ScanRecipe>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct DataRegistry {
     pub external_probes: Vec<ExternalProbeDefinition>,
     pub fingerprint_rules: Vec<FingerprintRule>,
@@ -41,19 +39,6 @@ pub struct DataRegistry {
     pub os_signatures: Vec<LegacyOsSignature>,
     pub service_signatures: Vec<LegacyServiceSignature>,
     pub recipes: Vec<ScanRecipe>,
-}
-
-impl Default for DataRegistry {
-    fn default() -> Self {
-        Self {
-            external_probes: Vec::new(),
-            fingerprint_rules: Vec::new(),
-            os_ttl_classes: Vec::new(),
-            os_signatures: builtin_os_signatures(),
-            service_signatures: builtin_service_signatures(),
-            recipes: Vec::new(),
-        }
-    }
 }
 
 impl DataRegistry {
@@ -115,36 +100,30 @@ impl DataRegistry {
 }
 
 fn parse_json_data_file(content: &str) -> Result<ExternalDataFile> {
-    if let Ok(file) = serde_json::from_str::<ExternalDataFile>(content) {
-        return Ok(file);
-    }
-
-    if let Ok(ttl_classes) = serde_json::from_str::<Vec<OsClassTtl>>(content) {
+    let mut value: serde_json::Value = serde_json::from_str(content)?;
+    if value.is_array() {
         return Ok(ExternalDataFile {
-            os_ttl_classes: ttl_classes,
+            os_ttl_classes: serde_json::from_value(value)?,
             ..ExternalDataFile::default()
         });
     }
-
-    if let Ok(db) = serde_json::from_str::<LegacyOsDb>(content)
-        && !db.signatures.is_empty()
-    {
-        return Ok(ExternalDataFile {
-            os_signatures: db.signatures,
-            ..ExternalDataFile::default()
-        });
+    let signatures = value
+        .as_object_mut()
+        .and_then(|object| object.remove("signatures"));
+    let mut file: ExternalDataFile = serde_json::from_value(value)?;
+    if let Some(signatures) = signatures {
+        // Legacy signatures may coexist with probes, rules, and recipes.
+        let signatures: Vec<serde_json::Value> = serde_json::from_value(signatures)?;
+        for signature in signatures {
+            if signature.get("signature").is_some() {
+                file.os_signatures.push(serde_json::from_value(signature)?);
+            } else {
+                file.service_signatures
+                    .push(serde_json::from_value(signature)?);
+            }
+        }
     }
-
-    if let Ok(db) = serde_json::from_str::<LegacyServiceDb>(content)
-        && !db.signatures.is_empty()
-    {
-        return Ok(ExternalDataFile {
-            service_signatures: db.signatures,
-            ..ExternalDataFile::default()
-        });
-    }
-
-    Ok(serde_json::from_str::<ExternalDataFile>(content)?)
+    Ok(file)
 }
 
 #[cfg(test)]
@@ -167,10 +146,25 @@ mod tests {
     }
 
     #[test]
-    fn loads_builtin_registry_by_default() {
+    fn legacy_signature_files_remain_explicitly_loadable() {
+        let service = parse_json_data_file(
+            r#"{"signatures":[{"probe_id":"ssh","service":"ssh","regex":"^SSH-2.0-","cpe":[]}]}"#,
+        )
+        .unwrap();
+        assert_eq!(service.service_signatures.len(), 1);
+        let os =
+            parse_json_data_file(r#"{"signatures":[{"signature":{"order_key":"MSS"},"cpe":[]}]}"#)
+                .unwrap();
+        assert_eq!(os.os_signatures.len(), 1);
+    }
+
+    #[test]
+    fn default_registry_has_no_identification_database() {
         let registry = DataRegistry::load(None).expect("load registry");
-        assert!(!registry.os_signatures.is_empty());
-        assert!(!registry.service_signatures.is_empty());
+        assert!(registry.os_signatures.is_empty());
+        assert!(registry.service_signatures.is_empty());
+        assert!(registry.os_ttl_classes.is_empty());
+        assert!(!registry.builtin_catalog().probes().is_empty());
     }
 
     #[test]
@@ -260,5 +254,34 @@ expect = ["HTTP/"]
         assert_eq!(registry.fingerprint_rules.len(), 1);
 
         fs::remove_dir_all(dir).ok();
+    }
+    #[test]
+    fn malformed_legacy_signatures_are_not_silently_ignored() {
+        for json in [
+            r#"{"signatures":[{}]}"#,
+            r#"{"signatures":null}"#,
+            r#"{"signatures":[{"signature":"invalid"}]}"#,
+        ] {
+            assert!(parse_json_data_file(json).is_err());
+        }
+    }
+
+    #[test]
+    fn mixed_pack_keeps_legacy_signatures_and_modern_sections() {
+        let file = parse_json_data_file(
+            r#"{
+            "probes":[{"id":"custom","transport":"udp","ports":[53],"payload":"test"}],
+            "recipes":[{"name":"custom"}],
+            "signatures":[
+                {"signature":{"order_key":"MSS"},"cpe":["cpe:/o:linux:linux_kernel"]},
+                {"probe_id":"ssh","service":"ssh","regex":"^SSH-"}
+            ]
+        }"#,
+        )
+        .unwrap();
+        assert_eq!(file.probes.len(), 1);
+        assert_eq!(file.recipes.len(), 1);
+        assert_eq!(file.os_signatures.len(), 1);
+        assert_eq!(file.service_signatures.len(), 1);
     }
 }

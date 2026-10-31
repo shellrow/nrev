@@ -12,8 +12,7 @@ use crate::{
     data::DataRegistry,
     fingerprint::{
         baseline_syn_observation, baseline_tcp_observation, baseline_udp_observation,
-        build_platform_match, builtin_os_ttl_classes, match_legacy_os_signatures, match_rules,
-        match_ttl_classes,
+        build_platform_match, match_legacy_os_signatures, match_rules, match_ttl_classes,
     },
     model::{EndpointResult, EndpointState, ScanMetadata, ScanReport, TargetReport, Transport},
     probes::{ProbeContext, select_builtin_probes},
@@ -35,12 +34,17 @@ pub struct Scanner<C> {
 pub struct ScanExecution {
     pub report: ScanReport,
     pub transport_scan_time: std::time::Duration,
+    pub identification_time: std::time::Duration,
     pub followup_probe_time: std::time::Duration,
     pub followup_endpoint_count: usize,
 }
 
 #[derive(Clone, Copy, Debug)]
 pub enum ScanEvent {
+    IdentificationStarted,
+    IdentificationCompleted {
+        elapsed: std::time::Duration,
+    },
     TransportScanStarted {
         target_count: usize,
         port_count: usize,
@@ -65,6 +69,7 @@ struct TargetPhaseResult {
 }
 
 struct FollowupResult {
+    connection_refused: bool,
     observations: Vec<crate::model::ProbeObservation>,
     errors: Vec<String>,
 }
@@ -101,6 +106,12 @@ where
     where
         F: FnMut(ScanEvent),
     {
+        self.config.identification.validate(self.config.transport)?;
+        let external = if self.config.identification.enabled() {
+            Some(crate::nmap::Nmap::preflight(&self.config.identification.executable).await?)
+        } else {
+            None
+        };
         let mut targets = targets;
         let mut rng = rand::rng();
         targets.shuffle(&mut rng);
@@ -191,8 +202,26 @@ where
             });
         }
 
+        let mut identification_time = std::time::Duration::ZERO;
+        let identification = if let Some(nmap) = external {
+            on_event(ScanEvent::IdentificationStarted);
+            let started = std::time::Instant::now();
+            let result = nmap
+                .identify(&target_reports, config.transport, &config.identification)
+                .await;
+            identification_time = started.elapsed();
+            on_event(ScanEvent::IdentificationCompleted {
+                elapsed: identification_time,
+            });
+            Some(result)
+        } else {
+            None
+        };
+
         Ok(ScanExecution {
+            identification_time,
             report: ScanReport {
+                identification,
                 metadata: ScanMetadata {
                     schema_version: crate::model::REPORT_SCHEMA_VERSION,
                     version: env!("CARGO_PKG_VERSION").to_string(),
@@ -458,6 +487,30 @@ async fn scan_transport_endpoint<C: Connector>(
             Ok(outcome) => {
                 let state = classify_open_state(config.transport, &outcome.connection);
                 let fingerprint = build_fingerprint(config.transport, &outcome.connection, false);
+                let observations = if let ProbeConnection::Quic(quic) = &outcome.connection {
+                    vec![crate::model::ProbeObservation {
+                        probe_id: "quic-handshake".into(),
+                        service_hint: None,
+                        banner: None,
+                        tls: Some(quic.tls().clone()),
+                        tags: vec!["quic".into()],
+                        evidence: quic
+                            .open_signal()
+                            .map(|signal| crate::model::Evidence {
+                                key: "open_signal".into(),
+                                value: signal.into(),
+                            })
+                            .into_iter()
+                            .collect(),
+                        confidence: if quic.handshake_observed() {
+                            crate::model::Confidence::High
+                        } else {
+                            crate::model::Confidence::Medium
+                        },
+                    }]
+                } else {
+                    Vec::new()
+                };
                 let reusable_connection = if is_probe_candidate(&state)
                     && matches!(
                         config.transport,
@@ -479,7 +532,7 @@ async fn scan_transport_endpoint<C: Connector>(
                         transport: config.transport,
                         state,
                         latency: outcome.latency,
-                        observations: Vec::new(),
+                        observations,
                         fingerprint: Some(fingerprint),
                         fingerprint_matches: Vec::new(),
                         errors,
@@ -552,12 +605,14 @@ async fn run_followup_phase<C: Connector>(
 
         for (port, followup) in followups {
             if let Some(endpoint) = endpoints.get_mut(&port) {
-                endpoint.observations = followup.observations;
+                endpoint.observations.extend(followup.observations);
                 endpoint.errors.extend(followup.errors);
-                if endpoint.state == EndpointState::OpenFiltered
-                    && !endpoint.observations.is_empty()
-                {
-                    endpoint.state = EndpointState::Open;
+                if endpoint.state == EndpointState::OpenFiltered {
+                    if !endpoint.observations.is_empty() {
+                        endpoint.state = EndpointState::Open;
+                    } else if followup.connection_refused && config.transport == Transport::Udp {
+                        endpoint.state = EndpointState::Closed;
+                    }
                 }
                 if let Some(fingerprint) = endpoint.fingerprint.as_mut() {
                     fingerprint.response_observed = !endpoint.observations.is_empty();
@@ -598,6 +653,7 @@ async fn collect_followup_observations<C: Connector>(
 ) -> FollowupResult {
     let mut observations = Vec::new();
     let mut errors = Vec::new();
+    let mut connection_refused = false;
     let followup_transport = probe_transport(config.transport);
     let address = target.address.to_string();
     let host = target.hostname.as_deref().unwrap_or(&address);
@@ -644,11 +700,18 @@ async fn collect_followup_observations<C: Connector>(
                                 break;
                             }
                         }
-                        Ok(Err(error)) => errors.push(format!("{}: {error}", probe.id())),
+                        Ok(Err(error)) => {
+                            connection_refused |= matches!(&error, crate::error::NrevError::Io(error)
+                                if error.kind() == std::io::ErrorKind::ConnectionRefused);
+                            errors.push(format!("{}: {error}", probe.id()));
+                        }
                         Err(_) => errors.push(format!("{}: probe timed out", probe.id())),
                     }
                 }
-                Err(error) => errors.push(error.to_string()),
+                Err(error) => {
+                    connection_refused |= error.kind() == std::io::ErrorKind::ConnectionRefused;
+                    errors.push(error.to_string());
+                }
             }
         }
     }
@@ -686,15 +749,23 @@ async fn collect_followup_observations<C: Connector>(
                 .await
                 {
                     Ok(Ok(observation)) => observations.push(observation),
-                    Ok(Err(error)) => errors.push(error.to_string()),
+                    Ok(Err(error)) => {
+                        connection_refused |= matches!(&error, crate::error::NrevError::Io(error)
+                            if error.kind() == std::io::ErrorKind::ConnectionRefused);
+                        errors.push(error.to_string());
+                    }
                     Err(_) => errors.push("external probe timed out".to_string()),
                 }
             }
-            Err(error) => errors.push(error.to_string()),
+            Err(error) => {
+                connection_refused |= error.kind() == std::io::ErrorKind::ConnectionRefused;
+                errors.push(error.to_string());
+            }
         }
     }
 
     FollowupResult {
+        connection_refused,
         observations: {
             let mut observations = observations;
             for observation in &mut observations {
@@ -722,7 +793,9 @@ fn build_fingerprint(
         Transport::Quic => {
             let mut fingerprint = baseline_udp_observation(response_observed);
             fingerprint.transport = Transport::Quic;
-            fingerprint.handshake_observed = true;
+            fingerprint.handshake_observed =
+                matches!(connection, ProbeConnection::Quic(quic) if quic.handshake_observed());
+            fingerprint.response_observed = true;
             fingerprint
         }
         Transport::Syn => match connection {
@@ -764,7 +837,6 @@ fn collect_fingerprint_matches(
     registry: &DataRegistry,
 ) -> Vec<crate::model::FingerprintMatch> {
     let mut matches = match_rules(fingerprint, &registry.fingerprint_rules);
-    matches.extend(match_ttl_classes(fingerprint, &builtin_os_ttl_classes()));
     matches.extend(match_ttl_classes(fingerprint, &registry.os_ttl_classes));
     matches.extend(match_legacy_os_signatures(
         fingerprint,
@@ -957,7 +1029,7 @@ fn is_ttl_class_match(candidate: &crate::model::FingerprintMatch) -> bool {
     candidate
         .evidence
         .iter()
-        .any(|item| item.key == "source" && item.value == "builtin-ttl-class")
+        .any(|item| item.key == "source" && item.value == "external-ttl-class")
 }
 
 fn is_specific_platform_match(candidate: &crate::model::FingerprintMatch) -> bool {
@@ -1263,6 +1335,7 @@ mod tests {
         });
 
         let config = ScanConfig {
+            identification: Default::default(),
             profile_name: "test".to_string(),
             recipe_name: None,
             transport: Transport::Tcp,
@@ -1340,6 +1413,7 @@ mod tests {
     #[tokio::test]
     async fn connect_scan_runs_ports_concurrently() {
         let config = ScanConfig {
+            identification: Default::default(),
             profile_name: "test".to_string(),
             recipe_name: None,
             transport: Transport::Tcp,
@@ -1422,6 +1496,7 @@ mod tests {
         };
         let peak = connector.peak.clone();
         let config = ScanConfig {
+            identification: Default::default(),
             profile_name: "test".to_string(),
             recipe_name: None,
             transport: Transport::Tcp,
@@ -1467,6 +1542,7 @@ mod tests {
         };
         let peak = connector.peak.clone();
         let config = ScanConfig {
+            identification: Default::default(),
             profile_name: "test".to_string(),
             recipe_name: None,
             transport: Transport::Tcp,
@@ -1537,7 +1613,7 @@ mod tests {
                     confidence: Confidence::Low,
                     evidence: vec![Evidence {
                         key: "source".to_string(),
-                        value: "builtin-ttl-class".to_string(),
+                        value: "external-ttl-class".to_string(),
                     }],
                 },
                 FingerprintMatch {
@@ -1581,7 +1657,7 @@ mod tests {
                     confidence: Confidence::Low,
                     evidence: vec![Evidence {
                         key: "source".to_string(),
-                        value: "builtin-ttl-class".to_string(),
+                        value: "external-ttl-class".to_string(),
                     }],
                 },
                 FingerprintMatch {

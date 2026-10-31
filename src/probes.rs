@@ -490,12 +490,27 @@ impl Probe for DnsUdpProbe {
         connection: ProbeConnection,
         context: ProbeContext<'_>,
     ) -> Result<ProbeObservation> {
-        let raw = exchange_bytes(connection, &dns_version_query_udp(), context.timeout).await?;
-        Ok(binary_observation(
+        let query = dns_version_query_udp();
+        let raw = exchange_bytes(connection, &query, context.timeout).await?;
+        let valid =
+            raw.len() >= 12 && raw[..2] == query[..2] && raw[2] & 0x80 != 0 && raw[2] & 0x78 == 0;
+        let mut details = Vec::new();
+        if valid {
+            details.push(Evidence {
+                key: "dns_rcode".into(),
+                value: (raw[3] & 0x0f).to_string(),
+            });
+            details.push(Evidence {
+                key: "dns_answers".into(),
+                value: u16::from_be_bytes([raw[6], raw[7]]).to_string(),
+            });
+        }
+        Ok(validated_udp_observation(
             self.id(),
             "dns",
             raw,
-            vec!["infrastructure".to_string()],
+            valid,
+            details,
         ))
     }
 }
@@ -521,16 +536,32 @@ impl Probe for NtpProbe {
         connection: ProbeConnection,
         context: ProbeContext<'_>,
     ) -> Result<ProbeObservation> {
-        let request = [
-            0x1b, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        ];
+        let mut request = [0_u8; 48];
+        request[0] = 0x23; // NTP version 4, client mode.
+        let timestamp = rand::random::<u64>().to_be_bytes();
+        request[40..48].copy_from_slice(&timestamp);
         let raw = exchange_bytes(connection, &request, context.timeout).await?;
-        Ok(binary_observation(
+        let valid = raw.len() >= 48
+            && raw[0] & 7 == 4
+            && matches!((raw[0] >> 3) & 7, 3 | 4)
+            && raw[24..32] == timestamp;
+        let mut details = Vec::new();
+        if valid {
+            details.push(Evidence {
+                key: "ntp_version".into(),
+                value: ((raw[0] >> 3) & 7).to_string(),
+            });
+            details.push(Evidence {
+                key: "ntp_stratum".into(),
+                value: raw[1].to_string(),
+            });
+        }
+        Ok(validated_udp_observation(
             self.id(),
             "ntp",
             raw,
-            vec!["infrastructure".to_string()],
+            valid,
+            details,
         ))
     }
 }
@@ -876,14 +907,14 @@ impl Probe for QuicProbe {
                 .negotiated_protocol
                 .as_deref()
                 .is_some_and(|protocol| protocol.starts_with("h3"))
-            && let Ok(response) = read_http3_response(
+        {
+            let response = read_http3_response(
                 connection,
                 &http_authority(context.host, context.port),
                 context.timeout,
                 context.http_body_preview_bytes,
             )
-            .await
-        {
+            .await?;
             banner = Some(normalize_banner(response.header_text.clone()));
             evidence.extend(extract_http_evidence(&response));
             service_hint = ServiceHint {
@@ -893,16 +924,16 @@ impl Probe for QuicProbe {
             tags.push("web".to_string());
         }
 
-        endpoint.wait_idle().await;
+        endpoint.close(0u32.into(), b"probe complete");
 
         Ok(ProbeObservation {
             probe_id: self.id().to_string(),
+            confidence: service_hint.confidence.clone(),
             service_hint: Some(service_hint),
             banner,
             tls: Some(tls),
             tags,
             evidence,
-            confidence: Confidence::High,
         })
     }
 }
@@ -923,6 +954,27 @@ fn simple_observation(service: &str, raw: String, tags: Vec<String>) -> ProbeObs
         }],
         confidence: Confidence::Medium,
     }
+}
+
+fn validated_udp_observation(
+    probe: &str,
+    service: &str,
+    raw: Vec<u8>,
+    valid: bool,
+    details: Vec<Evidence>,
+) -> ProbeObservation {
+    let mut observation = binary_observation(probe, service, raw, vec!["infrastructure".into()]);
+    observation.evidence.push(Evidence {
+        key: "response_validated".into(),
+        value: valid.to_string(),
+    });
+    observation.evidence.extend(details);
+    if !valid {
+        // A datagram proves reachability, but not the service that produced it.
+        observation.service_hint = None;
+        observation.confidence = Confidence::Low;
+    }
+    observation
 }
 
 fn binary_observation(
@@ -1258,7 +1310,7 @@ async fn read_http3_response(
         .map_err(|error| NrevError::Tls(error.to_string()))?;
 
     let header_text = format_http_headers(response.status().as_u16(), response.headers());
-    let mut body = String::new();
+    let mut body = Vec::new();
     while body.len() < body_limit {
         let Some(chunk) = timeout(timeout_window, stream.recv_data())
             .await
@@ -1269,14 +1321,12 @@ async fn read_http3_response(
         };
         let remaining = body_limit.saturating_sub(body.len());
         let slice = chunk.chunk();
-        body.push_str(&String::from_utf8_lossy(
-            &slice[..slice.len().min(remaining)],
-        ));
+        body.extend_from_slice(&slice[..slice.len().min(remaining)]);
     }
 
     Ok(HttpResponsePreview {
         header_text,
-        body_preview: (!body.is_empty()).then_some(body),
+        body_preview: (!body.is_empty()).then(|| String::from_utf8_lossy(&body).into_owned()),
     })
 }
 
@@ -1651,20 +1701,20 @@ fn rdp_protocol_name(protocol: u32) -> &'static str {
     }
 }
 
-fn dns_version_query_udp() -> [u8; 31] {
-    [
-        0x12, 0x34, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, b'v', b'e',
-        b'r', b's', b'i', b'o', b'n', 0x04, b'b', b'i', b'n', b'd', 0x00, 0x00, 0x10, 0x00, 0x03,
-        0x00,
-    ]
+fn dns_version_query_udp() -> [u8; 30] {
+    let mut query = [
+        0, 0, 0x01, 0, 0, 1, 0, 0, 0, 0, 0, 0, 7, b'v', b'e', b'r', b's', b'i', b'o', b'n', 4,
+        b'b', b'i', b'n', b'd', 0, 0, 0x10, 0, 3,
+    ];
+    query[..2].copy_from_slice(&rand::random::<u16>().to_be_bytes());
+    query
 }
 
-fn dns_version_query_tcp() -> [u8; 33] {
-    [
-        0x00, 0x1f, 0x12, 0x34, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07,
-        b'v', b'e', b'r', b's', b'i', b'o', b'n', 0x04, b'b', b'i', b'n', b'd', 0x00, 0x00, 0x10,
-        0x00, 0x03, 0x00,
-    ]
+fn dns_version_query_tcp() -> [u8; 32] {
+    let mut query = [0_u8; 32];
+    query[..2].copy_from_slice(&30_u16.to_be_bytes());
+    query[2..].copy_from_slice(&dns_version_query_udp());
+    query
 }
 
 #[cfg(test)]

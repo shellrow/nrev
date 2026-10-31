@@ -3,9 +3,6 @@ use std::collections::BTreeSet;
 
 use crate::model::{Confidence, Evidence, FingerprintMatch, TcpIpObservation, Transport};
 
-const BUILTIN_OS_CLASS_TTL_JSON: &str = include_str!("../resources/nrev-os-class-ttl.json");
-const BUILTIN_OS_DB_JSON: &str = include_str!("../resources/nrev-os-db.json");
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct FingerprintRule {
     pub id: String,
@@ -173,16 +170,6 @@ pub fn classify_initial_ttl(ttl: u8) -> u8 {
         65..=128 => 128,
         _ => 255,
     }
-}
-
-pub fn builtin_os_ttl_classes() -> Vec<OsClassTtl> {
-    serde_json::from_str(BUILTIN_OS_CLASS_TTL_JSON).expect("embedded OS TTL classes must be valid")
-}
-
-pub fn builtin_os_signatures() -> Vec<LegacyOsSignature> {
-    serde_json::from_str::<LegacyOsDb>(BUILTIN_OS_DB_JSON)
-        .expect("embedded OS signature database must be valid")
-        .signatures
 }
 
 pub fn match_rules(
@@ -353,7 +340,7 @@ pub fn match_ttl_classes(
                 },
                 Evidence {
                     key: "source".to_string(),
-                    value: "builtin-ttl-class".to_string(),
+                    value: "external-ttl-class".to_string(),
                 },
             ],
         })
@@ -406,6 +393,10 @@ fn build_signature_evidence(
             value: (*key).to_string(),
         })
         .collect::<Vec<_>>();
+    evidence.push(Evidence {
+        key: "source".into(),
+        value: "external-os-signature".into(),
+    });
     if let Some(order) = &observation.tcp_option_order {
         evidence.push(Evidence {
             key: "tcp_option_order".to_string(),
@@ -447,7 +438,7 @@ fn score_legacy_os_signature<'a>(
                 matched_on.push("order_key");
             }
             Some(_) => return (0, Vec::new()),
-            None => {}
+            None => return (0, Vec::new()),
         }
     }
 
@@ -458,7 +449,7 @@ fn score_legacy_os_signature<'a>(
                 matched_on.push("set_key");
             }
             Some(_) => return (0, Vec::new()),
-            None => {}
+            None => return (0, Vec::new()),
         }
     }
 
@@ -473,7 +464,7 @@ fn score_legacy_os_signature<'a>(
                 matched_on.push("win_bucket");
             }
             Some(_) => return (0, Vec::new()),
-            None => {}
+            None => return (0, Vec::new()),
         }
     }
 
@@ -663,9 +654,13 @@ pub fn canonical_platform_label(family: &str) -> &'static str {
 }
 
 fn cpe_family(cpe: &str) -> Option<&'static str> {
-    let value = cpe.strip_prefix("cpe:/")?;
+    let value = cpe
+        .strip_prefix("cpe:/")
+        .or_else(|| cpe.strip_prefix("cpe:2.3:"))?;
     let mut parts = value.split(':');
-    let _part = parts.next()?;
+    if !matches!(parts.next()?, "o" | "h") {
+        return None;
+    }
     let vendor = parts.next()?;
     let product = parts.next().unwrap_or_default();
 
@@ -834,5 +829,58 @@ mod tests {
         assert_eq!(matches.len(), 1);
         assert_eq!(matches[0].family, "linux:linux_kernel");
         assert_eq!(matches[0].label, "Linux");
+    }
+    #[test]
+    fn application_cpes_do_not_imply_host_operating_systems() {
+        assert_eq!(
+            canonical_platform_family(&["cpe:/a:apple:itunes".into()]),
+            None
+        );
+        assert_eq!(
+            canonical_platform_family(&[
+                "cpe:2.3:a:microsoft:windows_media_player:*:*:*:*:*:*:*:*".into()
+            ]),
+            None
+        );
+        assert_eq!(
+            canonical_platform_family(&["cpe:2.3:o:linux:linux_kernel:*:*:*:*:*:*:*:*".into()]),
+            Some("linux:linux_kernel".into())
+        );
+    }
+
+    #[test]
+    fn legacy_signature_requires_all_configured_observations() {
+        let mut observation = baseline_syn_observation(true, true, false, Some(64), Some(65535));
+        observation.tcp_option_order = Some("MSS".into());
+        let signature = LegacyOsSignature {
+            signature: LegacyOsSignatureKey {
+                order_key: Some("MSS".into()),
+                set_key: Some("MSS".into()),
+                win_bucket: Some(vec![65535]),
+            },
+            cpe: vec!["cpe:/o:linux:linux_kernel".into()],
+        };
+        assert!(
+            match_legacy_os_signatures(&observation, std::slice::from_ref(&signature)).is_empty()
+        );
+        observation.tcp_option_set = Some("MSS".into());
+        assert_eq!(
+            match_legacy_os_signatures(&observation, &[signature]).len(),
+            1
+        );
+        let ttl = match_ttl_classes(
+            &observation,
+            &[OsClassTtl {
+                os_class: "test".into(),
+                os_description: "Test".into(),
+                initial_ttl: 64,
+            }],
+        );
+        assert!(
+            ttl[0]
+                .evidence
+                .iter()
+                .any(|item| item.key == "source" && item.value == "external-ttl-class")
+        );
     }
 }

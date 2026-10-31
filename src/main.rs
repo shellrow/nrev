@@ -204,6 +204,19 @@ fn progress(progress_mode: ProgressMode, quiet: bool, message: &str) {
 
 fn log_scan_event(quiet: bool, event: ScanEvent) {
     match event {
+        ScanEvent::IdentificationStarted => progress(
+            ProgressMode::Auto,
+            quiet,
+            "Starting detailed identification",
+        ),
+        ScanEvent::IdentificationCompleted { elapsed } => progress(
+            ProgressMode::Auto,
+            quiet,
+            &format!(
+                "Detailed identification completed in {}",
+                format_duration(elapsed)
+            ),
+        ),
         ScanEvent::TransportScanStarted {
             target_count,
             port_count,
@@ -270,6 +283,7 @@ fn init_logging(progress_mode: ProgressMode, quiet: bool) -> anyhow::Result<()> 
     tracing_subscriber::registry()
         .with(
             fmt::layer()
+                .with_writer(io::stderr)
                 .with_ansi(false)
                 .with_target(false)
                 .with_timer(ChronoLocal::new("%H:%M:%S%.3f%:z".to_string()))
@@ -425,11 +439,17 @@ async fn run_port_scan(
         .scan_with_progress(targets, |event| log_scan_event(config.quiet, event))
         .await?;
     execution.report.metadata.timings = Some(ScanTimings {
+        identification: execution.identification_time,
         target_resolution: target_resolution_time,
         transport_scan: execution.transport_scan_time,
         followup_probes: execution.followup_probe_time,
         total: started.elapsed(),
     });
+
+    if let Some(path) = &args.output {
+        let json_report = filtered_scan_report(&execution.report, config.show_all_states);
+        write_json_report(&json_report, path)?;
+    }
 
     log_open_port_summary(config.quiet, &execution.report);
 
@@ -461,11 +481,13 @@ async fn run_port_scan(
         ),
     );
 
-    if let Some(path) = &args.output {
-        let json_report = filtered_scan_report(&execution.report, config.show_all_states);
-        write_json_report(&json_report, path)?;
+    if let Some(details) = &execution.report.identification {
+        anyhow::ensure!(
+            details.complete,
+            "detailed identification failed; basic results were retained: {}",
+            details.error.as_deref().unwrap_or("unknown error")
+        );
     }
-
     Ok(())
 }
 

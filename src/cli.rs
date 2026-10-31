@@ -130,6 +130,8 @@ pub struct TaskArgs {
 
 #[derive(Debug, Args)]
 pub struct ScanArgs {
+    #[command(flatten)]
+    pub identification: crate::nmap::IdentificationOptions,
     /// Target hosts, IPs, CIDRs, or host:port expressions.
     #[arg(required = true)]
     pub targets: Vec<String>,

@@ -95,6 +95,10 @@ pub struct QuicConnection {
 }
 
 impl QuicConnection {
+    pub fn handshake_observed(&self) -> bool {
+        self.connection.is_some()
+    }
+
     pub fn tls(&self) -> &TlsObservation {
         &self.tls
     }
@@ -482,7 +486,7 @@ async fn quic_connect(
             connection: None,
             tls: TlsObservation {
                 negotiated_protocol: None,
-                cipher_suite: Some("TLSv1_3".to_string()),
+                cipher_suite: None,
                 server_name: Some(server_name),
                 certificate_subjects: Vec::new(),
                 certificate_issuers: Vec::new(),
@@ -556,7 +560,7 @@ fn observe_quic_tls(connection: &Connection, server_name: &str) -> TlsObservatio
 
     TlsObservation {
         negotiated_protocol,
-        cipher_suite: Some("TLSv1_3".to_string()),
+        cipher_suite: None,
         server_name: Some(server_name.to_string()),
         certificate_subjects: subjects,
         certificate_issuers: issuers,
