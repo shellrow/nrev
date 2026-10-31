@@ -108,7 +108,7 @@ async fn discover_arp(
         }
     }
 
-    anyhow::bail!("ARP request timed out")
+    Err(std::io::Error::new(std::io::ErrorKind::TimedOut, "ARP request timed out").into())
 }
 
 async fn discover_ndp(
@@ -186,7 +186,7 @@ async fn discover_ndp(
         }
     }
 
-    anyhow::bail!("NDP request timed out")
+    Err(std::io::Error::new(std::io::ErrorKind::TimedOut, "NDP request timed out").into())
 }
 
 fn resolve_single_target(input: &str) -> Result<Target> {
@@ -203,6 +203,67 @@ fn resolve_interface(name: Option<&str>) -> Result<netdev::Interface> {
     } else {
         netdev::get_default_interface().map_err(anyhow::Error::msg)
     }
+}
+
+pub(crate) async fn destination_mac(
+    interface: &netdev::Interface,
+    address: IpAddr,
+    timeout_window: Duration,
+) -> std::io::Result<netdev::MacAddr> {
+    if interface.is_loopback() || interface.is_tun() {
+        return Ok(netdev::MacAddr::zero());
+    }
+    let next_hop = resolve_next_hop(interface, address);
+    let result = match next_hop {
+        IpAddr::V4(_) => discover_arp(interface, next_hop, timeout_window).await,
+        IpAddr::V6(_) => discover_ndp(interface, next_hop, timeout_window).await,
+    };
+    result
+        .map_err(|error| match error.downcast::<std::io::Error>() {
+            Ok(error) => error,
+            Err(error) => std::io::Error::other(error),
+        })?
+        .mac_address
+        .parse()
+        .map_err(std::io::Error::other)
+}
+
+/// Resolve each next hop once, with bounded concurrency for sparse subnets.
+pub(crate) async fn destination_macs(
+    interface: &netdev::Interface,
+    addresses: &[IpAddr],
+    timeout_window: Duration,
+) -> std::io::Result<std::collections::HashMap<IpAddr, netdev::MacAddr>> {
+    let next_hops: std::collections::HashSet<_> = addresses
+        .iter()
+        .map(|address| resolve_next_hop(interface, *address))
+        .collect();
+    let mut pending = futures::stream::iter(next_hops)
+        .map(|address| async move {
+            (
+                address,
+                destination_mac(interface, address, timeout_window).await,
+            )
+        })
+        .buffer_unordered(16);
+    let mut resolved = std::collections::HashMap::new();
+    while let Some((address, result)) = pending.next().await {
+        match result {
+            Ok(mac) => {
+                resolved.insert(address, mac);
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::TimedOut => {}
+            Err(error) => return Err(error),
+        }
+    }
+    Ok(addresses
+        .iter()
+        .filter_map(|address| {
+            resolved
+                .get(&resolve_next_hop(interface, *address))
+                .map(|mac| (*address, *mac))
+        })
+        .collect())
 }
 
 fn resolve_next_hop(interface: &netdev::Interface, address: IpAddr) -> IpAddr {
@@ -286,13 +347,25 @@ fn build_ndp_packet(
     use nex::packet::{ethernet::EtherType, ip::IpNextProtocol, packet::Packet};
 
     let src_mac = interface.mac_addr.unwrap_or(netdev::MacAddr::zero());
-    let dst_mac = ipv6_multicast_mac(dst_ip);
-    let ndp = NdpPacketBuilder::new(src_mac, src_ip, dst_ip)
+    let octets = dst_ip.octets();
+    let multicast = Ipv6Addr::new(
+        0xff02,
+        0,
+        0,
+        0,
+        0,
+        1,
+        0xff00 | u16::from(octets[13]),
+        u16::from_be_bytes([octets[14], octets[15]]),
+    );
+    let dst_mac = ipv6_multicast_mac(multicast);
+    let mut ndp = NdpPacketBuilder::new(src_mac, src_ip, dst_ip)
         .dst_mac(dst_mac)
         .build()?;
+    ndp.header.checksum = nex::packet::icmpv6::checksum(&ndp, &src_ip, &multicast);
     let ipv6 = Ipv6PacketBuilder::new()
         .source(src_ip)
-        .destination(dst_ip)
+        .destination(multicast)
         .next_header(IpNextProtocol::Icmpv6)
         .hop_limit(255)
         .payload(ndp.to_bytes())
@@ -316,4 +389,44 @@ fn ipv6_multicast_mac(ip: Ipv6Addr) -> netdev::MacAddr {
         ((segments[7] >> 8) & 0xff) as u8,
         (segments[7] & 0xff) as u8,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use nex::packet::{icmpv6::Icmpv6Packet, packet::Packet};
+
+    #[test]
+    fn solicitation_uses_solicited_node_multicast_and_matching_checksum() {
+        let mut interface = netdev::Interface::dummy();
+        interface.mac_addr = Some("02:00:00:00:00:01".parse().unwrap());
+        let source = "fe80::1".parse().unwrap();
+        let target = "2001:db8::1234:5678".parse().unwrap();
+        let multicast = "ff02::1:ff34:5678".parse().unwrap();
+        let packet = build_ndp_packet(&interface, source, target).unwrap();
+        assert_eq!(&packet[..6], &[0x33, 0x33, 0xff, 0x34, 0x56, 0x78]);
+        let frame = Frame::from_buf(&packet, Default::default()).unwrap();
+        let ip = frame.ip.unwrap();
+        let ipv6 = ip.ipv6.unwrap();
+        assert_eq!(ipv6.destination, multicast);
+        assert_eq!(ipv6.hop_limit, 255);
+        let icmp =
+            Icmpv6Packet::try_from_bytes(bytes::Bytes::copy_from_slice(&packet[54..])).unwrap();
+        assert_eq!(
+            icmp.header.checksum,
+            nex::packet::icmpv6::checksum(&icmp, &source, &multicast)
+        );
+        assert_eq!(&icmp.to_bytes()[8..24], &target.octets());
+    }
+
+    #[test]
+    fn on_link_targets_do_not_use_the_gateway() {
+        let mut interface = netdev::Interface::dummy();
+        interface.ipv4.push("192.0.2.1/24".parse().unwrap());
+        interface.ipv6.push("2001:db8::1/64".parse().unwrap());
+        for address in ["192.0.2.2", "2001:db8::2"] {
+            let address = address.parse().unwrap();
+            assert_eq!(resolve_next_hop(&interface, address), address);
+        }
+    }
 }

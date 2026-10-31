@@ -1,12 +1,9 @@
-use std::{
-    net::{IpAddr, Ipv4Addr, Ipv6Addr},
-    time::Duration,
-};
+use crate::interface::source_ip_for;
+use std::{net::IpAddr, time::Duration};
 
 use anyhow::{Context, Result};
 use chrono::Utc;
 use futures::StreamExt;
-use futures::future::poll_fn;
 use nex::datalink::async_io::{AsyncChannel, async_channel};
 use nex::net::interface::Interface as NexInterface;
 use nex::packet::frame::Frame;
@@ -35,6 +32,8 @@ pub async fn run_trace(input: &str, config: &TraceConfig) -> Result<TraceReport>
         anyhow::bail!("unsupported datalink channel");
     };
     let parse_option = capture_parse_option(&interface);
+    let dst_mac =
+        crate::neighbor::destination_mac(&interface, target.address, config.timeout).await?;
     let started = std::time::Instant::now();
     let mut hops = Vec::new();
 
@@ -45,11 +44,12 @@ pub async fn run_trace(input: &str, config: &TraceConfig) -> Result<TraceReport>
                 target.address,
                 config.port.unwrap_or(33435),
                 ttl,
+                dst_mac,
             )?,
-            TraceMethod::Icmp => build_icmp_trace_packet(&interface, target.address, ttl)?,
+            TraceMethod::Icmp => build_icmp_trace_packet(&interface, target.address, ttl, dst_mac)?,
         };
         let send_started = std::time::Instant::now();
-        poll_fn(|cx| tx.poll_send(cx, &packet))
+        crate::capture::send_packet(&mut *tx, &interface, &packet)
             .await
             .map_err(std::io::Error::other)?;
 
@@ -76,6 +76,13 @@ pub async fn run_trace(input: &str, config: &TraceConfig) -> Result<TraceReport>
                         ttl,
                         &frame,
                         send_started.elapsed(),
+                        if interface.is_tun()
+                            || (cfg!(not(target_os = "linux")) && interface.is_loopback())
+                        {
+                            &packet
+                        } else {
+                            &packet[14..]
+                        },
                     ) {
                         hop = candidate;
                         break;
@@ -129,8 +136,25 @@ fn parse_trace_frame(
     ttl: u8,
     frame: &Frame,
     latency: Duration,
+    sent_ip: &[u8],
 ) -> Option<TraceHop> {
     let ip = frame.ip.as_ref()?;
+    let echo_reply = ip
+        .icmp
+        .as_ref()
+        .is_some_and(|icmp| icmp.icmp_type == IcmpType::EchoReply)
+        || ip
+            .icmpv6
+            .as_ref()
+            .is_some_and(|icmp| icmp.icmpv6_type == Icmpv6Type::EchoReply);
+    if echo_reply {
+        let offset = ip_transport_offset(sent_ip)?;
+        if frame.payload.get(..4) != sent_ip.get(offset + 4..offset + 8) {
+            return None;
+        }
+    } else if !quoted_probe_matches(frame.payload.get(4..)?, sent_ip) {
+        return None;
+    }
     let mac = frame.datalink.as_ref().and_then(|datalink| {
         datalink
             .ethernet
@@ -155,7 +179,7 @@ fn parse_trace_frame(
                 });
             }
             IcmpType::DestinationUnreachable
-                if method == TraceMethod::Udp && responder == target =>
+                if method == TraceMethod::Udp && responder == target && icmp.icmp_code.0 == 3 =>
             {
                 return Some(TraceHop {
                     ttl,
@@ -199,7 +223,9 @@ fn parse_trace_frame(
                 });
             }
             Icmpv6Type::DestinationUnreachable
-                if method == TraceMethod::Udp && responder == target =>
+                if method == TraceMethod::Udp
+                    && responder == target
+                    && icmpv6.icmpv6_code.0 == 4 =>
             {
                 return Some(TraceHop {
                     ttl,
@@ -260,6 +286,7 @@ fn build_icmp_trace_packet(
     interface: &netdev::Interface,
     dst_ip: IpAddr,
     ttl: u8,
+    dst_mac: netdev::MacAddr,
 ) -> Result<Vec<u8>> {
     use nex::packet::builder::{
         ethernet::EthernetPacketBuilder, icmp::IcmpPacketBuilder, icmpv6::Icmpv6PacketBuilder,
@@ -268,13 +295,9 @@ fn build_icmp_trace_packet(
     use nex::packet::{ethernet::EtherType, ip::IpNextProtocol, ipv4::Ipv4Flags};
 
     let src_mac = interface.mac_addr.unwrap_or(netdev::MacAddr::zero());
-    let dst_mac = interface
-        .gateway
-        .as_ref()
-        .map(|gateway| gateway.mac_addr)
-        .unwrap_or(netdev::MacAddr::zero());
+
     let src_ip = source_ip_for(interface, dst_ip);
-    let ip_only = interface.is_tun() || interface.is_loopback();
+    let ip_only = interface.is_tun() || (cfg!(not(target_os = "linux")) && interface.is_loopback());
 
     let ip_packet = match (src_ip, dst_ip) {
         (IpAddr::V4(src), IpAddr::V4(dst)) => {
@@ -340,6 +363,7 @@ fn build_udp_trace_packet(
     dst_ip: IpAddr,
     dst_port: u16,
     ttl: u8,
+    dst_mac: netdev::MacAddr,
 ) -> Result<Vec<u8>> {
     use nex::packet::builder::{
         ethernet::EthernetPacketBuilder, ipv4::Ipv4PacketBuilder, ipv6::Ipv6PacketBuilder,
@@ -348,15 +372,11 @@ fn build_udp_trace_packet(
     use nex::packet::{ethernet::EtherType, ip::IpNextProtocol, ipv4::Ipv4Flags};
 
     let src_mac = interface.mac_addr.unwrap_or(netdev::MacAddr::zero());
-    let dst_mac = interface
-        .gateway
-        .as_ref()
-        .map(|gateway| gateway.mac_addr)
-        .unwrap_or(netdev::MacAddr::zero());
+
     let src_ip = source_ip_for(interface, dst_ip);
-    let ip_only = interface.is_tun() || interface.is_loopback();
+    let ip_only = interface.is_tun() || (cfg!(not(target_os = "linux")) && interface.is_loopback());
     let udp = UdpPacketBuilder::new(src_ip, dst_ip)
-        .source(TRACE_SOURCE_PORT)
+        .source(TRACE_SOURCE_PORT + u16::from(ttl))
         .destination(dst_port)
         .build()?;
 
@@ -409,21 +429,6 @@ fn build_udp_trace_packet(
     })
 }
 
-fn source_ip_for(interface: &netdev::Interface, dst_ip: IpAddr) -> IpAddr {
-    match dst_ip {
-        IpAddr::V4(_) => interface
-            .ipv4
-            .first()
-            .map(|ip| IpAddr::V4(ip.addr()))
-            .unwrap_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED)),
-        IpAddr::V6(_) => interface
-            .ipv6
-            .first()
-            .map(|ip| IpAddr::V6(ip.addr()))
-            .unwrap_or(IpAddr::V6(Ipv6Addr::UNSPECIFIED)),
-    }
-}
-
 fn log_trace_hop(_method: TraceMethod, hop: &TraceHop) {
     let rtt = hop
         .latency
@@ -448,4 +453,92 @@ fn log_trace_hop(_method: TraceMethod, hop: &TraceHop) {
         "#{} Reply from {} type={} TTL: {} RTT: {}",
         hop.ttl, src, hop_type, ttl, rtt
     );
+}
+
+// ICMP errors may quote only the IP header and eight transport bytes.
+fn ip_transport_offset(packet: &[u8]) -> Option<usize> {
+    let offset = match packet.first()? >> 4 {
+        4 => usize::from(packet[0] & 0x0f) * 4,
+        6 => 40,
+        _ => return None,
+    };
+    (offset >= 20 && packet.len() >= offset + 8).then_some(offset)
+}
+
+fn quoted_probe_matches(quoted: &[u8], sent: &[u8]) -> bool {
+    let (Some(q), Some(s)) = (ip_transport_offset(quoted), ip_transport_offset(sent)) else {
+        return false;
+    };
+    if quoted[0] >> 4 != sent[0] >> 4 {
+        return false;
+    }
+    let addresses_match = if sent[0] >> 4 == 4 {
+        quoted[9] == sent[9] && quoted[12..20] == sent[12..20]
+    } else {
+        quoted[6] == sent[6] && quoted[8..40] == sent[8..40]
+    };
+    addresses_match && quoted[q..q + 8] == sent[s..s + 8]
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn trace_rejects_unrelated_truncated_and_stale_icmp_errors() {
+        let mut interface = netdev::Interface::dummy();
+        interface.ipv4.push("192.0.2.1/24".parse().unwrap());
+        interface.ipv6.push("2001:db8::1/64".parse().unwrap());
+        for target in ["192.0.2.2", "2001:db8::2"] {
+            let target = target.parse().unwrap();
+            let packet =
+                build_udp_trace_packet(&interface, target, 33435, 1, netdev::MacAddr::zero())
+                    .unwrap();
+            let sent = &packet[14..];
+            let offset = ip_transport_offset(sent).unwrap();
+            assert!(quoted_probe_matches(&sent[..offset + 8], sent));
+            assert!(!quoted_probe_matches(&sent[..offset + 7], sent));
+            let stale =
+                build_udp_trace_packet(&interface, target, 33435, 2, netdev::MacAddr::zero())
+                    .unwrap();
+            assert!(!quoted_probe_matches(&stale[14..], sent));
+            let unrelated =
+                build_udp_trace_packet(&interface, target, 33436, 1, netdev::MacAddr::zero())
+                    .unwrap();
+            assert!(!quoted_probe_matches(&unrelated[14..], sent));
+
+            let outer =
+                build_icmp_trace_packet(&interface, target, 1, netdev::MacAddr::zero()).unwrap();
+            let mut frame = Frame::from_buf(&outer, Default::default()).unwrap();
+            let ip = frame.ip.as_mut().unwrap();
+            if let Some(ipv4) = ip.ipv4.as_mut() {
+                ipv4.source = match target {
+                    IpAddr::V4(ip) => ip,
+                    _ => unreachable!(),
+                };
+                let icmp = ip.icmp.as_mut().unwrap();
+                icmp.icmp_type = IcmpType::DestinationUnreachable;
+                icmp.icmp_code.0 = 3;
+            } else {
+                ip.ipv6.as_mut().unwrap().source = match target {
+                    IpAddr::V6(ip) => ip,
+                    _ => unreachable!(),
+                };
+                let icmp = ip.icmpv6.as_mut().unwrap();
+                icmp.icmpv6_type = Icmpv6Type::DestinationUnreachable;
+                icmp.icmpv6_code.0 = 4;
+            }
+            frame.payload = [vec![0; 4], sent.to_vec()].concat().into();
+            assert!(
+                parse_trace_frame(TraceMethod::Udp, target, 1, &frame, Duration::ZERO, sent)
+                    .unwrap()
+                    .reached_destination
+            );
+            frame.payload = [vec![0; 4], unrelated[14..].to_vec()].concat().into();
+            assert!(
+                parse_trace_frame(TraceMethod::Udp, target, 1, &frame, Duration::ZERO, sent)
+                    .is_none()
+            );
+        }
+    }
 }

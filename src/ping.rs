@@ -6,7 +6,6 @@ use std::{
 use anyhow::{Context, Result};
 use chrono::Utc;
 use futures::StreamExt;
-use futures::future::poll_fn;
 use nex::datalink::async_io::{AsyncChannel, async_channel};
 use nex::net::interface::Interface as NexInterface;
 use nex::packet::frame::Frame;
@@ -263,13 +262,15 @@ async fn run_icmp_ping(target: &Target, config: &PingConfig) -> Result<Vec<PingR
         anyhow::bail!("unsupported datalink channel");
     };
 
-    let packet = build_icmp_packet(&interface, target.address)?;
+    let dst_mac =
+        crate::neighbor::destination_mac(&interface, target.address, config.timeout).await?;
+    let packet = build_icmp_packet(&interface, target.address, dst_mac)?;
     let parse_option = capture_parse_option(&interface);
     let mut replies = Vec::with_capacity(config.count as usize);
 
     for seq in 1..=config.count {
         let started = std::time::Instant::now();
-        poll_fn(|cx| tx.poll_send(cx, &packet))
+        crate::capture::send_packet(&mut *tx, &interface, &packet)
             .await
             .map_err(std::io::Error::other)?;
 
@@ -390,7 +391,11 @@ fn capture_parse_option(interface: &netdev::Interface) -> nex::packet::frame::Pa
     parse_option
 }
 
-fn build_icmp_packet(interface: &netdev::Interface, dst_ip: IpAddr) -> Result<Vec<u8>> {
+fn build_icmp_packet(
+    interface: &netdev::Interface,
+    dst_ip: IpAddr,
+    dst_mac: netdev::MacAddr,
+) -> Result<Vec<u8>> {
     use nex::packet::builder::{
         ethernet::EthernetPacketBuilder, icmp::IcmpPacketBuilder, icmpv6::Icmpv6PacketBuilder,
         ipv4::Ipv4PacketBuilder, ipv6::Ipv6PacketBuilder,
@@ -398,24 +403,9 @@ fn build_icmp_packet(interface: &netdev::Interface, dst_ip: IpAddr) -> Result<Ve
     use nex::packet::{ethernet::EtherType, ip::IpNextProtocol, ipv4::Ipv4Flags};
 
     let src_mac = interface.mac_addr.unwrap_or(netdev::MacAddr::zero());
-    let dst_mac = interface
-        .gateway
-        .as_ref()
-        .map(|gateway| gateway.mac_addr)
-        .unwrap_or(netdev::MacAddr::zero());
-    let src_ip = match dst_ip {
-        IpAddr::V4(_) => interface
-            .ipv4
-            .first()
-            .map(|ip| IpAddr::V4(ip.addr()))
-            .unwrap_or(IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED)),
-        IpAddr::V6(_) => interface
-            .ipv6
-            .first()
-            .map(|ip| IpAddr::V6(ip.addr()))
-            .unwrap_or(IpAddr::V6(std::net::Ipv6Addr::UNSPECIFIED)),
-    };
-    let ip_only = interface.is_tun() || interface.is_loopback();
+
+    let src_ip = crate::interface::source_ip_for(interface, dst_ip);
+    let ip_only = interface.is_tun() || (cfg!(not(target_os = "linux")) && interface.is_loopback());
 
     let ip_packet = match (src_ip, dst_ip) {
         (IpAddr::V4(src), IpAddr::V4(dst)) => {
