@@ -115,10 +115,26 @@ pub fn write_json_report(report: &ScanReport, path: &Path) -> anyhow::Result<()>
 pub fn filtered_scan_report(report: &ScanReport, show_all_states: bool) -> ScanReport {
     let mut filtered = report.clone();
     if !show_all_states {
+        let external_candidates: std::collections::BTreeSet<_> = report
+            .identification
+            .iter()
+            .flat_map(|details| &details.hosts)
+            .flat_map(|host| {
+                host.ports
+                    .iter()
+                    .filter(|port| is_visible_external_port(port))
+                    .map(move |port| (host.ip, port.port, port.protocol.as_str()))
+            })
+            .collect();
         for target in &mut filtered.targets {
-            target
-                .endpoints
-                .retain(|_, endpoint| is_visible_state(&endpoint.state));
+            target.endpoints.retain(|_, endpoint| {
+                is_visible_state(&endpoint.state)
+                    || external_candidates.contains(&(
+                        target.target.address,
+                        endpoint.port,
+                        wire_protocol(endpoint.transport),
+                    ))
+            });
         }
     }
     filtered
@@ -491,12 +507,15 @@ fn render_endpoint_tree(endpoint: &EndpointResult) -> Tree<String> {
     node
 }
 
-fn matches_external_port(endpoint: &EndpointResult, port: &crate::nmap::PortDetails) -> bool {
-    let protocol = match endpoint.transport {
+fn wire_protocol(transport: crate::model::Transport) -> &'static str {
+    match transport {
         crate::model::Transport::Tcp | crate::model::Transport::Syn => "tcp",
         crate::model::Transport::Udp | crate::model::Transport::Quic => "udp",
-    };
-    endpoint.port == port.port && protocol == port.protocol
+    }
+}
+
+fn matches_external_port(endpoint: &EndpointResult, port: &crate::nmap::PortDetails) -> bool {
+    endpoint.port == port.port && wire_protocol(endpoint.transport) == port.protocol
 }
 
 fn is_visible_external_port(port: &crate::nmap::PortDetails) -> bool {
@@ -593,10 +612,7 @@ fn render_scan_target_tree(
         .map(|port| ((port.port, port.protocol.as_str()), port))
         .collect();
     for endpoint in target.endpoints.values() {
-        let protocol = match endpoint.transport {
-            crate::model::Transport::Tcp | crate::model::Transport::Syn => "tcp",
-            crate::model::Transport::Udp | crate::model::Transport::Quic => "udp",
-        };
+        let protocol = wire_protocol(endpoint.transport);
         let external = external_ports.get(&(endpoint.port, protocol)).copied();
         if show_all_states
             || is_visible_state(&endpoint.state)
@@ -991,6 +1007,38 @@ mod tests {
         assert!(http.contains("state: Filtered"));
         assert!(http.contains("state: open"));
         assert_eq!(before, serde_json::to_value(&report).unwrap());
+    }
+
+    #[test]
+    fn json_keeps_native_observations_for_externally_open_ports() {
+        let mut report = identified_report();
+        let filtered = filtered_scan_report(&report, false);
+        assert_eq!(
+            filtered.targets[0].endpoints[&80].state,
+            EndpointState::Filtered
+        );
+        assert_eq!(filtered.identification, report.identification);
+        assert_eq!(report.targets[0].endpoints.len(), 2);
+
+        let port = &mut report.identification.as_mut().unwrap().hosts[0].ports[1];
+        port.protocol = "udp".into();
+        assert!(
+            !filtered_scan_report(&report, false).targets[0]
+                .endpoints
+                .contains_key(&80)
+        );
+        report.targets[0].endpoints.get_mut(&80).unwrap().transport = Transport::Quic;
+        assert!(
+            filtered_scan_report(&report, false).targets[0]
+                .endpoints
+                .contains_key(&80)
+        );
+        report.identification.as_mut().unwrap().hosts[0].ip = "127.0.0.2".parse().unwrap();
+        assert!(
+            !filtered_scan_report(&report, false).targets[0]
+                .endpoints
+                .contains_key(&80)
+        );
     }
 
     #[test]
