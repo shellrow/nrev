@@ -574,7 +574,7 @@ fn default_host_ports(method: HostDiscoveryMethod) -> Vec<u16> {
 }
 
 pub fn load_profile(path: &Path) -> Result<ScanProfile> {
-    let content = std::fs::read_to_string(path)?;
+    let content = crate::data::read_data_file(path)?;
     match path.extension().and_then(|ext| ext.to_str()) {
         Some("json") => Ok(serde_json::from_str(&content)?),
         Some("toml") => Ok(toml::from_str(&content)?),
@@ -585,7 +585,7 @@ pub fn load_profile(path: &Path) -> Result<ScanProfile> {
 }
 
 pub fn load_task(path: &Path) -> Result<ScanTask> {
-    let content = std::fs::read_to_string(path)?;
+    let content = crate::data::read_data_file(path)?;
     let task = match path.extension().and_then(|ext| ext.to_str()) {
         Some("json") => serde_json::from_str(&content)?,
         Some("toml") => toml::from_str(&content)?,
@@ -650,6 +650,24 @@ where
 mod tests {
     use super::*;
     use crate::data::DataRegistry;
+
+    #[test]
+    fn rejects_oversized_task_and_profile_files() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("config.toml");
+        std::fs::File::create(&path)
+            .unwrap()
+            .set_len(16 * 1024 * 1024 + 1)
+            .unwrap();
+        assert!(matches!(
+            load_task(&path),
+            Err(NrevError::DataFileTooLarge { .. })
+        ));
+        assert!(matches!(
+            load_profile(&path),
+            Err(NrevError::DataFileTooLarge { .. })
+        ));
+    }
 
     #[test]
     fn profile_overrides_defaults() {

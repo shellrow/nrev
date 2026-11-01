@@ -1,5 +1,7 @@
 use std::{
+    collections::HashSet,
     fs,
+    io::Read,
     path::{Path, PathBuf},
 };
 
@@ -50,8 +52,8 @@ impl DataRegistry {
         let mut registry = Self::default();
         if path.is_dir() {
             let mut entries: Vec<PathBuf> = fs::read_dir(path)?
-                .filter_map(|entry| entry.ok().map(|entry| entry.path()))
-                .collect();
+                .map(|entry| entry.map(|entry| entry.path()))
+                .collect::<std::io::Result<_>>()?;
             entries.sort();
             for entry in entries {
                 registry.extend_from_file(&entry)?;
@@ -59,17 +61,35 @@ impl DataRegistry {
         } else {
             registry.extend_from_file(path)?;
         }
+        let mut probe_ids = HashSet::new();
+        for probe in &registry.external_probes {
+            if !matches!(probe.transport.as_str(), "tcp" | "udp") {
+                return Err(NrevError::InvalidConfiguration(format!(
+                    "external probe {} requires tcp or udp transport",
+                    probe.id
+                )));
+            }
+            if !probe_ids.insert(&probe.id) {
+                return Err(NrevError::InvalidConfiguration(format!(
+                    "duplicate external probe: {}",
+                    probe.id
+                )));
+            }
+        }
+        let mut recipe_names = HashSet::new();
+        for recipe in &registry.recipes {
+            if !recipe_names.insert(&recipe.name) {
+                return Err(NrevError::InvalidConfiguration(format!(
+                    "duplicate recipe: {}",
+                    recipe.name
+                )));
+            }
+        }
         Ok(registry)
     }
 
     fn extend_from_file(&mut self, path: &Path) -> Result<()> {
-        if fs::metadata(path)?.len() > MAX_EXTERNAL_DATA_FILE_BYTES {
-            return Err(NrevError::DataFileTooLarge {
-                path: path.to_path_buf(),
-                limit_bytes: MAX_EXTERNAL_DATA_FILE_BYTES,
-            });
-        }
-        let content = fs::read_to_string(path)?;
+        let content = read_data_file(path)?;
         let file = match path.extension().and_then(|ext| ext.to_str()) {
             Some("json") => parse_json_data_file(&content)?,
             Some("toml") => toml::from_str::<ExternalDataFile>(&content)?,
@@ -97,6 +117,21 @@ impl DataRegistry {
             })
             .collect()
     }
+}
+
+/// Bound the read itself, including files that grow after they are opened.
+pub(crate) fn read_data_file(path: &Path) -> Result<String> {
+    let mut content = String::new();
+    fs::File::open(path)?
+        .take(MAX_EXTERNAL_DATA_FILE_BYTES + 1)
+        .read_to_string(&mut content)?;
+    if content.len() as u64 > MAX_EXTERNAL_DATA_FILE_BYTES {
+        return Err(NrevError::DataFileTooLarge {
+            path: path.to_path_buf(),
+            limit_bytes: MAX_EXTERNAL_DATA_FILE_BYTES,
+        });
+    }
+    Ok(content)
 }
 
 fn parse_json_data_file(content: &str) -> Result<ExternalDataFile> {
@@ -129,6 +164,56 @@ fn parse_json_data_file(content: &str) -> Result<ExternalDataFile> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rejects_unsupported_external_transports_and_duplicate_ids() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("pack.json");
+        for content in [
+            r#"{"probes":[{"id":"test","transport":"quic","payload":""}]}"#,
+            r#"{"probes":[{"id":"test","transport":"tcp","payload":""},{"id":"test","transport":"udp","payload":""}]}"#,
+            r#"{"recipes":[{"name":"test"},{"name":"test"}]}"#,
+        ] {
+            fs::write(&path, content).unwrap();
+            assert!(matches!(
+                DataRegistry::load(Some(&path)),
+                Err(NrevError::InvalidConfiguration(_))
+            ));
+        }
+    }
+
+    #[test]
+    fn sample_data_and_recipes_are_loadable() {
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"));
+        for path in [
+            "samples/data-pack",
+            "samples/data-pack.json",
+            "samples/recipes",
+        ] {
+            let registry = DataRegistry::load(Some(&root.join(path))).unwrap();
+            let names: HashSet<_> = registry
+                .builtin_catalog()
+                .probes()
+                .iter()
+                .map(|probe| probe.id.to_string())
+                .chain(
+                    registry
+                        .external_probes
+                        .iter()
+                        .map(|probe| probe.id.to_string()),
+                )
+                .collect();
+            for recipe in registry.recipes {
+                if let Some(probes) = recipe.probes {
+                    assert!(
+                        probes.iter().all(|probe| names.contains(probe)),
+                        "{}",
+                        recipe.name
+                    );
+                }
+            }
+        }
+    }
 
     #[test]
     fn loads_external_probe_file() {
