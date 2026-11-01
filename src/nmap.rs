@@ -389,11 +389,11 @@ impl Nmap {
             warnings: Vec::new(),
             hosts: Vec::new(),
         };
-        let deadline = tokio::time::Instant::now() + Duration::from_millis(options.timeout_ms);
         if let Err(error) = options.validate(transport) {
             result.error = Some(error.to_string());
             return result;
         }
+        let deadline = tokio::time::Instant::now() + Duration::from_millis(options.timeout_ms);
         result.requests = plan_identification(targets, transport, options);
         let mut pending = stream::iter(result.requests.iter().cloned())
             .map(|request| async move {
