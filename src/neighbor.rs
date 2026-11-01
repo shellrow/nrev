@@ -151,25 +151,9 @@ async fn discover_ndp(
                 let Some(frame) = Frame::from_buf(&frame_bytes, parse_option.clone()) else {
                     continue;
                 };
-                let Some(ip) = &frame.ip else {
+                let Some(mac_address) = ndp_reply_mac(&frame, target_ip) else {
                     continue;
                 };
-                let Some(ipv6) = &ip.ipv6 else {
-                    continue;
-                };
-                let Some(icmpv6) = &ip.icmpv6 else {
-                    continue;
-                };
-                if icmpv6.icmpv6_type != Icmpv6Type::NeighborAdvertisement
-                    || ipv6.source != target_ip
-                {
-                    continue;
-                }
-                let mac_address = frame
-                    .datalink
-                    .as_ref()
-                    .and_then(|datalink| datalink.ethernet.as_ref().map(|ethernet| ethernet.source))
-                    .context("failed to extract target MAC address from NDP reply")?;
 
                 return Ok(NeighborResolution {
                     resolved_ip: IpAddr::V6(target_ip),
@@ -187,6 +171,45 @@ async fn discover_ndp(
     }
 
     Err(std::io::Error::new(std::io::ErrorKind::TimedOut, "NDP request timed out").into())
+}
+
+fn ndp_reply_mac(frame: &Frame, target: Ipv6Addr) -> Option<netdev::MacAddr> {
+    let ip = frame.ip.as_ref()?;
+    let ipv6 = ip.ipv6.as_ref()?;
+    let icmp = ip.icmpv6.as_ref()?;
+    if ipv6.hop_limit != 255
+        || icmp.icmpv6_type != Icmpv6Type::NeighborAdvertisement
+        || icmp.icmpv6_code.0 != 0
+        || target.is_multicast()
+        || frame.payload.get(4..20) != Some(target.octets().as_slice())
+    {
+        return None;
+    }
+    let mut options = frame.payload.get(20..)?;
+    let mut advertised = None;
+    while !options.is_empty() {
+        let length = usize::from(*options.get(1)?) * 8;
+        if length == 0 || length > options.len() {
+            return None;
+        }
+        if options[0] == 2 {
+            if length != 8 {
+                return None;
+            }
+            advertised = Some(netdev::MacAddr::new(
+                options[2], options[3], options[4], options[5], options[6], options[7],
+            ));
+        }
+        options = &options[length..];
+    }
+    advertised.or_else(|| {
+        frame
+            .datalink
+            .as_ref()?
+            .ethernet
+            .as_ref()
+            .map(|ethernet| ethernet.source)
+    })
 }
 
 fn resolve_single_target(input: &str) -> Result<Target> {
@@ -319,11 +342,13 @@ fn build_arp_packet(interface: &netdev::Interface, dst_ip: Ipv4Addr) -> Result<V
     use nex::packet::{ethernet::EtherType, packet::Packet};
 
     let src_mac = interface.mac_addr.unwrap_or(netdev::MacAddr::zero());
-    let src_ip = interface
-        .ipv4
-        .first()
-        .map(|network| network.addr())
-        .context("interface does not have an IPv4 address")?;
+    let IpAddr::V4(src_ip) = crate::interface::source_ip_for(interface, IpAddr::V4(dst_ip)) else {
+        unreachable!("IPv4 source selection preserves the address family");
+    };
+    anyhow::ensure!(
+        !src_ip.is_unspecified(),
+        "interface does not have an IPv4 address"
+    );
     let arp = ArpPacketBuilder::new(src_mac, src_ip, dst_ip)
         .operation(ArpOperation::Request)
         .build()?;
@@ -395,6 +420,34 @@ fn ipv6_multicast_mac(ip: Ipv6Addr) -> netdev::MacAddr {
 mod tests {
     use super::*;
     use nex::packet::{icmpv6::Icmpv6Packet, packet::Packet};
+
+    #[test]
+    fn ndp_reply_validates_target_hop_limit_and_options() {
+        let mut interface = netdev::Interface::dummy();
+        interface.mac_addr = Some("02:00:00:00:00:01".parse().unwrap());
+        let target: Ipv6Addr = "2001:db8::2".parse().unwrap();
+        let packet = build_ndp_packet(&interface, "fe80::1".parse().unwrap(), target).unwrap();
+        let mut reply = Frame::from_buf(&packet, Default::default()).unwrap();
+        reply
+            .ip
+            .as_mut()
+            .unwrap()
+            .icmpv6
+            .as_mut()
+            .unwrap()
+            .icmpv6_type = Icmpv6Type::NeighborAdvertisement;
+        let mut payload = reply.payload.to_vec();
+        payload[20] = 2;
+        reply.payload = payload.clone().into();
+        assert_eq!(ndp_reply_mac(&reply, target), interface.mac_addr);
+        assert!(ndp_reply_mac(&reply, "2001:db8::3".parse().unwrap()).is_none());
+        reply.ip.as_mut().unwrap().ipv6.as_mut().unwrap().hop_limit = 64;
+        assert!(ndp_reply_mac(&reply, target).is_none());
+        reply.ip.as_mut().unwrap().ipv6.as_mut().unwrap().hop_limit = 255;
+        payload[21] = 0;
+        reply.payload = payload.into();
+        assert!(ndp_reply_mac(&reply, target).is_none());
+    }
 
     #[test]
     fn solicitation_uses_solicited_node_multicast_and_matching_checksum() {

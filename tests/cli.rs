@@ -438,3 +438,28 @@ fn diagnostic_color_option_works_before_the_subcommand() {
         assert_eq!(output.stderr.contains(&0x1b), colored);
     }
 }
+
+#[test]
+fn invalid_interfaces_fail_instead_of_reporting_successful_empty_scans() {
+    for args in [
+        vec![
+            "port",
+            "127.0.0.1:80",
+            "--connect-timeout-ms",
+            "50",
+            "--no-builtin-probes",
+        ],
+        vec!["host", "127.0.0.1", "--method", "tcp"],
+        vec!["host", "127.0.0.1", "--method", "icmp"],
+        vec!["ping", "127.0.0.1", "--method", "tcp", "--count", "1"],
+        vec!["ping", "127.0.0.1", "--method", "udp", "--count", "1"],
+    ] {
+        let output = Command::new(env!("CARGO_BIN_EXE_nrev"))
+            .args(args)
+            .args(["--interface", "nrev-missing-interface", "--quiet"])
+            .output()
+            .unwrap();
+        assert!(!output.status.success());
+        assert!(!output.stderr.is_empty());
+    }
+}

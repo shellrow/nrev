@@ -276,11 +276,11 @@ pub struct HostArgs {
     #[arg(short = 't', long, default_value_t = 600, value_parser = value_parser!(u64).range(50..=30_000))]
     pub timeout_ms: u64,
 
-    /// Interface name to use for ICMP or UDP probing.
+    /// Interface for raw probes, or source address selection for socket probes.
     #[arg(short = 'i', long)]
     pub interface: Option<String>,
 
-    /// Scan hosts in user-specified order.
+    /// Disable randomization and schedule hosts in address order.
     #[arg(long, action = ArgAction::SetTrue)]
     pub ordered: bool,
 
@@ -330,7 +330,7 @@ pub struct PingArgs {
     #[arg(short = 't', long, default_value_t = 1000, value_parser = value_parser!(u64).range(50..=60_000))]
     pub timeout_ms: u64,
 
-    /// Interface name to use for ICMP probing.
+    /// Interface for raw probes, or source address selection for socket probes.
     #[arg(short = 'i', long)]
     pub interface: Option<String>,
 

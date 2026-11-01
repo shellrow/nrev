@@ -615,7 +615,7 @@ async fn run_followup_phase<C: Connector>(
                     }
                 }
                 if let Some(fingerprint) = endpoint.fingerprint.as_mut() {
-                    fingerprint.response_observed = !endpoint.observations.is_empty();
+                    fingerprint.response_observed |= !endpoint.observations.is_empty();
                     endpoint.fingerprint_matches =
                         collect_fingerprint_matches(fingerprint, registry);
                 }
@@ -1703,6 +1703,51 @@ mod tests {
             panic!("port command")
         };
         ScanConfig::from_scan_args(&args, &DataRegistry::default()).unwrap()
+    }
+
+    #[tokio::test]
+    async fn followup_without_application_response_preserves_syn_evidence() {
+        let mut config = test_config();
+        config.transport = Transport::Syn;
+        config.builtin_probes = false;
+        let phase = TargetPhaseResult {
+            target: Target {
+                original: "192.0.2.1".into(),
+                hostname: None,
+                address: "192.0.2.1".parse().unwrap(),
+            },
+            endpoints: BTreeMap::from([(
+                80,
+                EndpointResult {
+                    port: 80,
+                    transport: Transport::Syn,
+                    state: EndpointState::Open,
+                    latency: Duration::ZERO,
+                    observations: Vec::new(),
+                    fingerprint: Some(baseline_syn_observation(true, true, false, Some(64), None)),
+                    fingerprint_matches: Vec::new(),
+                    errors: Vec::new(),
+                },
+            )]),
+            probe_ports: vec![80],
+            reusable_connections: BTreeMap::new(),
+        };
+        let report = run_followup_phase(
+            phase,
+            &config,
+            &DataRegistry::default(),
+            SlowConnector,
+            Arc::new(Semaphore::new(1)),
+        )
+        .await;
+        assert!(report.fingerprint.unwrap().response_observed);
+        assert!(
+            report.endpoints[&80]
+                .fingerprint
+                .as_ref()
+                .unwrap()
+                .response_observed
+        );
     }
 
     #[tokio::test]

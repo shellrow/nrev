@@ -15,7 +15,7 @@ use crate::{
     model::{
         HostDiscoveryMethod, HostObservation, HostResult, HostScanMetadata, HostScanReport, Target,
     },
-    transport::{icmp_host_probe, icmp_scan_targets, tcp_host_probe, udp_host_probe},
+    transport::{icmp_host_probe, icmp_scan_targets, tcp_host_probe_on_interface, udp_host_probe},
 };
 
 pub struct HostDiscoveryExecution {
@@ -56,6 +56,12 @@ impl HostScanner {
     where
         F: FnMut(HostScanEvent),
     {
+        if let Some(name) = &self.config.interface {
+            anyhow::ensure!(
+                crate::interface::get_interface_by_name(name.clone()).is_some(),
+                "interface not found: {name}"
+            );
+        }
         if !self.config.ordered {
             let mut rng = rand::rng();
             targets.shuffle(&mut rng);
@@ -67,7 +73,7 @@ impl HostScanner {
         });
         let started = std::time::Instant::now();
         let results = if self.config.method == HostDiscoveryMethod::Icmp {
-            discover_targets_icmp(targets, &self.config).await
+            discover_targets_icmp(targets, &self.config).await?
         } else {
             let concurrency = effective_host_concurrency(&self.config);
             stream::iter(targets)
@@ -109,13 +115,16 @@ fn effective_host_concurrency(config: &HostConfig) -> usize {
     }
 }
 
-async fn discover_targets_icmp(targets: Vec<Target>, config: &HostConfig) -> Vec<HostResult> {
+async fn discover_targets_icmp(
+    targets: Vec<Target>,
+    config: &HostConfig,
+) -> Result<Vec<HostResult>> {
     let addresses = targets
         .iter()
         .map(|target| target.address)
         .collect::<Vec<_>>();
     match icmp_scan_targets(&addresses, config.timeout, config.interface.as_deref()).await {
-        Ok(observations) => targets
+        Ok(observations) => Ok(targets
             .into_iter()
             .map(|target| match observations.get(&target.address).cloned() {
                 Some(observation) => HostResult {
@@ -131,16 +140,8 @@ async fn discover_targets_icmp(targets: Vec<Target>, config: &HostConfig) -> Vec
                     errors: vec!["icmp probe timed out".to_string()],
                 },
             })
-            .collect(),
-        Err(error) => targets
-            .into_iter()
-            .map(|target| HostResult {
-                target,
-                reachable: false,
-                observations: Vec::new(),
-                errors: vec![error.to_string()],
-            })
-            .collect(),
+            .collect()),
+        Err(error) => Err(error.into()),
     }
 }
 
@@ -183,7 +184,16 @@ async fn discover_target(target: Target, config: &HostConfig) -> HostResult {
 
 async fn collect_tcp_observations(address: IpAddr, config: &HostConfig) -> Vec<HostObservation> {
     let results = stream::iter(config.ports.iter().copied())
-        .map(|port| async move { tcp_host_probe(address, &[port], config.timeout).await.ok() })
+        .map(|port| async move {
+            tcp_host_probe_on_interface(
+                address,
+                &[port],
+                config.timeout,
+                config.interface.as_deref(),
+            )
+            .await
+            .ok()
+        })
         .buffer_unordered(config.ports.len().clamp(1, 16))
         .collect::<Vec<_>>()
         .await;
@@ -354,7 +364,7 @@ mod tests {
             let _ = listener.accept().await;
         });
 
-        let observation = tcp_host_probe(
+        let observation = crate::transport::tcp_host_probe(
             "127.0.0.1".parse().expect("ip"),
             &[port],
             Duration::from_millis(200),

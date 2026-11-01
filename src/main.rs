@@ -495,6 +495,18 @@ async fn run_port_scan(
         ),
     );
 
+    let failed_endpoints = execution
+        .report
+        .targets
+        .iter()
+        .flat_map(|target| target.endpoints.values())
+        .filter(|endpoint| endpoint.state == EndpointState::Error)
+        .count();
+    anyhow::ensure!(
+        failed_endpoints == 0,
+        "transport failed for {failed_endpoints} endpoint(s); use --all-states to inspect errors"
+    );
+
     if let Some(details) = &execution.report.identification {
         anyhow::ensure!(
             details.complete,
