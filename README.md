@@ -141,3 +141,7 @@ sudo chmod-bpf install
 Raw-packet modes require [Npcap](https://npcap.com/#download). Select
 "Install Npcap in WinPcap API-compatible Mode" during installation.
 Npcap is loaded at runtime; building `nrev` does not require the Npcap SDK.
+
+Raw probes to Windows loopback addresses (`127.0.0.1` and `::1`) are currently
+unsupported by the datalink backend. Use TCP, UDP, or QUIC socket probes for
+loopback targets.

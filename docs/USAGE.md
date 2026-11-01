@@ -53,14 +53,16 @@ nrev port 192.168.10.10 --concurrency 128 \
 encounter file-descriptor limits; connections retained for probing can require
 up to another `--concurrency` descriptors.
 
-For TCP and QUIC scans, `--interface` selects a source address. Routing remains
-under operating-system control.
+For TCP, UDP, and QUIC socket probes, `--interface` selects a source address.
+Routing remains under operating-system control. Specify an interface for IPv6
+link-local targets.
 
 ## Nmap identification
 
 Use `--nmap` for service/version identification and `--os-detect` for OS
 identification. nrev looks for `nmap` on `PATH`; `--nmap-path` selects another
-executable.
+executable. On Windows, use the Nmap executable directly: cancellation stops
+the immediate process but does not terminate descendants started by wrappers.
 
 ```sh
 nrev port 192.168.10.10 --ports top-100 --nmap
@@ -142,7 +144,9 @@ Use `--quiet` to disable progress or `--progress verbose` for more detail.
 Progress and diagnostics use color when stderr is a terminal. Use `--no-color`
 (or `--color never`) to disable it, or `--color always` to force it. Automatic
 color respects `NO_COLOR` and `TERM=dumb`. Reports and JSON remain uncolored.
-Probe failures appear in endpoint `errors` and in the tree output.
+Probe failures appear in endpoint `errors` and in the tree output. Transport
+errors make port scans exit with status 1; use `--all-states` to inspect failed
+endpoints. Raw host-capture failures also return status 1.
 
 JSON files are replaced atomically. Check `metadata.schema_version` when parsing
 reports. Enum values use `snake_case`. Terminal output escapes control characters;
@@ -159,9 +163,9 @@ Target files may include other files using `@relative/path.txt`. Includes resolv
 relative to the containing file; repeated or cyclic includes are read once.
 Use brackets around IPv6 addresses that include a port.
 
-Each command accepts up to 65,536 unique addresses and 1,000,000 endpoint
-assignments. Target files are limited to 1,024 files, 16 MiB total, and 65,536
-tokens. Split larger inventories across commands.
+Port scans accept up to 65,536 target identities (address and hostname) and
+1,000,000 endpoint assignments. Host discovery accepts up to 65,536 addresses.
+Target files are limited to 1,024 files, 16 MiB total, and 65,536 tokens. Split larger inventories across commands.
 
 ## Profiles and recipes
 
@@ -229,7 +233,8 @@ file. See [sample tasks](../samples/tasks) for more examples.
 ## External data
 
 `--data` accepts a JSON or TOML file, or a directory of those files. Each file
-can contain `probes`, `fingerprint_rules`, and `recipes`.
+can contain `probes`, `fingerprint_rules`, and `recipes`. Data files, profiles,
+and task files are limited to 16 MiB each.
 
 ```sh
 nrev probe --data ./samples/data-pack
@@ -239,7 +244,12 @@ nrev port 192.168.10.10 --ports 8080,8088 --data ./samples/data-pack \
   --probes corp-http-alt --no-builtin-probes
 ```
 
-See [sample data packs](../samples/data-pack) for definitions.
+External payload probes support TCP and UDP. Use the built-in `quic` probe for
+QUIC and HTTP/3. Probe IDs and recipe names must be unique within a data pack.
+
+See the [sample directory](../samples/data-pack) and the alternative
+[JSON file](../samples/data-pack.json) for definitions. Load either one; do not
+combine them, as they define the same probes and recipes.
 
 ## Response limits
 
