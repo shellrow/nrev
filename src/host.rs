@@ -1,8 +1,6 @@
 use std::{
     collections::{BTreeMap, BTreeSet, HashSet},
-    fs,
     net::{IpAddr, ToSocketAddrs},
-    path::{Path, PathBuf},
     time::Duration,
 };
 
@@ -17,7 +15,7 @@ use crate::{
     model::{
         HostDiscoveryMethod, HostObservation, HostResult, HostScanMetadata, HostScanReport, Target,
     },
-    transport::{icmp_host_probe, icmp_scan_targets, tcp_host_probe, udp_host_probe},
+    transport::{icmp_host_probe, icmp_scan_targets, tcp_host_probe_on_interface, udp_host_probe},
 };
 
 pub struct HostDiscoveryExecution {
@@ -58,6 +56,12 @@ impl HostScanner {
     where
         F: FnMut(HostScanEvent),
     {
+        if let Some(name) = &self.config.interface {
+            anyhow::ensure!(
+                crate::interface::get_interface_by_name(name.clone()).is_some(),
+                "interface not found: {name}"
+            );
+        }
         if !self.config.ordered {
             let mut rng = rand::rng();
             targets.shuffle(&mut rng);
@@ -69,10 +73,10 @@ impl HostScanner {
         });
         let started = std::time::Instant::now();
         let results = if self.config.method == HostDiscoveryMethod::Icmp {
-            discover_targets_icmp(targets, &self.config).await
+            discover_targets_icmp(targets, &self.config).await?
         } else {
             let concurrency = effective_host_concurrency(&self.config);
-            stream::iter(targets.into_iter())
+            stream::iter(targets)
                 .map(|target| {
                     let config = self.config.clone();
                     async move { discover_target(target, &config).await }
@@ -90,6 +94,7 @@ impl HostScanner {
         Ok(HostDiscoveryExecution {
             report: HostScanReport {
                 metadata: HostScanMetadata {
+                    schema_version: crate::model::REPORT_SCHEMA_VERSION,
                     version: env!("CARGO_PKG_VERSION").to_string(),
                     method: self.config.method,
                     generated_at: Utc::now(),
@@ -110,13 +115,16 @@ fn effective_host_concurrency(config: &HostConfig) -> usize {
     }
 }
 
-async fn discover_targets_icmp(targets: Vec<Target>, config: &HostConfig) -> Vec<HostResult> {
+async fn discover_targets_icmp(
+    targets: Vec<Target>,
+    config: &HostConfig,
+) -> Result<Vec<HostResult>> {
     let addresses = targets
         .iter()
         .map(|target| target.address)
         .collect::<Vec<_>>();
     match icmp_scan_targets(&addresses, config.timeout, config.interface.as_deref()).await {
-        Ok(observations) => targets
+        Ok(observations) => Ok(targets
             .into_iter()
             .map(|target| match observations.get(&target.address).cloned() {
                 Some(observation) => HostResult {
@@ -132,16 +140,8 @@ async fn discover_targets_icmp(targets: Vec<Target>, config: &HostConfig) -> Vec
                     errors: vec!["icmp probe timed out".to_string()],
                 },
             })
-            .collect(),
-        Err(error) => targets
-            .into_iter()
-            .map(|target| HostResult {
-                target,
-                reachable: false,
-                observations: Vec::new(),
-                errors: vec![error.to_string()],
-            })
-            .collect(),
+            .collect()),
+        Err(error) => Err(error.into()),
     }
 }
 
@@ -184,7 +184,16 @@ async fn discover_target(target: Target, config: &HostConfig) -> HostResult {
 
 async fn collect_tcp_observations(address: IpAddr, config: &HostConfig) -> Vec<HostObservation> {
     let results = stream::iter(config.ports.iter().copied())
-        .map(|port| async move { tcp_host_probe(address, &[port], config.timeout).await.ok() })
+        .map(|port| async move {
+            tcp_host_probe_on_interface(
+                address,
+                &[port],
+                config.timeout,
+                config.interface.as_deref(),
+            )
+            .await
+            .ok()
+        })
         .buffer_unordered(config.ports.len().clamp(1, 16))
         .collect::<Vec<_>>()
         .await;
@@ -230,57 +239,16 @@ impl TargetSpec {
     }
 }
 
-fn canonicalize_for_seen(path: &Path) -> PathBuf {
-    fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
-}
-
-fn collect_target_tokens(
-    inputs: &[String],
-    seen_files: &mut HashSet<PathBuf>,
-) -> Result<Vec<String>> {
-    let mut tokens = Vec::new();
-
-    for raw in inputs {
-        let value = raw.trim();
-        if value.is_empty() {
-            continue;
-        }
-
-        let (is_file_hint, path_str) = if let Some(stripped) = value.strip_prefix('@') {
-            (true, stripped)
-        } else {
-            (false, value)
-        };
-
-        let path = Path::new(path_str);
-        if is_file_hint || path.is_file() {
-            let canonical = canonicalize_for_seen(path);
-            if !seen_files.insert(canonical) {
-                continue;
-            }
-
-            let text = fs::read_to_string(path)?;
-            let nested_inputs = text
-                .lines()
-                .map(str::trim)
-                .filter(|line| !line.is_empty() && !line.starts_with('#'))
-                .map(ToString::to_string)
-                .collect::<Vec<_>>();
-
-            let mut nested = collect_target_tokens(&nested_inputs, seen_files)?;
-            tokens.append(&mut nested);
-            continue;
-        }
-
-        tokens.push(value.to_string());
-    }
-
-    Ok(tokens)
-}
-
 pub fn resolve_host_targets(inputs: &[String]) -> Result<Vec<Target>> {
+    resolve_host_targets_with_limit(inputs, crate::target::DEFAULT_MAX_TARGETS)
+}
+
+pub fn resolve_host_targets_with_limit(
+    inputs: &[String],
+    max_targets: usize,
+) -> Result<Vec<Target>> {
     let mut seen_files = HashSet::new();
-    let tokens = collect_target_tokens(inputs, &mut seen_files)?;
+    let tokens = crate::target::collect_target_tokens(inputs, &mut seen_files)?;
 
     let mut by_ip = BTreeMap::new();
     for token in tokens {
@@ -293,6 +261,7 @@ pub fn resolve_host_targets(inputs: &[String]) -> Result<Vec<Target>> {
                             hostname: None,
                             address: IpAddr::V4(ip),
                         });
+                        ensure_target_limit(&by_ip, &token, max_targets)?;
                     }
                 }
                 IpNet::V6(net) => {
@@ -302,6 +271,7 @@ pub fn resolve_host_targets(inputs: &[String]) -> Result<Vec<Target>> {
                             hostname: None,
                             address: IpAddr::V6(ip),
                         });
+                        ensure_target_limit(&by_ip, &token, max_targets)?;
                     }
                 }
             },
@@ -311,6 +281,7 @@ pub fn resolve_host_targets(inputs: &[String]) -> Result<Vec<Target>> {
                     hostname: None,
                     address: ip,
                 });
+                ensure_target_limit(&by_ip, &token, max_targets)?;
             }
             TargetSpec::Hostname(name) => {
                 let socket = format!("{name}:0");
@@ -322,6 +293,7 @@ pub fn resolve_host_targets(inputs: &[String]) -> Result<Vec<Target>> {
                             hostname: Some(name.clone()),
                             address: addr.ip(),
                         });
+                        ensure_target_limit(&by_ip, &name, max_targets)?;
                     }
                 }
             }
@@ -331,8 +303,24 @@ pub fn resolve_host_targets(inputs: &[String]) -> Result<Vec<Target>> {
     Ok(by_ip.into_values().collect())
 }
 
+fn ensure_target_limit(
+    targets: &BTreeMap<IpAddr, Target>,
+    input: &str,
+    max_targets: usize,
+) -> Result<()> {
+    if targets.len() > max_targets.max(1) {
+        return Err(crate::error::NrevError::TargetLimitExceeded {
+            input: input.to_string(),
+            limit: max_targets.max(1),
+        }
+        .into());
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
+    use std::fs;
     use std::time::Duration;
 
     use super::*;
@@ -361,6 +349,13 @@ mod tests {
         fs::remove_file(path).ok();
     }
 
+    #[test]
+    fn rejects_host_expansion_above_limit() {
+        let error = resolve_host_targets_with_limit(&["192.0.2.0/29".to_string()], 2)
+            .expect_err("target limit");
+        assert!(error.to_string().contains("safety limit of 2"));
+    }
+
     #[tokio::test]
     async fn tcp_host_probe_marks_listener_as_reachable() {
         let listener = TcpListener::bind("127.0.0.1:0").await.expect("listener");
@@ -369,7 +364,7 @@ mod tests {
             let _ = listener.accept().await;
         });
 
-        let observation = tcp_host_probe(
+        let observation = crate::transport::tcp_host_probe(
             "127.0.0.1".parse().expect("ip"),
             &[port],
             Duration::from_millis(200),

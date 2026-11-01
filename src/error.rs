@@ -12,10 +12,22 @@ pub enum NrevError {
     InvalidRecipe(String),
     #[error("invalid task: {0}")]
     InvalidTask(String),
+    #[error("invalid configuration: {0}")]
+    InvalidConfiguration(String),
     #[error("unsupported file extension for {0}")]
     UnsupportedFileExtension(PathBuf),
     #[error("failed to resolve {0}")]
     ResolutionFailed(String),
+    #[error(
+        "target expansion exceeds the safety limit of {limit} addresses (while processing {input})"
+    )]
+    TargetLimitExceeded { input: String, limit: usize },
+    #[error(
+        "scan expansion exceeds the safety limit of {limit} endpoint assignments (while processing {input})"
+    )]
+    EndpointLimitExceeded { input: String, limit: usize },
+    #[error("external data file exceeds the {limit_bytes}-byte safety limit: {path}")]
+    DataFileTooLarge { path: PathBuf, limit_bytes: u64 },
     #[error("I/O error: {0}")]
     Io(#[from] std::io::Error),
     #[error("JSON error: {0}")]

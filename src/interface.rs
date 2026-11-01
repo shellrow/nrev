@@ -5,6 +5,26 @@ use std::{
     net::{IpAddr, Ipv4Addr, Ipv6Addr},
 };
 
+/// Select a source address with the same family and scope as the destination.
+pub(crate) fn source_ip_for(iface: &Interface, destination: IpAddr) -> IpAddr {
+    match destination {
+        IpAddr::V4(dst) => iface
+            .ipv4
+            .iter()
+            .find(|network| network.contains(&dst))
+            .or_else(|| iface.ipv4.first())
+            .map(|network| IpAddr::V4(network.addr()))
+            .unwrap_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED)),
+        IpAddr::V6(dst) => iface
+            .ipv6
+            .iter()
+            .filter(|network| network.addr().is_unicast_link_local() == dst.is_unicast_link_local())
+            .max_by_key(|network| (network.contains(&dst), network.prefix_len()))
+            .map(|network| IpAddr::V6(network.addr()))
+            .unwrap_or(IpAddr::V6(Ipv6Addr::UNSPECIFIED)),
+    }
+}
+
 /// Get interface information by IP address.
 pub fn get_interface_by_ip(ip_addr: IpAddr) -> Option<Interface> {
     for iface in netdev::interface::get_interfaces() {
@@ -168,5 +188,33 @@ pub fn get_gateway_macaddr(iface: &Interface) -> MacAddr {
     match &iface.gateway {
         Some(gateway) => gateway.mac_addr,
         None => MacAddr::zero(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn raw_source_selection_respects_subnet_and_ipv6_scope() {
+        let mut interface = Interface::dummy();
+        interface.ipv4 = vec![
+            "198.51.100.1/24".parse().unwrap(),
+            "192.0.2.1/24".parse().unwrap(),
+        ];
+        interface.ipv6 = vec![
+            "fe80::1/64".parse().unwrap(),
+            "2001:db8::1/64".parse().unwrap(),
+        ];
+        for (destination, expected) in [
+            ("192.0.2.2", "192.0.2.1"),
+            ("fe80::2", "fe80::1"),
+            ("2001:db8::2", "2001:db8::1"),
+        ] {
+            assert_eq!(
+                source_ip_for(&interface, destination.parse().unwrap()),
+                expected.parse::<IpAddr>().unwrap()
+            );
+        }
     }
 }

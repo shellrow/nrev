@@ -9,7 +9,7 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
-    time::timeout,
+    time::{Instant, timeout, timeout_at},
 };
 
 use crate::{
@@ -145,8 +145,11 @@ pub fn select_builtin_probes(
         .into_iter()
         .filter(|probe| {
             probe.transport() == transport
-                && probe.matches(port)
-                && (enabled_set.is_empty() || enabled_set.contains(probe.id()))
+                && if enabled_set.is_empty() {
+                    probe.matches(port)
+                } else {
+                    enabled_set.contains(probe.id())
+                }
         })
         .collect()
 }
@@ -213,10 +216,11 @@ impl Probe for TlsProbe {
                 "TLS probe requires a TCP connection".to_string(),
             ));
         };
+        let started = Instant::now();
         let (tls, tls_stream) = handshake_tls(stream, Some(context.host), context.timeout).await?;
         let request = format!(
             "GET / HTTP/1.1\r\nHost: {}\r\nUser-Agent: nrev\r\nAccept: */*\r\nRange: bytes=0-4095\r\nConnection: close\r\n\r\n",
-            context.host
+            http_authority(context.host, context.port)
         );
 
         let mut evidence = vec![Evidence {
@@ -230,7 +234,7 @@ impl Probe for TlsProbe {
         if let Ok(response) = read_http_response_stream(
             tls_stream,
             request.as_bytes(),
-            context.timeout,
+            context.timeout.saturating_sub(started.elapsed()) / 2,
             context.http_body_preview_bytes,
         )
         .await
@@ -279,7 +283,7 @@ impl Probe for HttpProbe {
     ) -> Result<ProbeObservation> {
         let request = format!(
             "GET / HTTP/1.1\r\nHost: {}\r\nUser-Agent: nrev\r\nAccept: */*\r\nRange: bytes=0-255\r\nConnection: close\r\n\r\n",
-            context.host
+            http_authority(context.host, context.port)
         );
         let response = read_http_response(
             connection,
@@ -487,12 +491,27 @@ impl Probe for DnsUdpProbe {
         connection: ProbeConnection,
         context: ProbeContext<'_>,
     ) -> Result<ProbeObservation> {
-        let raw = exchange_bytes(connection, &dns_version_query_udp(), context.timeout).await?;
-        Ok(binary_observation(
+        let query = dns_version_query_udp();
+        let raw = exchange_bytes(connection, &query, context.timeout).await?;
+        let valid =
+            raw.len() >= 12 && raw[..2] == query[..2] && raw[2] & 0x80 != 0 && raw[2] & 0x78 == 0;
+        let mut details = Vec::new();
+        if valid {
+            details.push(Evidence {
+                key: "dns_rcode".into(),
+                value: (raw[3] & 0x0f).to_string(),
+            });
+            details.push(Evidence {
+                key: "dns_answers".into(),
+                value: u16::from_be_bytes([raw[6], raw[7]]).to_string(),
+            });
+        }
+        Ok(validated_udp_observation(
             self.id(),
             "dns",
             raw,
-            vec!["infrastructure".to_string()],
+            valid,
+            details,
         ))
     }
 }
@@ -518,16 +537,32 @@ impl Probe for NtpProbe {
         connection: ProbeConnection,
         context: ProbeContext<'_>,
     ) -> Result<ProbeObservation> {
-        let request = [
-            0x1b, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-        ];
+        let mut request = [0_u8; 48];
+        request[0] = 0x23; // NTP version 4, client mode.
+        let timestamp = rand::random::<u64>().to_be_bytes();
+        request[40..48].copy_from_slice(&timestamp);
         let raw = exchange_bytes(connection, &request, context.timeout).await?;
-        Ok(binary_observation(
+        let valid = raw.len() >= 48
+            && raw[0] & 7 == 4
+            && matches!((raw[0] >> 3) & 7, 3 | 4)
+            && raw[24..32] == timestamp;
+        let mut details = Vec::new();
+        if valid {
+            details.push(Evidence {
+                key: "ntp_version".into(),
+                value: ((raw[0] >> 3) & 7).to_string(),
+            });
+            details.push(Evidence {
+                key: "ntp_stratum".into(),
+                value: raw[1].to_string(),
+            });
+        }
+        Ok(validated_udp_observation(
             self.id(),
             "ntp",
             raw,
-            vec!["infrastructure".to_string()],
+            valid,
+            details,
         ))
     }
 }
@@ -873,14 +908,14 @@ impl Probe for QuicProbe {
                 .negotiated_protocol
                 .as_deref()
                 .is_some_and(|protocol| protocol.starts_with("h3"))
-            && let Ok(response) = read_http3_response(
+        {
+            let response = read_http3_response(
                 connection,
-                context.host,
+                &http_authority(context.host, context.port),
                 context.timeout,
                 context.http_body_preview_bytes,
             )
-            .await
-        {
+            .await?;
             banner = Some(normalize_banner(response.header_text.clone()));
             evidence.extend(extract_http_evidence(&response));
             service_hint = ServiceHint {
@@ -890,16 +925,16 @@ impl Probe for QuicProbe {
             tags.push("web".to_string());
         }
 
-        endpoint.wait_idle().await;
+        endpoint.close(0u32.into(), b"probe complete");
 
         Ok(ProbeObservation {
             probe_id: self.id().to_string(),
+            confidence: service_hint.confidence.clone(),
             service_hint: Some(service_hint),
             banner,
             tls: Some(tls),
             tags,
             evidence,
-            confidence: Confidence::High,
         })
     }
 }
@@ -920,6 +955,27 @@ fn simple_observation(service: &str, raw: String, tags: Vec<String>) -> ProbeObs
         }],
         confidence: Confidence::Medium,
     }
+}
+
+fn validated_udp_observation(
+    probe: &str,
+    service: &str,
+    raw: Vec<u8>,
+    valid: bool,
+    details: Vec<Evidence>,
+) -> ProbeObservation {
+    let mut observation = binary_observation(probe, service, raw, vec!["infrastructure".into()]);
+    observation.evidence.push(Evidence {
+        key: "response_validated".into(),
+        value: valid.to_string(),
+    });
+    observation.evidence.extend(details);
+    if !valid {
+        // A datagram proves reachability, but not the service that produced it.
+        observation.service_hint = None;
+        observation.confidence = Confidence::Low;
+    }
+    observation
 }
 
 fn binary_observation(
@@ -1182,6 +1238,22 @@ async fn exchange_string(
     )
 }
 
+// Dropping a JoinHandle detaches its task; probing must cancel the driver instead.
+struct AbortOnDrop(tokio::task::JoinHandle<()>);
+impl Drop for AbortOnDrop {
+    fn drop(&mut self) {
+        self.0.abort();
+    }
+}
+
+fn http_authority(host: &str, port: u16) -> String {
+    if host.parse::<std::net::Ipv6Addr>().is_ok() {
+        format!("[{host}]:{port}")
+    } else {
+        format!("{host}:{port}")
+    }
+}
+
 struct HttpResponsePreview {
     header_text: String,
     body_preview: Option<String>,
@@ -1212,9 +1284,9 @@ async fn read_http3_response(
     let (mut driver, mut send_request) = client::new(h3_connection)
         .await
         .map_err(|error| NrevError::Tls(error.to_string()))?;
-    let driver_task = tokio::spawn(async move {
+    let _driver_task = AbortOnDrop(tokio::spawn(async move {
         let _ = poll_fn(|cx| driver.poll_close(cx)).await;
-    });
+    }));
 
     let request = Request::builder()
         .method(Method::GET)
@@ -1239,7 +1311,7 @@ async fn read_http3_response(
         .map_err(|error| NrevError::Tls(error.to_string()))?;
 
     let header_text = format_http_headers(response.status().as_u16(), response.headers());
-    let mut body = String::new();
+    let mut body = Vec::new();
     while body.len() < body_limit {
         let Some(chunk) = timeout(timeout_window, stream.recv_data())
             .await
@@ -1250,16 +1322,12 @@ async fn read_http3_response(
         };
         let remaining = body_limit.saturating_sub(body.len());
         let slice = chunk.chunk();
-        body.push_str(&String::from_utf8_lossy(
-            &slice[..slice.len().min(remaining)],
-        ));
+        body.extend_from_slice(&slice[..slice.len().min(remaining)]);
     }
-
-    driver_task.abort();
 
     Ok(HttpResponsePreview {
         header_text,
-        body_preview: (!body.is_empty()).then_some(body),
+        body_preview: (!body.is_empty()).then(|| String::from_utf8_lossy(&body).into_owned()),
     })
 }
 
@@ -1272,53 +1340,71 @@ async fn read_http_response_stream<S>(
 where
     S: AsyncRead + AsyncWrite + Unpin,
 {
-    timeout(timeout_window, stream.write_all(payload))
+    const HEADER_LIMIT: usize = 64 * 1024;
+    let deadline = Instant::now() + timeout_window;
+    timeout_at(deadline, stream.write_all(payload))
         .await
         .map_err(|_| std::io::Error::new(std::io::ErrorKind::TimedOut, "write timeout"))??;
 
     let mut buf = Vec::new();
-    let mut chunk = vec![0_u8; 1024];
+    let mut chunk = [0_u8; 4096];
     let mut header_end = None;
+    let mut expected_body = body_limit;
     loop {
-        let size = timeout(timeout_window, stream.read(&mut chunk))
-            .await
-            .map_err(|_| std::io::Error::new(std::io::ErrorKind::TimedOut, "read timeout"))??;
+        let limit = header_end.map_or(HEADER_LIMIT, |end| end + expected_body);
+        let remaining = limit.saturating_sub(buf.len());
+        if remaining == 0 {
+            break;
+        }
+        let read_len = remaining.min(chunk.len());
+        let size = match timeout_at(deadline, stream.read(&mut chunk[..read_len])).await {
+            Ok(result) => result?,
+            Err(_) if header_end.is_some() => break,
+            Err(_) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "HTTP header read timed out",
+                )
+                .into());
+            }
+        };
         if size == 0 {
             break;
         }
         buf.extend_from_slice(&chunk[..size]);
-
         if header_end.is_none() {
             header_end = find_http_header_end(&buf);
-        }
-
-        if let Some(end) = header_end
-            && buf.len().saturating_sub(end) >= body_limit
-        {
-            break;
-        }
-
-        if buf.len() >= 8192 {
-            break;
+            if let Some(end) = header_end {
+                let headers = String::from_utf8_lossy(&buf[..end]);
+                // Transfer-Encoding takes precedence over Content-Length.
+                let chunked = headers.lines().any(|line| {
+                    line.split_once(':')
+                        .is_some_and(|(key, _)| key.eq_ignore_ascii_case("transfer-encoding"))
+                });
+                if !chunked
+                    && let Some(length) = headers.lines().find_map(|line| {
+                        let (key, value) = line.split_once(':')?;
+                        key.eq_ignore_ascii_case("content-length")
+                            .then(|| value.trim().parse::<usize>().ok())
+                            .flatten()
+                    })
+                {
+                    expected_body = expected_body.min(length);
+                }
+            }
         }
     }
-
-    let header_end = header_end.unwrap_or(buf.len());
-    let header_text = String::from_utf8_lossy(&buf[..header_end]).to_string();
-    let body_preview = if header_end < buf.len() {
-        Some(
-            String::from_utf8_lossy(&buf[header_end..])
-                .chars()
-                .take(body_limit)
-                .collect::<String>(),
+    let end = header_end.ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "incomplete HTTP headers or header limit exceeded",
         )
-    } else {
-        None
-    };
-
+    })?;
+    let header_text = String::from_utf8_lossy(&buf[..end]).to_string();
+    let body = &buf[end..buf.len().min(end + expected_body)];
     Ok(HttpResponsePreview {
         header_text,
-        body_preview,
+        body_preview: (!body.is_empty()).then(|| String::from_utf8_lossy(body).into_owned()),
     })
 }
 
@@ -1436,6 +1522,13 @@ async fn exchange_bytes(
             let size = timeout(timeout_window, stream.read(&mut buf))
                 .await
                 .map_err(|_| std::io::Error::new(std::io::ErrorKind::TimedOut, "read timeout"))??;
+            if size == 0 {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    "peer closed without a response",
+                )
+                .into());
+            }
             Ok(buf[..size].to_vec())
         }
         ProbeConnection::Udp(socket) => {
@@ -1581,7 +1674,7 @@ fn parse_rdp_banner(raw: &[u8]) -> Option<String> {
     };
 
     if raw.len() >= 19 && raw[11] == 0x02 {
-        let selected_protocol = u32::from_be_bytes([raw[15], raw[16], raw[17], raw[18]]);
+        let selected_protocol = u32::from_le_bytes([raw[15], raw[16], raw[17], raw[18]]);
         return Some(format!(
             "RDP X.224 {x224_label} tpkt_len={tpkt_len} selected_protocol={}",
             rdp_protocol_name(selected_protocol)
@@ -1589,7 +1682,7 @@ fn parse_rdp_banner(raw: &[u8]) -> Option<String> {
     }
 
     if raw.len() >= 19 && raw[11] == 0x03 {
-        let failure_code = u32::from_be_bytes([raw[15], raw[16], raw[17], raw[18]]);
+        let failure_code = u32::from_le_bytes([raw[15], raw[16], raw[17], raw[18]]);
         return Some(format!(
             "RDP X.224 {x224_label} tpkt_len={tpkt_len} negotiation_failure={failure_code}"
         ));
@@ -1609,20 +1702,20 @@ fn rdp_protocol_name(protocol: u32) -> &'static str {
     }
 }
 
-fn dns_version_query_udp() -> [u8; 31] {
-    [
-        0x12, 0x34, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, b'v', b'e',
-        b'r', b's', b'i', b'o', b'n', 0x04, b'b', b'i', b'n', b'd', 0x00, 0x00, 0x10, 0x00, 0x03,
-        0x00,
-    ]
+fn dns_version_query_udp() -> [u8; 30] {
+    let mut query = [
+        0, 0, 0x01, 0, 0, 1, 0, 0, 0, 0, 0, 0, 7, b'v', b'e', b'r', b's', b'i', b'o', b'n', 4,
+        b'b', b'i', b'n', b'd', 0, 0, 0x10, 0, 3,
+    ];
+    query[..2].copy_from_slice(&rand::random::<u16>().to_be_bytes());
+    query
 }
 
-fn dns_version_query_tcp() -> [u8; 33] {
-    [
-        0x00, 0x1f, 0x12, 0x34, 0x01, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07,
-        b'v', b'e', b'r', b's', b'i', b'o', b'n', 0x04, b'b', b'i', b'n', b'd', 0x00, 0x00, 0x10,
-        0x00, 0x03, 0x00,
-    ]
+fn dns_version_query_tcp() -> [u8; 32] {
+    let mut query = [0_u8; 32];
+    query[..2].copy_from_slice(&30_u16.to_be_bytes());
+    query[2..].copy_from_slice(&dns_version_query_udp());
+    query
 }
 
 #[cfg(test)]
@@ -1688,9 +1781,140 @@ mod tests {
     fn parses_rdp_negotiation_banner() {
         let raw = [
             0x03, 0x00, 0x00, 0x13, 0x0e, 0xd0, 0x00, 0x00, 0x12, 0x34, 0x00, 0x02, 0x00, 0x08,
-            0x00, 0x00, 0x00, 0x00, 0x02,
+            0x00, 0x02, 0x00, 0x00, 0x00,
         ];
         let banner = parse_rdp_banner(&raw).expect("banner");
         assert!(banner.contains("selected_protocol=hybrid"));
+    }
+    #[test]
+    fn parses_rdp_failure_code_in_wire_byte_order() {
+        let raw = [3, 0, 0, 19, 14, 0xd0, 0, 0, 0, 0, 0, 3, 0, 8, 0, 5, 0, 0, 0];
+        assert!(
+            parse_rdp_banner(&raw)
+                .unwrap()
+                .contains("negotiation_failure=5")
+        );
+    }
+
+    #[tokio::test]
+    async fn tls_observation_survives_a_silent_application() {
+        let key = rcgen::generate_simple_self_signed(vec!["localhost".into()]).unwrap();
+        let config = rustls::ServerConfig::builder()
+            .with_no_client_auth()
+            .with_single_cert(
+                vec![key.cert.der().clone()],
+                rustls::pki_types::PrivatePkcs8KeyDer::from(key.signing_key.serialize_der()).into(),
+            )
+            .unwrap();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let task = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let _tls = tokio_rustls::TlsAcceptor::from(std::sync::Arc::new(config))
+                .accept(stream)
+                .await
+                .unwrap();
+            std::future::pending::<()>().await;
+        });
+        let _guard = AbortOnDrop(task);
+        let stream = tokio::net::TcpStream::connect(address).await.unwrap();
+        let budget = Duration::from_secs(2);
+        let observation = timeout(
+            budget,
+            TlsProbe.execute(
+                ProbeConnection::Tcp(stream),
+                ProbeContext {
+                    host: "localhost",
+                    port: address.port(),
+                    timeout: budget,
+                    http_body_preview_bytes: 4096,
+                },
+            ),
+        )
+        .await
+        .expect("probe must retain evidence within its budget")
+        .unwrap();
+        assert!(observation.tls.is_some());
+        assert_eq!(observation.service_hint.unwrap().name, "tls");
+    }
+
+    #[test]
+    fn explicitly_selected_probe_supports_nonstandard_ports() {
+        let probes = select_builtin_probes(2222, Transport::Tcp, &["ssh".into()]);
+        assert_eq!(probes.len(), 1);
+        assert_eq!(probes[0].id(), "ssh");
+        assert_eq!(http_authority("::1", 8080), "[::1]:8080");
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn http_drip_feed_cannot_extend_deadline() {
+        let (client, mut server) = tokio::io::duplex(65536);
+        let sender = tokio::spawn(async move {
+            loop {
+                if server.write_all(b"H").await.is_err() {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        });
+        let started = Instant::now();
+        assert!(
+            read_http_response_stream(client, b"", Duration::from_millis(100), 256)
+                .await
+                .is_err()
+        );
+        assert_eq!(started.elapsed(), Duration::from_millis(100));
+        sender.abort();
+    }
+
+    #[tokio::test]
+    async fn http_body_preview_can_exceed_eight_kilobytes() {
+        let (client, mut server) = tokio::io::duplex(65536);
+        server
+            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 20000\r\n\r\n")
+            .await
+            .unwrap();
+        server.write_all(&vec![b'x'; 20000]).await.unwrap();
+        let response = read_http_response_stream(client, b"", Duration::from_secs(1), 16000)
+            .await
+            .unwrap();
+        assert_eq!(response.body_preview.unwrap().len(), 16000);
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn http_content_length_avoids_waiting_for_keep_alive_eof() {
+        let (client, mut server) = tokio::io::duplex(1024);
+        server
+            .write_all(b"HTTP/1.1 200 OK\r\nContent-Length: 2\r\n\r\nok")
+            .await
+            .unwrap();
+        let started = Instant::now();
+        let response = read_http_response_stream(client, b"", Duration::from_secs(1), 4096)
+            .await
+            .unwrap();
+        assert_eq!(response.body_preview.as_deref(), Some("ok"));
+        assert_eq!(started.elapsed(), Duration::ZERO);
+    }
+
+    #[tokio::test]
+    async fn http_body_limit_counts_bytes() {
+        let (client, mut server) = tokio::io::duplex(1024);
+        server
+            .write_all("HTTP/1.1 200 OK\r\n\r\néééé".as_bytes())
+            .await
+            .unwrap();
+        let response = read_http_response_stream(client, b"", Duration::from_secs(1), 4)
+            .await
+            .unwrap();
+        assert_eq!(response.body_preview.as_deref(), Some("éé"));
+    }
+
+    #[tokio::test]
+    async fn dropping_driver_guard_cancels_task() {
+        let handle = tokio::spawn(std::future::pending());
+        let abort = handle.abort_handle();
+        drop(AbortOnDrop(handle));
+        tokio::task::yield_now().await;
+        assert!(abort.is_finished());
     }
 }

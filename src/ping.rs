@@ -1,12 +1,8 @@
-use std::{
-    net::{IpAddr, SocketAddr},
-    time::Duration,
-};
+use std::{net::IpAddr, time::Duration};
 
 use anyhow::{Context, Result};
 use chrono::Utc;
 use futures::StreamExt;
-use futures::future::poll_fn;
 use nex::datalink::async_io::{AsyncChannel, async_channel};
 use nex::net::interface::Interface as NexInterface;
 use nex::packet::frame::Frame;
@@ -22,6 +18,13 @@ use crate::{
 };
 
 pub async fn run_ping(input: &str, config: &PingConfig) -> Result<PingReport> {
+    anyhow::ensure!(config.count > 0, "ping count must be greater than zero");
+    if let Some(name) = &config.interface {
+        anyhow::ensure!(
+            crate::interface::get_interface_by_name(name.clone()).is_some(),
+            "interface not found: {name}"
+        );
+    }
     let target = resolve_single_target(input)?;
     let started = std::time::Instant::now();
     let replies = match config.method {
@@ -56,6 +59,7 @@ pub async fn run_ping(input: &str, config: &PingConfig) -> Result<PingReport> {
 
     Ok(PingReport {
         metadata: PingMetadata {
+            schema_version: crate::model::REPORT_SCHEMA_VERSION,
             version: env!("CARGO_PKG_VERSION").to_string(),
             target,
             method: config.method,
@@ -81,12 +85,19 @@ async fn run_udp_ping(target: &Target, config: &PingConfig) -> Vec<PingReply> {
     let port = config.port.unwrap_or(33435);
     let mut replies = Vec::with_capacity(config.count as usize);
     for seq in 1..=config.count {
-        let local = bind_addr(target.address);
         let started = std::time::Instant::now();
         let reply = match async {
-            let socket = tokio::net::UdpSocket::bind(local).await?;
+            let socket = tokio::net::UdpSocket::bind(crate::transport::local_bind_addr(
+                target.address,
+                config.interface.as_deref(),
+            )?)
+            .await?;
             socket
-                .connect(SocketAddr::new(target.address, port))
+                .connect(crate::transport::remote_socket_addr(
+                    target.address,
+                    port,
+                    config.interface.as_deref(),
+                )?)
                 .await?;
             socket.send(&[0]).await?;
             let mut buf = [0_u8; 64];
@@ -148,13 +159,18 @@ async fn run_tcp_ping(target: &Target, config: &PingConfig) -> Vec<PingReply> {
     let mut replies = Vec::with_capacity(config.count as usize);
     for seq in 1..=config.count {
         let started = std::time::Instant::now();
-        let reply = match timeout(
-            config.timeout,
-            tokio::net::TcpStream::connect(SocketAddr::new(target.address, port)),
-        )
-        .await
+        let reply = match SocketConnector
+            .connect(
+                target.address,
+                port,
+                Transport::Tcp,
+                config.timeout,
+                config.interface.as_deref(),
+                None,
+            )
+            .await
         {
-            Ok(Ok(_)) => PingReply {
+            Ok(_) => PingReply {
                 seq,
                 success: true,
                 outcome: "connect-open".to_string(),
@@ -162,7 +178,7 @@ async fn run_tcp_ping(target: &Target, config: &PingConfig) -> Vec<PingReply> {
                 ttl_hint: None,
                 mac_address: None,
             },
-            Ok(Err(error)) if error.kind() == std::io::ErrorKind::ConnectionRefused => PingReply {
+            Err(error) if error.kind() == std::io::ErrorKind::ConnectionRefused => PingReply {
                 seq,
                 success: true,
                 outcome: "connection-refused".to_string(),
@@ -170,18 +186,10 @@ async fn run_tcp_ping(target: &Target, config: &PingConfig) -> Vec<PingReply> {
                 ttl_hint: None,
                 mac_address: None,
             },
-            Ok(Err(error)) => PingReply {
+            Err(error) => PingReply {
                 seq,
                 success: false,
                 outcome: error.to_string(),
-                latency: None,
-                ttl_hint: None,
-                mac_address: None,
-            },
-            Err(_) => PingReply {
-                seq,
-                success: false,
-                outcome: "tcp ping timed out".to_string(),
                 latency: None,
                 ttl_hint: None,
                 mac_address: None,
@@ -252,16 +260,9 @@ async fn run_quic_ping(target: &Target, config: &PingConfig) -> Vec<PingReply> {
 
 async fn run_icmp_ping(target: &Target, config: &PingConfig) -> Result<Vec<PingReply>> {
     let interface = resolve_interface(config.interface.as_deref())?;
-    let datalink_config = nex::datalink::Config {
-        write_buffer_size: 4096,
-        read_buffer_size: 4096,
-        read_timeout: Some(config.timeout),
-        write_timeout: None,
-        channel_type: nex::datalink::ChannelType::Layer2,
-        bpf_fd_attempts: 1000,
-        linux_fanout: None,
-        promiscuous: false,
-    };
+    let datalink_config = nex::datalink::Config::default()
+        .with_read_timeout(Some(config.timeout))
+        .with_promiscuous(false);
     let nex_interface = NexInterface::from(interface.clone());
     let AsyncChannel::Ethernet(mut tx, mut rx) =
         async_channel(&nex_interface, datalink_config).map_err(std::io::Error::other)?
@@ -269,13 +270,16 @@ async fn run_icmp_ping(target: &Target, config: &PingConfig) -> Result<Vec<PingR
         anyhow::bail!("unsupported datalink channel");
     };
 
-    let packet = build_icmp_packet(&interface, target.address)?;
+    let dst_mac =
+        crate::neighbor::destination_mac(&interface, target.address, config.timeout).await?;
     let parse_option = capture_parse_option(&interface);
     let mut replies = Vec::with_capacity(config.count as usize);
 
     for seq in 1..=config.count {
+        let token = rand::random::<u32>();
+        let packet = build_icmp_packet(&interface, target.address, dst_mac, token)?;
         let started = std::time::Instant::now();
-        poll_fn(|cx| tx.poll_send(cx, &packet))
+        crate::capture::send_packet(&mut *tx, &interface, &packet)
             .await
             .map_err(std::io::Error::other)?;
 
@@ -295,7 +299,8 @@ async fn run_icmp_ping(target: &Target, config: &PingConfig) -> Result<Vec<PingR
                     let Some(frame) = Frame::from_buf(&frame_bytes, parse_option.clone()) else {
                         continue;
                     };
-                    if let Some((ttl_hint, mac_address)) = parse_icmp_reply(target.address, &frame)
+                    if let Some((ttl_hint, mac_address)) =
+                        parse_icmp_reply(target.address, &frame, token)
                     {
                         reply = PingReply {
                             seq,
@@ -333,7 +338,14 @@ async fn run_icmp_ping(target: &Target, config: &PingConfig) -> Result<Vec<PingR
     Ok(replies)
 }
 
-fn parse_icmp_reply(address: IpAddr, frame: &Frame) -> Option<(Option<u8>, Option<String>)> {
+fn parse_icmp_reply(
+    address: IpAddr,
+    frame: &Frame,
+    token: u32,
+) -> Option<(Option<u8>, Option<String>)> {
+    if frame.payload.get(..4) != Some(token.to_be_bytes().as_slice()) {
+        return None;
+    }
     let ip = frame.ip.as_ref()?;
     let mac = frame.datalink.as_ref().and_then(|datalink| {
         datalink
@@ -378,13 +390,6 @@ fn resolve_interface(name: Option<&str>) -> Result<netdev::Interface> {
     }
 }
 
-fn bind_addr(address: IpAddr) -> SocketAddr {
-    match address {
-        IpAddr::V4(_) => SocketAddr::from(([0, 0, 0, 0], 0)),
-        IpAddr::V6(_) => SocketAddr::from(([0_u16; 8], 0)),
-    }
-}
-
 fn capture_parse_option(interface: &netdev::Interface) -> nex::packet::frame::ParseOption {
     let mut parse_option = nex::packet::frame::ParseOption::default();
     if interface.is_tun()
@@ -396,7 +401,12 @@ fn capture_parse_option(interface: &netdev::Interface) -> nex::packet::frame::Pa
     parse_option
 }
 
-fn build_icmp_packet(interface: &netdev::Interface, dst_ip: IpAddr) -> Result<Vec<u8>> {
+fn build_icmp_packet(
+    interface: &netdev::Interface,
+    dst_ip: IpAddr,
+    dst_mac: netdev::MacAddr,
+    token: u32,
+) -> Result<Vec<u8>> {
     use nex::packet::builder::{
         ethernet::EthernetPacketBuilder, icmp::IcmpPacketBuilder, icmpv6::Icmpv6PacketBuilder,
         ipv4::Ipv4PacketBuilder, ipv6::Ipv6PacketBuilder,
@@ -404,65 +414,41 @@ fn build_icmp_packet(interface: &netdev::Interface, dst_ip: IpAddr) -> Result<Ve
     use nex::packet::{ethernet::EtherType, ip::IpNextProtocol, ipv4::Ipv4Flags};
 
     let src_mac = interface.mac_addr.unwrap_or(netdev::MacAddr::zero());
-    let dst_mac = interface
-        .gateway
-        .as_ref()
-        .map(|gateway| gateway.mac_addr)
-        .unwrap_or(netdev::MacAddr::zero());
-    let src_ip = match dst_ip {
-        IpAddr::V4(_) => interface
-            .ipv4
-            .first()
-            .map(|ip| IpAddr::V4(ip.addr()))
-            .unwrap_or(IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED)),
-        IpAddr::V6(_) => interface
-            .ipv6
-            .first()
-            .map(|ip| IpAddr::V6(ip.addr()))
-            .unwrap_or(IpAddr::V6(std::net::Ipv6Addr::UNSPECIFIED)),
-    };
-    let ip_only = interface.is_tun() || interface.is_loopback();
+
+    let src_ip = crate::interface::source_ip_for(interface, dst_ip);
 
     let ip_packet = match (src_ip, dst_ip) {
         (IpAddr::V4(src), IpAddr::V4(dst)) => {
             let icmp = IcmpPacketBuilder::new(src, dst)
-                .echo_fields(0x4e52, 1)
-                .build();
+                .echo_fields((token >> 16) as u16, token as u16)
+                .build()?;
             Ipv4PacketBuilder::new()
                 .source(src)
                 .destination(dst)
                 .protocol(IpNextProtocol::Icmp)
                 .flags(Ipv4Flags::DontFragment)
                 .payload(icmp.to_bytes())
-                .build()
+                .build()?
                 .to_bytes()
         }
         (IpAddr::V6(src), IpAddr::V6(dst)) => {
             let icmp = Icmpv6PacketBuilder::new(src, dst)
-                .echo_fields(0x4e52, 1)
-                .build();
+                .echo_fields((token >> 16) as u16, token as u16)
+                .build()?;
             Ipv6PacketBuilder::new()
                 .source(src)
                 .destination(dst)
                 .next_header(IpNextProtocol::Icmpv6)
                 .payload(icmp.to_bytes())
-                .build()
+                .build()?
                 .to_bytes()
         }
         _ => anyhow::bail!("mismatched address family"),
     };
 
     let ethernet = EthernetPacketBuilder::new()
-        .source(if ip_only {
-            netdev::MacAddr::zero()
-        } else {
-            src_mac
-        })
-        .destination(if ip_only {
-            netdev::MacAddr::zero()
-        } else {
-            dst_mac
-        })
+        .source(src_mac)
+        .destination(dst_mac)
         .ethertype(match dst_ip {
             IpAddr::V4(_) => EtherType::Ipv4,
             IpAddr::V6(_) => EtherType::Ipv6,
@@ -470,14 +456,7 @@ fn build_icmp_packet(interface: &netdev::Interface, dst_ip: IpAddr) -> Result<Ve
         .payload(ip_packet)
         .build();
 
-    Ok(if ip_only {
-        ethernet
-            .ip_packet()
-            .context("failed to extract IP packet")?
-            .to_vec()
-    } else {
-        ethernet.to_bytes().to_vec()
-    })
+    Ok(ethernet.to_bytes().to_vec())
 }
 
 fn log_ping_reply(
@@ -499,4 +478,52 @@ fn log_ping_reply(
         .map(|value| value.to_string())
         .unwrap_or_else(|| "-".to_string());
     info!("#{} Reply from {} TTL: {} RTT: {}", seq, src, ttl, rtt);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn loopback_packets_keep_the_ethernet_header_required_by_datalink() {
+        let mut interface = netdev::Interface::dummy();
+        interface.flags = nex::net::interface::IFF_LOOPBACK;
+        interface.ipv4.push("127.0.0.1/8".parse().unwrap());
+        interface.ipv6.push("::1/128".parse().unwrap());
+        for address in ["127.0.0.1", "::1"] {
+            let address: IpAddr = address.parse().unwrap();
+            let packet =
+                build_icmp_packet(&interface, address, netdev::MacAddr::zero(), 123).unwrap();
+            let frame = Frame::from_buf(&packet, Default::default()).unwrap();
+            assert!(frame.datalink.unwrap().ethernet.is_some());
+            let ip = frame.ip.unwrap();
+            assert!(ip.icmp.is_some() || ip.icmpv6.is_some());
+        }
+    }
+
+    #[test]
+    fn icmp_ping_rejects_delayed_replies_from_previous_probes() {
+        let mut interface = netdev::Interface::dummy();
+        interface.ipv4.push("192.0.2.1/24".parse().unwrap());
+        interface.ipv6.push("2001:db8::1/64".parse().unwrap());
+        for address in ["192.0.2.2", "2001:db8::2"] {
+            let address: IpAddr = address.parse().unwrap();
+            let packet =
+                build_icmp_packet(&interface, address, netdev::MacAddr::zero(), 123).unwrap();
+            let mut reply = Frame::from_buf(&packet, Default::default()).unwrap();
+            let ip = reply.ip.as_mut().unwrap();
+            match address {
+                IpAddr::V4(address) => {
+                    ip.ipv4.as_mut().unwrap().source = address;
+                    ip.icmp.as_mut().unwrap().icmp_type = IcmpType::EchoReply;
+                }
+                IpAddr::V6(address) => {
+                    ip.ipv6.as_mut().unwrap().source = address;
+                    ip.icmpv6.as_mut().unwrap().icmpv6_type = Icmpv6Type::EchoReply;
+                }
+            }
+            assert!(parse_icmp_reply(address, &reply, 123).is_some());
+            assert!(parse_icmp_reply(address, &reply, 124).is_none());
+        }
+    }
 }

@@ -56,6 +56,8 @@ pub struct ScanRecipe {
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ScanTask {
+    #[serde(default)]
+    pub identification: crate::nmap::IdentificationOptions,
     pub name: Option<String>,
     pub description: Option<String>,
     pub target: Option<String>,
@@ -85,6 +87,7 @@ pub struct ScanTask {
 
 #[derive(Clone, Debug)]
 pub struct ScanConfig {
+    pub identification: crate::nmap::IdentificationOptions,
     pub profile_name: String,
     pub recipe_name: Option<String>,
     pub transport: Transport,
@@ -164,6 +167,13 @@ impl ScanTask {
         );
 
         ScanArgs {
+            identification: {
+                let mut options = self.identification.clone();
+                if options.executable.is_relative() && options.executable.components().count() > 1 {
+                    options.executable = resolve_task_path(task_path, &options.executable);
+                }
+                options
+            },
             targets,
             ports: self.ports.clone().unwrap_or_else(|| "top-100".to_string()),
             transport: self.transport.map(Into::into).unwrap_or(ScanTransport::Tcp),
@@ -259,12 +269,11 @@ impl ScanConfig {
 
         let enabled_probes = if sources.probes || !args.probes.is_empty() {
             args.probes.clone()
-        } else if let Some(recipe) = &recipe {
-            recipe.probes.clone().unwrap_or_default()
         } else {
-            profile
+            recipe
                 .as_ref()
-                .and_then(|p| p.probes.clone())
+                .and_then(|r| r.probes.clone())
+                .or_else(|| profile.as_ref().and_then(|p| p.probes.clone()))
                 .unwrap_or_default()
         };
         let explicit_connect_timeout = if sources.connect_timeout_ms {
@@ -277,7 +286,8 @@ impl ScanConfig {
                 .or(args.connect_timeout_ms)
         };
 
-        Ok(Self {
+        let config = Self {
+            identification: args.identification.clone(),
             profile_name: profile
                 .as_ref()
                 .map(|p| p.name.clone())
@@ -355,8 +365,53 @@ impl ScanConfig {
                     .unwrap_or(!args.no_builtin_probes)
             },
             tags: recipe.map(|r| r.tags).unwrap_or_default(),
-        })
+        };
+        validate_scan_config(&config)?;
+        let catalog = registry.builtin_catalog();
+        for id in &config.enabled_probes {
+            if !catalog.probes().iter().any(|probe| probe.id == id)
+                && !registry.external_probes.iter().any(|probe| &probe.id == id)
+            {
+                return Err(NrevError::InvalidConfiguration(format!(
+                    "unknown probe: {id}"
+                )));
+            }
+        }
+        Ok(config)
     }
+}
+
+fn validate_scan_config(config: &ScanConfig) -> Result<()> {
+    config
+        .identification
+        .validate(config.transport)
+        .map_err(|error| NrevError::InvalidConfiguration(error.to_string()))?;
+    if !(1..=65_535).contains(&config.concurrency) {
+        return Err(NrevError::InvalidConfiguration(
+            "concurrency must be between 1 and 65535".to_string(),
+        ));
+    }
+    if !(Duration::from_millis(50)..=Duration::from_secs(30)).contains(&config.connect_timeout) {
+        return Err(NrevError::InvalidConfiguration(
+            "connect timeout must be between 50 and 30000 milliseconds".to_string(),
+        ));
+    }
+    if !(Duration::from_millis(50)..=Duration::from_secs(30)).contains(&config.probe_timeout) {
+        return Err(NrevError::InvalidConfiguration(
+            "probe timeout must be between 50 and 30000 milliseconds".to_string(),
+        ));
+    }
+    if !(256..=1_048_576).contains(&config.http_body_preview_bytes) {
+        return Err(NrevError::InvalidConfiguration(
+            "HTTP body preview must be between 256 and 1048576 bytes".to_string(),
+        ));
+    }
+    if config.retries > 5 {
+        return Err(NrevError::InvalidConfiguration(
+            "retries must be between 0 and 5".to_string(),
+        ));
+    }
+    Ok(())
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -433,6 +488,11 @@ impl From<CliTraceMethod> for TraceMethod {
 
 impl HostConfig {
     pub fn from_host_args(args: &HostArgs) -> Result<Self> {
+        if !(1..=65_535).contains(&args.concurrency) {
+            return Err(NrevError::InvalidConfiguration(
+                "concurrency must be between 1 and 65535".to_string(),
+            ));
+        }
         let method: HostDiscoveryMethod = args.method.into();
         let ports = if let Some(ports) = &args.ports {
             parse_ports(ports)?
@@ -514,7 +574,7 @@ fn default_host_ports(method: HostDiscoveryMethod) -> Vec<u16> {
 }
 
 pub fn load_profile(path: &Path) -> Result<ScanProfile> {
-    let content = std::fs::read_to_string(path)?;
+    let content = crate::data::read_data_file(path)?;
     match path.extension().and_then(|ext| ext.to_str()) {
         Some("json") => Ok(serde_json::from_str(&content)?),
         Some("toml") => Ok(toml::from_str(&content)?),
@@ -525,7 +585,7 @@ pub fn load_profile(path: &Path) -> Result<ScanProfile> {
 }
 
 pub fn load_task(path: &Path) -> Result<ScanTask> {
-    let content = std::fs::read_to_string(path)?;
+    let content = crate::data::read_data_file(path)?;
     let task = match path.extension().and_then(|ext| ext.to_str()) {
         Some("json") => serde_json::from_str(&content)?,
         Some("toml") => toml::from_str(&content)?,
@@ -592,6 +652,24 @@ mod tests {
     use crate::data::DataRegistry;
 
     #[test]
+    fn rejects_oversized_task_and_profile_files() {
+        let directory = tempfile::tempdir().unwrap();
+        let path = directory.path().join("config.toml");
+        std::fs::File::create(&path)
+            .unwrap()
+            .set_len(16 * 1024 * 1024 + 1)
+            .unwrap();
+        assert!(matches!(
+            load_task(&path),
+            Err(NrevError::DataFileTooLarge { .. })
+        ));
+        assert!(matches!(
+            load_profile(&path),
+            Err(NrevError::DataFileTooLarge { .. })
+        ));
+    }
+
+    #[test]
     fn profile_overrides_defaults() {
         let profile = ScanProfile {
             name: "fast".to_string(),
@@ -616,6 +694,7 @@ mod tests {
     #[test]
     fn recipe_overrides_profile() {
         let args = ScanArgs {
+            identification: Default::default(),
             targets: vec!["127.0.0.1".to_string()],
             ports: "80".to_string(),
             transport: ScanTransport::Tcp,
@@ -662,6 +741,7 @@ mod tests {
     #[test]
     fn explicit_cli_values_override_recipe_defaults() {
         let args = ScanArgs {
+            identification: Default::default(),
             targets: vec!["127.0.0.1".to_string()],
             ports: "443".to_string(),
             transport: ScanTransport::Udp,
@@ -731,6 +811,7 @@ mod tests {
     #[test]
     fn supports_quic_transport_from_cli() {
         let args = ScanArgs {
+            identification: Default::default(),
             targets: vec!["example.com".to_string()],
             ports: "443".to_string(),
             transport: ScanTransport::Quic,
@@ -817,6 +898,7 @@ format = "json"
     #[test]
     fn explicit_task_builtin_probe_setting_overrides_recipe_defaults() {
         let task = ScanTask {
+            identification: Default::default(),
             name: None,
             description: None,
             target: Some("127.0.0.1".to_string()),
@@ -865,5 +947,71 @@ format = "json"
         let config =
             ScanConfig::from_scan_args_with_sources(&args, &registry, &sources).expect("config");
         assert!(config.builtin_probes);
+    }
+    #[test]
+    fn recipe_without_probes_inherits_profile_selection() {
+        use clap::Parser;
+        let dir = tempfile::tempdir().unwrap();
+        let profile = dir.path().join("profile.toml");
+        std::fs::write(&profile, "name = 'test'\nprobes = ['ssh']\n").unwrap();
+        let cli = crate::cli::Cli::parse_from([
+            "nrev",
+            "port",
+            "127.0.0.1",
+            "--profile",
+            profile.to_str().unwrap(),
+            "--recipe",
+            "test",
+        ]);
+        let crate::cli::Command::Port(args) = cli.command else {
+            panic!("port command")
+        };
+        let mut registry = DataRegistry::default();
+        registry
+            .recipes
+            .push(toml::from_str("name = 'test'").unwrap());
+        let config = ScanConfig::from_scan_args(&args, &registry).unwrap();
+        assert_eq!(config.enabled_probes, vec!["ssh"]);
+    }
+
+    #[test]
+    fn rejects_unknown_probe_names() {
+        use clap::Parser;
+        let cli = crate::cli::Cli::parse_from(["nrev", "port", "127.0.0.1", "--probes", "typo"]);
+        let crate::cli::Command::Port(args) = cli.command else {
+            panic!("port command")
+        };
+        assert!(matches!(
+            ScanConfig::from_scan_args(&args, &DataRegistry::default()),
+            Err(NrevError::InvalidConfiguration(_))
+        ));
+    }
+    #[test]
+    fn native_and_external_concurrency_are_independent() {
+        use clap::Parser;
+        let cli = crate::cli::Cli::parse_from([
+            "nrev",
+            "port",
+            "127.0.0.1",
+            "--concurrency",
+            "8",
+            "--nmap-concurrency",
+            "3",
+            "--nmap-scope",
+            "all",
+        ]);
+        let crate::cli::Command::Port(args) = cli.command else {
+            panic!("port command")
+        };
+        let config = ScanConfig::from_scan_args(&args, &DataRegistry::default()).unwrap();
+        assert_eq!(config.concurrency, 8);
+        assert_eq!(config.identification.concurrency, 3);
+        assert_eq!(
+            config.identification.scope,
+            crate::nmap::IdentificationScope::All
+        );
+        let options: crate::nmap::IdentificationOptions =
+            toml::from_str("services = true\nconcurrency = 0").unwrap();
+        assert!(options.validate(Transport::Tcp).is_err());
     }
 }

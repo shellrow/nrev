@@ -14,6 +14,6 @@ description = "Probe enterprise QUIC and HTTP/3 listeners on alternate ports."
 ports = "443,9443"
 transport = "quic"
 probe_timeout_ms = 2500
-probes = ["quic", "quic-alt-svc"]
+probes = ["quic"]
 builtin_probes = true
 tags = ["quic", "http3", "enterprise"]

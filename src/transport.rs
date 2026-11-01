@@ -1,12 +1,13 @@
+use crate::interface::source_ip_for;
 use std::{
     collections::{BTreeMap, HashSet},
-    net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr},
+    net::{IpAddr, SocketAddr},
     sync::Arc,
     time::{Duration, Instant},
 };
 
 use async_trait::async_trait;
-use futures::{StreamExt, future::poll_fn, stream};
+use futures::{StreamExt, stream};
 use netdev::Interface;
 use nex::net::interface::Interface as NexInterface;
 use nex::{
@@ -34,7 +35,7 @@ use rustls::{
 };
 use std::convert::TryFrom;
 use tokio::{
-    net::{TcpStream, UdpSocket},
+    net::{TcpSocket, TcpStream, UdpSocket},
     sync::oneshot,
     time::timeout,
 };
@@ -48,7 +49,12 @@ use crate::{
 };
 
 const SYN_SOURCE_PORT: u16 = 44322;
-const ICMP_ECHO_IDENTIFIER: u16 = 0x4e52;
+
+fn datalink_config(timeout_window: Duration) -> nex::datalink::Config {
+    nex::datalink::Config::default()
+        .with_read_timeout(Some(timeout_window))
+        .with_promiscuous(false)
+}
 
 #[derive(Debug)]
 pub struct SynAckObservation {
@@ -89,6 +95,10 @@ pub struct QuicConnection {
 }
 
 impl QuicConnection {
+    pub fn handshake_observed(&self) -> bool {
+        self.connection.is_some()
+    }
+
     pub fn tls(&self) -> &TlsObservation {
         &self.tls
     }
@@ -113,12 +123,30 @@ pub async fn tcp_host_probe(
     ports: &[u16],
     timeout_window: Duration,
 ) -> std::io::Result<HostObservation> {
+    tcp_host_probe_on_interface(address, ports, timeout_window, None).await
+}
+
+pub(crate) async fn tcp_host_probe_on_interface(
+    address: IpAddr,
+    ports: &[u16],
+    timeout_window: Duration,
+    interface_name: Option<&str>,
+) -> std::io::Result<HostObservation> {
     let samples = stream::iter(ports.iter().copied())
         .map(|port| async move {
-            let socket = SocketAddr::new(address, port);
             let started = Instant::now();
-            match timeout(timeout_window, TcpStream::connect(socket)).await {
-                Ok(Ok(_stream)) => Ok(HostObservation {
+            match SocketConnector
+                .connect(
+                    address,
+                    port,
+                    Transport::Tcp,
+                    timeout_window,
+                    interface_name,
+                    None,
+                )
+                .await
+            {
+                Ok(_stream) => Ok(HostObservation {
                     method: HostDiscoveryMethod::Tcp,
                     port: Some(port),
                     outcome: "connect-open".to_string(),
@@ -126,7 +154,7 @@ pub async fn tcp_host_probe(
                     ttl_hint: None,
                     mac_address: None,
                 }),
-                Ok(Err(error)) if error.kind() == std::io::ErrorKind::ConnectionRefused => {
+                Err(error) if error.kind() == std::io::ErrorKind::ConnectionRefused => {
                     Ok(HostObservation {
                         method: HostDiscoveryMethod::Tcp,
                         port: Some(port),
@@ -136,11 +164,7 @@ pub async fn tcp_host_probe(
                         mac_address: None,
                     })
                 }
-                Ok(Err(error)) => Err(error),
-                Err(_) => Err(std::io::Error::new(
-                    std::io::ErrorKind::TimedOut,
-                    "tcp host probe timed out",
-                )),
+                Err(error) => Err(error),
             }
         })
         .buffer_unordered(ports.len().clamp(1, 16))
@@ -162,7 +186,7 @@ pub async fn udp_host_probe(
     let samples = stream::iter(ports.iter().copied())
         .map(|port| async move {
             let local = local_bind_addr(address, interface_name)?;
-            let socket = SocketAddr::new(address, port);
+            let socket = remote_socket_addr(address, port, interface_name)?;
             let udp = UdpSocket::bind(local).await?;
             udp.connect(socket).await?;
             let started = Instant::now();
@@ -223,17 +247,9 @@ pub async fn icmp_host_probe(
     timeout_window: Duration,
     interface_name: Option<&str>,
 ) -> std::io::Result<HostObservation> {
+    let token = rand::random::<u32>();
     let interface = resolve_interface(interface_name)?;
-    let config = nex::datalink::Config {
-        write_buffer_size: 4096,
-        read_buffer_size: 4096,
-        read_timeout: Some(timeout_window),
-        write_timeout: None,
-        channel_type: nex::datalink::ChannelType::Layer2,
-        bpf_fd_attempts: 1000,
-        linux_fanout: None,
-        promiscuous: false,
-    };
+    let config = datalink_config(timeout_window);
     let nex_interface = NexInterface::from(interface.clone());
 
     let AsyncChannel::Ethernet(mut tx, mut rx) =
@@ -242,10 +258,11 @@ pub async fn icmp_host_probe(
         return Err(std::io::Error::other("unsupported datalink channel"));
     };
 
-    let packet = build_icmp_echo_packet(&interface, address)?;
+    let dst_mac = crate::neighbor::destination_mac(&interface, address, timeout_window).await?;
+    let packet = build_icmp_echo_packet(&interface, address, dst_mac, token)?;
     let parse_option = capture_parse_option(&interface);
     let started = Instant::now();
-    poll_fn(|cx| tx.poll_send(cx, &packet))
+    crate::capture::send_packet(&mut *tx, &interface, &packet)
         .await
         .map_err(std::io::Error::other)?;
 
@@ -263,13 +280,19 @@ pub async fn icmp_host_probe(
                 let Some(frame) = Frame::from_buf(&packet, parse_option.clone()) else {
                     continue;
                 };
-                if let Some(observation) = parse_icmp_host_frame(address, &frame, started.elapsed())
+                if let Some(observation) =
+                    parse_icmp_host_frame(address, &frame, started.elapsed(), token)
                 {
                     return Ok(observation);
                 }
             }
             Ok(Some(Err(error))) => return Err(std::io::Error::other(error)),
-            Ok(None) => continue,
+            Ok(None) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::UnexpectedEof,
+                    "capture ended",
+                ));
+            }
             Err(_) => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::TimedOut,
@@ -289,17 +312,11 @@ pub async fn icmp_scan_targets(
         return Ok(BTreeMap::new());
     }
 
+    let token = rand::random::<u32>();
     let interface = resolve_interface(interface_name)?;
-    let config = nex::datalink::Config {
-        write_buffer_size: 4096,
-        read_buffer_size: 4096,
-        read_timeout: Some(timeout_window),
-        write_timeout: None,
-        channel_type: nex::datalink::ChannelType::Layer2,
-        bpf_fd_attempts: 1000,
-        linux_fanout: None,
-        promiscuous: false,
-    };
+    let destination_macs =
+        crate::neighbor::destination_macs(&interface, addresses, timeout_window).await?;
+    let config = datalink_config(timeout_window);
     let nex_interface = NexInterface::from(interface.clone());
 
     let AsyncChannel::Ethernet(mut tx, mut rx) =
@@ -310,9 +327,14 @@ pub async fn icmp_scan_targets(
 
     let mut options = PacketCaptureOptions::from_interface_index(interface.index)
         .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "interface not found"))?;
-    options.capture_timeout = timeout_window;
+    // The response window starts after the final send, not before the batch.
+    // Dropping stop_tx on send failure or cancellation also stops capture.
+    options.capture_timeout = Duration::MAX;
     options.read_timeout = timeout_window;
     options.src_ips.extend(addresses.iter().copied());
+    options
+        .dst_ips
+        .extend(crate::interface::get_interface_local_ips(&interface));
     options.ip_protocols.insert(IpNextProtocol::Icmp);
     options.ip_protocols.insert(IpNextProtocol::Icmpv6);
 
@@ -326,23 +348,28 @@ pub async fn icmp_scan_targets(
     let _ = ready_rx.await;
     let mut send_times = BTreeMap::new();
     for address in addresses {
-        let packet = build_icmp_echo_packet(&interface, *address)?;
-        poll_fn(|cx| tx.poll_send(cx, &packet))
+        let Some(&dst_mac) = destination_macs.get(address) else {
+            continue;
+        };
+        let packet = build_icmp_echo_packet(&interface, *address, dst_mac, token)?;
+        let sent = Instant::now();
+        crate::capture::send_packet(&mut *tx, &interface, &packet)
             .await
             .map_err(std::io::Error::other)?;
-        send_times.insert(*address, Instant::now());
+        send_times.insert(*address, sent);
     }
     tokio::time::sleep(timeout_window).await;
     let _ = stop_tx.send(());
 
     let captured = capture_task
         .await
-        .map_err(|err| std::io::Error::other(err.to_string()))?;
+        .map_err(|err| std::io::Error::other(err.to_string()))??;
     Ok(parse_icmp_scan_frames(
         &interface,
         addresses,
         &send_times,
         captured,
+        token,
     ))
 }
 
@@ -375,9 +402,17 @@ impl Connector for SocketConnector {
     ) -> std::io::Result<ConnectOutcome> {
         match transport {
             Transport::Tcp => {
-                let socket = SocketAddr::new(address, port);
+                let socket = remote_socket_addr(address, port, interface_name)?;
                 let start = Instant::now();
-                let stream = timeout(timeout_window, TcpStream::connect(socket))
+                let tcp = if address.is_ipv4() {
+                    TcpSocket::new_v4()?
+                } else {
+                    TcpSocket::new_v6()?
+                };
+                if interface_name.is_some() {
+                    tcp.bind(local_bind_addr(address, interface_name)?)?;
+                }
+                let stream = timeout(timeout_window, tcp.connect(socket))
                     .await
                     .map_err(|_| {
                         std::io::Error::new(std::io::ErrorKind::TimedOut, "connect timeout")
@@ -389,7 +424,7 @@ impl Connector for SocketConnector {
             }
             Transport::Udp => {
                 let local = local_bind_addr(address, interface_name)?;
-                let socket = SocketAddr::new(address, port);
+                let socket = remote_socket_addr(address, port, interface_name)?;
                 let start = Instant::now();
                 let udp = UdpSocket::bind(local).await?;
                 timeout(timeout_window, udp.connect(socket))
@@ -412,7 +447,9 @@ impl Connector for SocketConnector {
             }
             Transport::Quic => {
                 let start = Instant::now();
-                let connection = quic_connect(address, port, timeout_window, server_name).await?;
+                let connection =
+                    quic_connect(address, port, timeout_window, server_name, interface_name)
+                        .await?;
                 Ok(ConnectOutcome {
                     connection: ProbeConnection::Quic(connection),
                     latency: start.elapsed(),
@@ -455,14 +492,9 @@ async fn quic_connect(
     port: u16,
     timeout_window: Duration,
     server_name: Option<&str>,
+    interface_name: Option<&str>,
 ) -> std::io::Result<QuicConnection> {
-    let bind_addr = SocketAddr::new(
-        match address {
-            IpAddr::V4(_) => IpAddr::V4(Ipv4Addr::UNSPECIFIED),
-            IpAddr::V6(_) => IpAddr::V6(Ipv6Addr::UNSPECIFIED),
-        },
-        0,
-    );
+    let bind_addr = local_bind_addr(address, interface_name)?;
     let mut endpoint = Endpoint::client(bind_addr).map_err(std::io::Error::other)?;
     endpoint.set_default_client_config(quic_client_config()?);
 
@@ -470,7 +502,7 @@ async fn quic_connect(
         .filter(|value| !value.is_empty())
         .map(ToOwned::to_owned)
         .unwrap_or_else(|| address.to_string());
-    let remote = SocketAddr::new(address, port);
+    let remote = remote_socket_addr(address, port, interface_name)?;
     let connecting = endpoint
         .connect(remote, &server_name)
         .map_err(std::io::Error::other)?;
@@ -487,10 +519,11 @@ async fn quic_connect(
             connection: None,
             tls: TlsObservation {
                 negotiated_protocol: None,
-                cipher_suite: Some("TLSv1_3".to_string()),
+                cipher_suite: None,
                 server_name: Some(server_name),
                 certificate_subjects: Vec::new(),
                 certificate_issuers: Vec::new(),
+                certificate_validation: crate::model::TlsCertificateValidation::NotPerformed,
             },
             open_signal: Some(format!(
                 "quic-handshake-error={}",
@@ -506,13 +539,8 @@ async fn quic_connect(
 }
 
 fn quic_client_config() -> std::io::Result<ClientConfig> {
-    let mut roots = RootCertStore::empty();
-    for cert in rustls_native_certs::load_native_certs().map_err(std::io::Error::other)? {
-        let _ = roots.add(cert);
-    }
-
     let mut tls = RustlsClientConfig::builder()
-        .with_root_certificates(roots)
+        .with_root_certificates(RootCertStore::empty())
         .with_no_client_auth();
     tls.alpn_protocols = quic_alpn_protocols();
     tls.dangerous()
@@ -565,10 +593,11 @@ fn observe_quic_tls(connection: &Connection, server_name: &str) -> TlsObservatio
 
     TlsObservation {
         negotiated_protocol,
-        cipher_suite: Some("TLSv1_3".to_string()),
+        cipher_suite: None,
         server_name: Some(server_name.to_string()),
         certificate_subjects: subjects,
         certificate_issuers: issuers,
+        certificate_validation: crate::model::TlsCertificateValidation::NotPerformed,
     }
 }
 
@@ -660,17 +689,9 @@ async fn syn_probe(
     timeout_window: Duration,
     interface_name: Option<&str>,
 ) -> std::io::Result<SynAckObservation> {
+    let sequence = rand::random::<u32>();
     let interface = resolve_interface(interface_name)?;
-    let config = nex::datalink::Config {
-        write_buffer_size: 4096,
-        read_buffer_size: 4096,
-        read_timeout: Some(timeout_window),
-        write_timeout: None,
-        channel_type: nex::datalink::ChannelType::Layer2,
-        bpf_fd_attempts: 1000,
-        linux_fanout: None,
-        promiscuous: false,
-    };
+    let config = datalink_config(timeout_window);
     let nex_interface = NexInterface::from(interface.clone());
 
     let AsyncChannel::Ethernet(mut tx, mut rx) =
@@ -681,10 +702,15 @@ async fn syn_probe(
 
     let mut options = PacketCaptureOptions::from_interface_index(interface.index)
         .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "interface not found"))?;
-    options.capture_timeout = timeout_window;
+    // The response window starts after the final send, not before the batch.
+    // Dropping stop_tx on send failure or cancellation also stops capture.
+    options.capture_timeout = Duration::MAX;
     options.read_timeout = timeout_window;
     options.src_ips.insert(address);
     options.src_ports.insert(port);
+    options
+        .dst_ips
+        .extend(crate::interface::get_interface_local_ips(&interface));
     options.dst_ports.insert(SYN_SOURCE_PORT);
     options.ip_protocols.insert(IpNextProtocol::Tcp);
 
@@ -694,8 +720,9 @@ async fn syn_probe(
         tokio::spawn(async move { start_capture(&mut rx, options, ready_tx, &mut stop_rx).await });
 
     let _ = ready_rx.await;
-    let packet = build_tcp_syn_packet(&interface, address, port)?;
-    poll_fn(|cx| tx.poll_send(cx, &packet))
+    let dst_mac = crate::neighbor::destination_mac(&interface, address, timeout_window).await?;
+    let packet = build_tcp_syn_packet(&interface, address, port, dst_mac, sequence)?;
+    crate::capture::send_packet(&mut *tx, &interface, &packet)
         .await
         .map_err(std::io::Error::other)?;
     tokio::time::sleep(timeout_window).await;
@@ -703,8 +730,8 @@ async fn syn_probe(
 
     let frames = capture_task
         .await
-        .map_err(|err| std::io::Error::other(err.to_string()))?;
-    parse_syn_frames(address, port, SYN_SOURCE_PORT, frames)
+        .map_err(|err| std::io::Error::other(err.to_string()))??;
+    parse_syn_frames(address, port, SYN_SOURCE_PORT, sequence, frames)
 }
 
 pub async fn syn_scan_target(
@@ -713,17 +740,9 @@ pub async fn syn_scan_target(
     timeout_window: Duration,
     interface_name: Option<&str>,
 ) -> std::io::Result<BTreeMap<u16, SynPortStatus>> {
+    let sequence = rand::random::<u32>();
     let interface = resolve_interface(interface_name)?;
-    let config = nex::datalink::Config {
-        write_buffer_size: 4096,
-        read_buffer_size: 4096,
-        read_timeout: Some(timeout_window),
-        write_timeout: None,
-        channel_type: nex::datalink::ChannelType::Layer2,
-        bpf_fd_attempts: 1000,
-        linux_fanout: None,
-        promiscuous: false,
-    };
+    let config = datalink_config(timeout_window);
     let nex_interface = NexInterface::from(interface.clone());
 
     let AsyncChannel::Ethernet(mut tx, mut rx) =
@@ -734,10 +753,15 @@ pub async fn syn_scan_target(
 
     let mut options = PacketCaptureOptions::from_interface_index(interface.index)
         .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "interface not found"))?;
-    options.capture_timeout = timeout_window;
+    // The response window starts after the final send, not before the batch.
+    // Dropping stop_tx on send failure or cancellation also stops capture.
+    options.capture_timeout = Duration::MAX;
     options.read_timeout = timeout_window;
     options.src_ips.insert(address);
     options.src_ports.extend(ports.iter().copied());
+    options
+        .dst_ips
+        .extend(crate::interface::get_interface_local_ips(&interface));
     options.dst_ports.insert(SYN_SOURCE_PORT);
     options.ip_protocols.insert(IpNextProtocol::Tcp);
 
@@ -747,9 +771,10 @@ pub async fn syn_scan_target(
         tokio::spawn(async move { start_capture(&mut rx, options, ready_tx, &mut stop_rx).await });
 
     let _ = ready_rx.await;
+    let dst_mac = crate::neighbor::destination_mac(&interface, address, timeout_window).await?;
     for port in ports {
-        let packet = build_tcp_syn_packet(&interface, address, *port)?;
-        poll_fn(|cx| tx.poll_send(cx, &packet))
+        let packet = build_tcp_syn_packet(&interface, address, *port, dst_mac, sequence)?;
+        crate::capture::send_packet(&mut *tx, &interface, &packet)
             .await
             .map_err(std::io::Error::other)?;
     }
@@ -758,11 +783,12 @@ pub async fn syn_scan_target(
 
     let frames = capture_task
         .await
-        .map_err(|err| std::io::Error::other(err.to_string()))?;
+        .map_err(|err| std::io::Error::other(err.to_string()))??;
     Ok(parse_syn_scan_frames(
         address,
         ports,
         SYN_SOURCE_PORT,
+        sequence,
         frames,
     ))
 }
@@ -776,17 +802,18 @@ pub async fn syn_scan_targets(
         return Ok(BTreeMap::new());
     }
 
+    let sequence = rand::random::<u32>();
     let interface = resolve_interface(interface_name)?;
-    let config = nex::datalink::Config {
-        write_buffer_size: 4096,
-        read_buffer_size: 4096,
-        read_timeout: Some(timeout_window),
-        write_timeout: None,
-        channel_type: nex::datalink::ChannelType::Layer2,
-        bpf_fd_attempts: 1000,
-        linux_fanout: None,
-        promiscuous: false,
-    };
+    let destination_macs = crate::neighbor::destination_macs(
+        &interface,
+        &targets
+            .iter()
+            .map(|(address, _)| *address)
+            .collect::<Vec<_>>(),
+        timeout_window,
+    )
+    .await?;
+    let config = datalink_config(timeout_window);
     let nex_interface = NexInterface::from(interface.clone());
 
     let AsyncChannel::Ethernet(mut tx, mut rx) =
@@ -797,7 +824,9 @@ pub async fn syn_scan_targets(
 
     let mut options = PacketCaptureOptions::from_interface_index(interface.index)
         .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "interface not found"))?;
-    options.capture_timeout = timeout_window;
+    // The response window starts after the final send, not before the batch.
+    // Dropping stop_tx on send failure or cancellation also stops capture.
+    options.capture_timeout = Duration::MAX;
     options.read_timeout = timeout_window;
     options
         .src_ips
@@ -805,6 +834,9 @@ pub async fn syn_scan_targets(
     options
         .src_ports
         .extend(targets.iter().flat_map(|(_, ports)| ports.iter().copied()));
+    options
+        .dst_ips
+        .extend(crate::interface::get_interface_local_ips(&interface));
     options.dst_ports.insert(SYN_SOURCE_PORT);
     options.ip_protocols.insert(IpNextProtocol::Tcp);
 
@@ -815,9 +847,12 @@ pub async fn syn_scan_targets(
 
     let _ = ready_rx.await;
     for (address, ports) in targets {
+        let Some(&dst_mac) = destination_macs.get(address) else {
+            continue;
+        };
         for port in ports {
-            let packet = build_tcp_syn_packet(&interface, *address, *port)?;
-            poll_fn(|cx| tx.poll_send(cx, &packet))
+            let packet = build_tcp_syn_packet(&interface, *address, *port, dst_mac, sequence)?;
+            crate::capture::send_packet(&mut *tx, &interface, &packet)
                 .await
                 .map_err(std::io::Error::other)?;
         }
@@ -827,10 +862,11 @@ pub async fn syn_scan_targets(
 
     let frames = capture_task
         .await
-        .map_err(|err| std::io::Error::other(err.to_string()))?;
+        .map_err(|err| std::io::Error::other(err.to_string()))??;
     Ok(parse_syn_scan_frames_multi(
         targets,
         SYN_SOURCE_PORT,
+        sequence,
         frames,
     ))
 }
@@ -839,6 +875,7 @@ fn parse_syn_frames(
     address: IpAddr,
     port: u16,
     source_port: u16,
+    sequence: u32,
     frames: Vec<Frame>,
 ) -> std::io::Result<SynAckObservation> {
     for frame in frames {
@@ -861,6 +898,12 @@ fn parse_syn_frames(
         let Some(tcp) = transport.tcp else {
             continue;
         };
+        if tcp.flags & TcpFlags::ACK == 0
+            || tcp.acknowledgement != sequence.wrapping_add(1)
+            || tcp.flags & (TcpFlags::SYN | TcpFlags::RST) == (TcpFlags::SYN | TcpFlags::RST)
+        {
+            continue;
+        }
         if tcp.source != port || tcp.destination != source_port {
             continue;
         }
@@ -899,6 +942,7 @@ fn parse_syn_scan_frames(
     address: IpAddr,
     ports: &[u16],
     source_port: u16,
+    sequence: u32,
     frames: Vec<Frame>,
 ) -> BTreeMap<u16, SynPortStatus> {
     let mut results = BTreeMap::new();
@@ -929,6 +973,12 @@ fn parse_syn_scan_frames(
         let Some(tcp) = transport.tcp else {
             continue;
         };
+        if tcp.flags & TcpFlags::ACK == 0
+            || tcp.acknowledgement != sequence.wrapping_add(1)
+            || tcp.flags & (TcpFlags::SYN | TcpFlags::RST) == (TcpFlags::SYN | TcpFlags::RST)
+        {
+            continue;
+        }
         if tcp.destination != source_port || !port_set.contains(&tcp.source) {
             continue;
         }
@@ -963,6 +1013,7 @@ fn parse_syn_scan_frames(
 fn parse_syn_scan_frames_multi(
     targets: &[(IpAddr, Vec<u16>)],
     source_port: u16,
+    sequence: u32,
     frames: Vec<Frame>,
 ) -> BTreeMap<IpAddr, BTreeMap<u16, SynPortStatus>> {
     let target_ports = targets
@@ -996,6 +1047,12 @@ fn parse_syn_scan_frames_multi(
         let Some(tcp) = transport.tcp else {
             continue;
         };
+        if tcp.flags & TcpFlags::ACK == 0
+            || tcp.acknowledgement != sequence.wrapping_add(1)
+            || tcp.flags & (TcpFlags::SYN | TcpFlags::RST) == (TcpFlags::SYN | TcpFlags::RST)
+        {
+            continue;
+        }
         if tcp.destination != source_port || !port_set.contains(&tcp.source) {
             continue;
         }
@@ -1043,18 +1100,17 @@ fn build_tcp_syn_packet(
     interface: &Interface,
     dst_ip: IpAddr,
     dst_port: u16,
+    dst_mac: netdev::MacAddr,
+    sequence: u32,
 ) -> std::io::Result<Vec<u8>> {
     let src_mac = interface.mac_addr.unwrap_or(netdev::MacAddr::zero());
-    let dst_mac = interface
-        .gateway
-        .as_ref()
-        .map(|gateway| gateway.mac_addr)
-        .unwrap_or(netdev::MacAddr::zero());
+
     let src_ip = source_ip_for(interface, dst_ip);
 
     let tcp_packet = TcpPacketBuilder::new(src_ip, dst_ip)
         .source(SYN_SOURCE_PORT)
         .destination(dst_port)
+        .sequence(sequence)
         .flags(TcpFlags::SYN)
         .window(65535)
         .options(vec![
@@ -1066,7 +1122,8 @@ fn build_tcp_syn_packet(
             TcpOptionPacket::timestamp(u32::MAX, u32::MIN),
             TcpOptionPacket::sack_perm(),
         ])
-        .build();
+        .build()
+        .map_err(std::io::Error::other)?;
 
     let ip_packet = match (src_ip, dst_ip) {
         (IpAddr::V4(src), IpAddr::V4(dst)) => Ipv4PacketBuilder::new()
@@ -1076,6 +1133,7 @@ fn build_tcp_syn_packet(
             .flags(Ipv4Flags::DontFragment)
             .payload(tcp_packet.to_bytes())
             .build()
+            .map_err(std::io::Error::other)?
             .to_bytes(),
         (IpAddr::V6(src), IpAddr::V6(dst)) => Ipv6PacketBuilder::new()
             .source(src)
@@ -1083,6 +1141,7 @@ fn build_tcp_syn_packet(
             .next_header(IpNextProtocol::Tcp)
             .payload(tcp_packet.to_bytes())
             .build()
+            .map_err(std::io::Error::other)?
             .to_bytes(),
         _ => {
             return Err(std::io::Error::new(
@@ -1128,7 +1187,7 @@ fn extract_tcp_option_signature(options: &[TcpOptionPacket]) -> TcpOptionSignatu
     for option in options {
         let token = match option.kind() {
             TcpOptionKind::MSS => {
-                mss = Some(option.get_mss());
+                mss = Some(option.maximum_segment_size());
                 Some("MSS")
             }
             TcpOptionKind::SACK_PERMITTED => {
@@ -1140,7 +1199,7 @@ fn extract_tcp_option_signature(options: &[TcpOptionPacket]) -> TcpOptionSignatu
                 Some("TS")
             }
             TcpOptionKind::WSCALE => {
-                window_scale = Some(option.get_wscale());
+                window_scale = Some(option.window_scale());
                 Some("WS")
             }
             TcpOptionKind::NOP => Some("NOP"),
@@ -1195,20 +1254,22 @@ fn extract_tcp_option_signature(options: &[TcpOptionPacket]) -> TcpOptionSignatu
     }
 }
 
-fn build_icmp_echo_packet(interface: &Interface, dst_ip: IpAddr) -> std::io::Result<Vec<u8>> {
+fn build_icmp_echo_packet(
+    interface: &Interface,
+    dst_ip: IpAddr,
+    dst_mac: netdev::MacAddr,
+    token: u32,
+) -> std::io::Result<Vec<u8>> {
     let src_mac = interface.mac_addr.unwrap_or(netdev::MacAddr::zero());
-    let dst_mac = interface
-        .gateway
-        .as_ref()
-        .map(|gateway| gateway.mac_addr)
-        .unwrap_or(netdev::MacAddr::zero());
+
     let src_ip = source_ip_for(interface, dst_ip);
 
     let ip_packet = match (src_ip, dst_ip) {
         (IpAddr::V4(src), IpAddr::V4(dst)) => {
             let icmp_packet = IcmpPacketBuilder::new(src, dst)
-                .echo_fields(ICMP_ECHO_IDENTIFIER, 1)
-                .build();
+                .echo_fields((token >> 16) as u16, token as u16)
+                .build()
+                .map_err(std::io::Error::other)?;
             Ipv4PacketBuilder::new()
                 .source(src)
                 .destination(dst)
@@ -1216,18 +1277,21 @@ fn build_icmp_echo_packet(interface: &Interface, dst_ip: IpAddr) -> std::io::Res
                 .flags(Ipv4Flags::DontFragment)
                 .payload(icmp_packet.to_bytes())
                 .build()
+                .map_err(std::io::Error::other)?
                 .to_bytes()
         }
         (IpAddr::V6(src), IpAddr::V6(dst)) => {
             let icmp_packet = Icmpv6PacketBuilder::new(src, dst)
-                .echo_fields(ICMP_ECHO_IDENTIFIER, 1)
-                .build();
+                .echo_fields((token >> 16) as u16, token as u16)
+                .build()
+                .map_err(std::io::Error::other)?;
             Ipv6PacketBuilder::new()
                 .source(src)
                 .destination(dst)
                 .next_header(IpNextProtocol::Icmpv6)
                 .payload(icmp_packet.to_bytes())
                 .build()
+                .map_err(std::io::Error::other)?
                 .to_bytes()
         }
         _ => {
@@ -1255,7 +1319,11 @@ fn parse_icmp_host_frame(
     address: IpAddr,
     frame: &Frame,
     latency: Duration,
+    token: u32,
 ) -> Option<HostObservation> {
+    if frame.payload.get(..4) != Some(token.to_be_bytes().as_slice()) {
+        return None;
+    }
     let ip = frame.ip.as_ref()?;
     if let Some(ipv4) = &ip.ipv4 {
         if IpAddr::V4(ipv4.source) != address {
@@ -1302,7 +1370,11 @@ fn parse_icmp_scan_frame(
     send_times: &BTreeMap<IpAddr, Instant>,
     frame: &Frame,
     captured_at: Instant,
+    token: u32,
 ) -> Option<(IpAddr, HostObservation)> {
+    if frame.payload.get(..4) != Some(token.to_be_bytes().as_slice()) {
+        return None;
+    }
     let ip = frame.ip.as_ref()?;
     let source_mac = frame
         .datalink
@@ -1318,9 +1390,7 @@ fn parse_icmp_scan_frame(
         if icmp.icmp_type != IcmpType::EchoReply {
             return None;
         }
-        let latency = send_times
-            .get(&address)
-            .map(|sent| captured_at.saturating_duration_since(*sent));
+        let latency = Some(captured_at.checked_duration_since(*send_times.get(&address)?)?);
         return Some((
             address,
             HostObservation {
@@ -1347,9 +1417,7 @@ fn parse_icmp_scan_frame(
         if icmpv6.icmpv6_type != Icmpv6Type::EchoReply {
             return None;
         }
-        let latency = send_times
-            .get(&address)
-            .map(|sent| captured_at.saturating_duration_since(*sent));
+        let latency = Some(captured_at.checked_duration_since(*send_times.get(&address)?)?);
         return Some((
             address,
             HostObservation {
@@ -1375,6 +1443,7 @@ fn parse_icmp_scan_frames(
     addresses: &[IpAddr],
     send_times: &BTreeMap<IpAddr, Instant>,
     frames: Vec<CapturedFrame>,
+    token: u32,
 ) -> BTreeMap<IpAddr, HostObservation> {
     let address_set: HashSet<IpAddr> = addresses.iter().copied().collect();
     let mut results = BTreeMap::new();
@@ -1386,6 +1455,7 @@ fn parse_icmp_scan_frames(
             send_times,
             &captured.frame,
             captured.captured_at,
+            token,
         ) {
             results.entry(address).or_insert(observation);
         }
@@ -1418,21 +1488,6 @@ fn capture_parse_option(interface: &Interface) -> nex::packet::frame::ParseOptio
     parse_option
 }
 
-fn source_ip_for(interface: &Interface, dst_ip: IpAddr) -> IpAddr {
-    match dst_ip {
-        IpAddr::V4(_) => interface
-            .ipv4
-            .first()
-            .map(|ip| IpAddr::V4(ip.addr()))
-            .unwrap_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED)),
-        IpAddr::V6(_) => interface
-            .ipv6
-            .first()
-            .map(|ip| IpAddr::V6(ip.addr()))
-            .unwrap_or(IpAddr::V6(Ipv6Addr::UNSPECIFIED)),
-    }
-}
-
 fn resolve_interface(interface_name: Option<&str>) -> std::io::Result<Interface> {
     if let Some(name) = interface_name {
         return get_interface_by_name(name.to_string()).ok_or_else(|| {
@@ -1445,30 +1500,226 @@ fn resolve_interface(interface_name: Option<&str>) -> std::io::Result<Interface>
     netdev::get_default_interface().map_err(std::io::Error::other)
 }
 
-fn local_bind_addr(address: IpAddr, interface_name: Option<&str>) -> std::io::Result<SocketAddr> {
-    let interface = if interface_name.is_some() {
-        Some(resolve_interface(interface_name)?)
+pub(crate) fn local_bind_addr(
+    address: IpAddr,
+    interface_name: Option<&str>,
+) -> std::io::Result<SocketAddr> {
+    if let Some(name) = interface_name {
+        return interface_bind_addr(address, &resolve_interface(Some(name))?);
+    }
+    Ok(match address {
+        IpAddr::V4(_) => SocketAddr::from(([0, 0, 0, 0], 0)),
+        IpAddr::V6(_) => SocketAddr::from(([0_u16; 8], 0)),
+    })
+}
+
+fn interface_bind_addr(address: IpAddr, interface: &Interface) -> std::io::Result<SocketAddr> {
+    let source = source_ip_for(interface, address);
+    if source.is_unspecified() {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::AddrNotAvailable,
+            "interface has no source address matching the destination family and scope",
+        ));
+    }
+    Ok(scoped_socket_addr(source, 0, interface.index))
+}
+
+fn scoped_socket_addr(address: IpAddr, port: u16, interface_index: u32) -> SocketAddr {
+    let mut socket = SocketAddr::new(address, port);
+    if let SocketAddr::V6(socket) = &mut socket
+        && socket.ip().is_unicast_link_local()
+    {
+        socket.set_scope_id(interface_index);
+    }
+    socket
+}
+
+pub(crate) fn remote_socket_addr(
+    address: IpAddr,
+    port: u16,
+    interface_name: Option<&str>,
+) -> std::io::Result<SocketAddr> {
+    let index = if matches!(address, IpAddr::V6(ip) if ip.is_unicast_link_local()) {
+        interface_name
+            .map(|name| resolve_interface(Some(name)).map(|interface| interface.index))
+            .transpose()?
+            .unwrap_or(0)
     } else {
-        None
+        0
     };
-    match (address, interface.as_ref()) {
-        (IpAddr::V4(_), Some(interface)) => Ok(SocketAddr::new(
-            interface
-                .ipv4
-                .first()
-                .map(|ip| IpAddr::V4(ip.addr()))
-                .unwrap_or(IpAddr::V4(Ipv4Addr::UNSPECIFIED)),
-            0,
-        )),
-        (IpAddr::V6(_), Some(interface)) => Ok(SocketAddr::new(
-            interface
-                .ipv6
-                .first()
-                .map(|ip| IpAddr::V6(ip.addr()))
-                .unwrap_or(IpAddr::V6(Ipv6Addr::UNSPECIFIED)),
-            0,
-        )),
-        (IpAddr::V4(_), None) => Ok(SocketAddr::from(([0, 0, 0, 0], 0))),
-        (IpAddr::V6(_), None) => Ok(SocketAddr::from(([0_u16; 8], 0))),
+    Ok(scoped_socket_addr(address, port, index))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn fixture_interface() -> Interface {
+        let mut interface = Interface::dummy();
+        interface.ipv4.push("192.0.2.1/24".parse().unwrap());
+        interface.ipv6.push("2001:db8::1/64".parse().unwrap());
+        interface
+    }
+
+    #[test]
+    fn socket_binding_selects_address_scope_and_preserves_zone() {
+        let mut interface = fixture_interface();
+        interface.index = 7;
+        interface.ipv6.insert(0, "fe80::1/64".parse().unwrap());
+        let global = interface_bind_addr("2001:db8::2".parse().unwrap(), &interface).unwrap();
+        assert_eq!(global.ip(), "2001:db8::1".parse::<IpAddr>().unwrap());
+        let local = interface_bind_addr("fe80::2".parse().unwrap(), &interface).unwrap();
+        assert_eq!(local.to_string(), "[fe80::1%7]:0");
+        assert_eq!(
+            scoped_socket_addr("fe80::2".parse().unwrap(), 80, 7).to_string(),
+            "[fe80::2%7]:80"
+        );
+        interface.ipv6.clear();
+        assert!(interface_bind_addr("fe80::2".parse().unwrap(), &interface).is_err());
+    }
+
+    #[test]
+    fn syn_replies_must_acknowledge_the_current_probe() {
+        let interface = fixture_interface();
+        for address in ["192.0.2.2", "2001:db8::2"] {
+            let address: IpAddr = address.parse().unwrap();
+            let sequence = u32::MAX;
+            let packet =
+                build_tcp_syn_packet(&interface, address, 80, netdev::MacAddr::zero(), sequence)
+                    .unwrap();
+            let sent = Frame::from_buf(&packet, Default::default()).unwrap();
+            assert_eq!(
+                sent.transport
+                    .as_ref()
+                    .unwrap()
+                    .tcp
+                    .as_ref()
+                    .unwrap()
+                    .sequence,
+                sequence
+            );
+            let mut reply = sent;
+            let ip = reply.ip.as_mut().unwrap();
+            match address {
+                IpAddr::V4(address) => ip.ipv4.as_mut().unwrap().source = address,
+                IpAddr::V6(address) => ip.ipv6.as_mut().unwrap().source = address,
+            }
+            let tcp = reply.transport.as_mut().unwrap().tcp.as_mut().unwrap();
+            tcp.source = 80;
+            tcp.destination = SYN_SOURCE_PORT;
+            tcp.flags = TcpFlags::SYN | TcpFlags::ACK;
+            tcp.acknowledgement = sequence.wrapping_add(1);
+            assert!(
+                parse_syn_frames(address, 80, SYN_SOURCE_PORT, sequence, vec![reply.clone()])
+                    .is_ok()
+            );
+            assert!(
+                parse_syn_frames(address, 80, SYN_SOURCE_PORT, 123, vec![reply.clone()]).is_err()
+            );
+            assert!(matches!(
+                parse_syn_scan_frames(address, &[80], SYN_SOURCE_PORT, 123, vec![reply.clone()])
+                    [&80],
+                SynPortStatus::Filtered
+            ));
+            assert!(matches!(
+                parse_syn_scan_frames_multi(
+                    &[(address, vec![80])],
+                    SYN_SOURCE_PORT,
+                    123,
+                    vec![reply.clone()]
+                )[&address][&80],
+                SynPortStatus::Filtered
+            ));
+            reply
+                .transport
+                .as_mut()
+                .unwrap()
+                .tcp
+                .as_mut()
+                .unwrap()
+                .flags = TcpFlags::RST | TcpFlags::ACK;
+            assert!(matches!(
+                parse_syn_scan_frames(
+                    address,
+                    &[80],
+                    SYN_SOURCE_PORT,
+                    sequence,
+                    vec![reply.clone()]
+                )[&80],
+                SynPortStatus::Closed(_)
+            ));
+            reply
+                .transport
+                .as_mut()
+                .unwrap()
+                .tcp
+                .as_mut()
+                .unwrap()
+                .flags = TcpFlags::RST;
+            assert!(matches!(
+                parse_syn_scan_frames(address, &[80], SYN_SOURCE_PORT, sequence, vec![reply])[&80],
+                SynPortStatus::Filtered
+            ));
+        }
+    }
+
+    #[test]
+    fn icmp_discovery_rejects_other_operations_and_pre_send_frames() {
+        let interface = fixture_interface();
+        let token = 0x12345678;
+        for address in ["192.0.2.2", "2001:db8::2"] {
+            let address: IpAddr = address.parse().unwrap();
+            let packet =
+                build_icmp_echo_packet(&interface, address, netdev::MacAddr::zero(), token)
+                    .unwrap();
+            let mut reply = Frame::from_buf(&packet, Default::default()).unwrap();
+            let ip = reply.ip.as_mut().unwrap();
+            match address {
+                IpAddr::V4(address) => {
+                    ip.ipv4.as_mut().unwrap().source = address;
+                    ip.icmp.as_mut().unwrap().icmp_type = IcmpType::EchoReply;
+                }
+                IpAddr::V6(address) => {
+                    ip.ipv6.as_mut().unwrap().source = address;
+                    ip.icmpv6.as_mut().unwrap().icmpv6_type = Icmpv6Type::EchoReply;
+                }
+            }
+            assert!(parse_icmp_host_frame(address, &reply, Duration::ZERO, token).is_some());
+            assert!(parse_icmp_host_frame(address, &reply, Duration::ZERO, token + 1).is_none());
+            let captured = Instant::now();
+            let addresses = HashSet::from([address]);
+            let sent = BTreeMap::from([(address, captured)]);
+            assert!(
+                parse_icmp_scan_frame(&interface, &addresses, &sent, &reply, captured, token)
+                    .is_some()
+            );
+            assert!(
+                parse_icmp_scan_frame(&interface, &addresses, &sent, &reply, captured, token + 1)
+                    .is_none()
+            );
+            let sent = BTreeMap::from([(address, captured + Duration::from_millis(1))]);
+            assert!(
+                parse_icmp_scan_frame(&interface, &addresses, &sent, &reply, captured, token)
+                    .is_none()
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn socket_transports_reject_missing_interfaces_before_connecting() {
+        for transport in [Transport::Tcp, Transport::Udp, Transport::Quic] {
+            let error = SocketConnector
+                .connect(
+                    "127.0.0.1".parse().unwrap(),
+                    9,
+                    transport,
+                    Duration::from_millis(50),
+                    Some("nrev-test-nonexistent-interface"),
+                    Some("127.0.0.1"),
+                )
+                .await
+                .unwrap_err();
+            assert_eq!(error.kind(), std::io::ErrorKind::NotFound);
+        }
     }
 }

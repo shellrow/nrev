@@ -6,8 +6,6 @@ use crate::{
     model::{Confidence, Evidence, ProbeObservation},
 };
 
-const BUILTIN_SERVICE_DB_JSON: &str = include_str!("../resources/nrev-service-db.json");
-
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct LegacyServiceDb {
     #[serde(default)]
@@ -23,12 +21,6 @@ pub struct LegacyServiceSignature {
     pub regex_literal_tokens: Vec<String>,
     #[serde(default)]
     pub cpe: Vec<String>,
-}
-
-pub fn builtin_service_signatures() -> Vec<LegacyServiceSignature> {
-    serde_json::from_str::<LegacyServiceDb>(BUILTIN_SERVICE_DB_JSON)
-        .expect("embedded service signature database must be valid")
-        .signatures
 }
 
 pub fn apply_legacy_service_signatures(

@@ -10,8 +10,31 @@ use serde::{Deserialize, Serialize};
     about = "Observation-first reconnaissance engine"
 )]
 pub struct Cli {
+    /// Color progress and diagnostic output on stderr.
+    #[arg(long, global = true, value_enum, default_value_t = ColorMode::Auto)]
+    pub color: ColorMode,
+    /// Disable colored progress and diagnostic output.
+    #[arg(long, global = true, conflicts_with = "color")]
+    pub no_color: bool,
     #[command(subcommand)]
     pub command: Command,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, ValueEnum)]
+pub enum ColorMode {
+    Auto,
+    Always,
+    Never,
+}
+
+impl ColorMode {
+    pub fn enabled(self, terminal: bool, no_color: bool, dumb_terminal: bool) -> bool {
+        match self {
+            Self::Always => true,
+            Self::Never => false,
+            Self::Auto => terminal && !no_color && !dumb_terminal,
+        }
+    }
 }
 
 #[derive(Debug, Subcommand)]
@@ -130,6 +153,8 @@ pub struct TaskArgs {
 
 #[derive(Debug, Args)]
 pub struct ScanArgs {
+    #[command(flatten)]
+    pub identification: crate::nmap::IdentificationOptions,
     /// Target hosts, IPs, CIDRs, or host:port expressions.
     #[arg(required = true)]
     pub targets: Vec<String>,
@@ -158,7 +183,7 @@ pub struct ScanArgs {
     #[arg(long, value_enum, default_value_t = ProgressMode::Auto)]
     pub progress: ProgressMode,
 
-    /// Interface name to use for UDP or SYN scanning.
+    /// Interface for raw packets or source address selection in socket scans.
     #[arg(short = 'i', long)]
     pub interface: Option<String>,
 
@@ -174,7 +199,7 @@ pub struct ScanArgs {
     #[arg(long, default_value_t = 4096)]
     pub http_body_preview_bytes: usize,
 
-    /// Retries for connect/probe actions.
+    /// Additional transport connection attempts.
     #[arg(long, default_value_t = 0, value_parser = value_parser!(u8).range(0..=5))]
     pub retries: u8,
 
@@ -190,7 +215,7 @@ pub struct ScanArgs {
     #[arg(short = 'r', long)]
     pub recipe: Option<String>,
 
-    /// Override the enabled built-in probe ids.
+    /// Select built-in or external probe IDs; built-in probes also run on nonstandard ports.
     #[arg(long, value_delimiter = ',', num_args = 1..)]
     pub probes: Vec<String>,
 
@@ -251,11 +276,11 @@ pub struct HostArgs {
     #[arg(short = 't', long, default_value_t = 600, value_parser = value_parser!(u64).range(50..=30_000))]
     pub timeout_ms: u64,
 
-    /// Interface name to use for ICMP or UDP probing.
+    /// Interface for raw probes, or source address selection for socket probes.
     #[arg(short = 'i', long)]
     pub interface: Option<String>,
 
-    /// Scan hosts in user-specified order.
+    /// Disable randomization and schedule hosts in address order.
     #[arg(long, action = ArgAction::SetTrue)]
     pub ordered: bool,
 
@@ -305,7 +330,7 @@ pub struct PingArgs {
     #[arg(short = 't', long, default_value_t = 1000, value_parser = value_parser!(u64).range(50..=60_000))]
     pub timeout_ms: u64,
 
-    /// Interface name to use for ICMP probing.
+    /// Interface for raw probes, or source address selection for socket probes.
     #[arg(short = 'i', long)]
     pub interface: Option<String>,
 
@@ -545,5 +570,14 @@ mod tests {
             Some(PathBuf::from("recipes").as_path())
         );
         assert!(args.json);
+    }
+    #[test]
+    fn automatic_color_requires_a_capable_terminal() {
+        assert!(ColorMode::Auto.enabled(true, false, false));
+        assert!(!ColorMode::Auto.enabled(false, false, false));
+        assert!(!ColorMode::Auto.enabled(true, true, false));
+        assert!(!ColorMode::Auto.enabled(true, false, true));
+        assert!(ColorMode::Always.enabled(false, true, true));
+        assert!(!ColorMode::Never.enabled(true, false, false));
     }
 }

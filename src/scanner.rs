@@ -4,15 +4,15 @@ use anyhow::Result;
 use chrono::Utc;
 use futures::{StreamExt, stream};
 use rand::seq::SliceRandom;
-use tokio::sync::Semaphore;
+use tokio::sync::{OwnedSemaphorePermit, Semaphore};
+use tokio::time::timeout;
 
 use crate::{
     config::ScanConfig,
     data::DataRegistry,
     fingerprint::{
         baseline_syn_observation, baseline_tcp_observation, baseline_udp_observation,
-        build_platform_match, builtin_os_ttl_classes, match_legacy_os_signatures, match_rules,
-        match_ttl_classes,
+        build_platform_match, match_legacy_os_signatures, match_rules, match_ttl_classes,
     },
     model::{EndpointResult, EndpointState, ScanMetadata, ScanReport, TargetReport, Transport},
     probes::{ProbeContext, select_builtin_probes},
@@ -34,12 +34,17 @@ pub struct Scanner<C> {
 pub struct ScanExecution {
     pub report: ScanReport,
     pub transport_scan_time: std::time::Duration,
+    pub identification_time: std::time::Duration,
     pub followup_probe_time: std::time::Duration,
-    pub open_endpoint_count: usize,
+    pub followup_endpoint_count: usize,
 }
 
 #[derive(Clone, Copy, Debug)]
 pub enum ScanEvent {
+    IdentificationStarted,
+    IdentificationCompleted {
+        elapsed: std::time::Duration,
+    },
     TransportScanStarted {
         target_count: usize,
         port_count: usize,
@@ -49,7 +54,7 @@ pub enum ScanEvent {
         elapsed: std::time::Duration,
     },
     FollowupProbesStarted {
-        open_endpoint_count: usize,
+        endpoint_count: usize,
     },
     FollowupProbesCompleted {
         elapsed: std::time::Duration,
@@ -59,18 +64,19 @@ pub enum ScanEvent {
 struct TargetPhaseResult {
     target: crate::model::Target,
     endpoints: BTreeMap<u16, EndpointResult>,
-    open_ports: Vec<u16>,
-    reusable_connections: BTreeMap<u16, ProbeConnection>,
+    probe_ports: Vec<u16>,
+    reusable_connections: BTreeMap<u16, (ProbeConnection, OwnedSemaphorePermit)>,
 }
 
 struct FollowupResult {
+    connection_refused: bool,
     observations: Vec<crate::model::ProbeObservation>,
     errors: Vec<String>,
 }
 
 struct TransportEndpointScan {
     endpoint: EndpointResult,
-    reusable_connection: Option<ProbeConnection>,
+    reusable_connection: Option<(ProbeConnection, OwnedSemaphorePermit)>,
 }
 
 impl<C> Scanner<C>
@@ -100,6 +106,12 @@ where
     where
         F: FnMut(ScanEvent),
     {
+        self.config.identification.validate(self.config.transport)?;
+        let external = if self.config.identification.enabled() {
+            Some(crate::nmap::Nmap::preflight(&self.config.identification.executable).await?)
+        } else {
+            None
+        };
         let mut targets = targets;
         let mut rng = rand::rng();
         targets.shuffle(&mut rng);
@@ -109,7 +121,7 @@ where
 
         let connector = self.connector.clone();
         let config = self.config.clone();
-        let registry = self.registry.clone();
+        let registry = &self.registry;
         let target_count = targets.len();
         let port_count = targets.iter().map(|(_, ports)| ports.len()).sum();
         let target_concurrency = effective_target_concurrency(&config, target_count);
@@ -119,14 +131,16 @@ where
             port_count,
             transport: config.transport,
         });
+        let connection_cache = Arc::new(Semaphore::new(config.concurrency.max(1)));
         let transport_started = std::time::Instant::now();
         let transport_phase = if config.transport == Transport::Syn {
             scan_syn_transport_phase(targets, &config).await
         } else {
-            stream::iter(targets.into_iter())
+            stream::iter(targets)
                 .map(|(target, ports)| {
                     let connector = connector.clone();
                     let config = config.clone();
+                    let connection_cache = connection_cache.clone();
                     async move {
                         scan_target_phase(
                             target,
@@ -135,6 +149,7 @@ where
                             connector,
                             target_concurrency,
                             target_count,
+                            connection_cache,
                         )
                         .await
                     }
@@ -148,42 +163,67 @@ where
             elapsed: transport_scan_time,
         });
 
-        let open_endpoint_count = transport_phase
+        let followup_endpoint_count = transport_phase
             .iter()
-            .map(|phase| phase.open_ports.len())
+            .map(|phase| phase.probe_ports.len())
             .sum();
 
         let followup_started = std::time::Instant::now();
-        if open_endpoint_count > 0 {
+        if followup_endpoint_count > 0 {
             on_event(ScanEvent::FollowupProbesStarted {
-                open_endpoint_count,
+                endpoint_count: followup_endpoint_count,
             });
         }
         let semaphore = Arc::new(Semaphore::new(config.concurrency.max(1)));
-        let target_reports =
-            stream::iter(transport_phase.into_iter())
+        let mut target_reports =
+            stream::iter(transport_phase)
                 .map(|phase| {
                     let connector = connector.clone();
                     let config = config.clone();
-                    let registry = registry.clone();
                     let semaphore = semaphore.clone();
                     async move {
-                        run_followup_phase(phase, &config, &registry, connector, semaphore).await
+                        run_followup_phase(phase, &config, registry, connector, semaphore).await
                     }
                 })
                 .buffer_unordered(target_concurrency)
                 .collect::<Vec<_>>()
                 .await;
+        target_reports.sort_by(|left, right| {
+            left.target
+                .address
+                .cmp(&right.target.address)
+                .then_with(|| left.target.hostname.cmp(&right.target.hostname))
+                .then_with(|| left.target.original.cmp(&right.target.original))
+        });
         let followup_probe_time = followup_started.elapsed();
-        if open_endpoint_count > 0 {
+        if followup_endpoint_count > 0 {
             on_event(ScanEvent::FollowupProbesCompleted {
                 elapsed: followup_probe_time,
             });
         }
 
+        let mut identification_time = std::time::Duration::ZERO;
+        let identification = if let Some(nmap) = external {
+            on_event(ScanEvent::IdentificationStarted);
+            let started = std::time::Instant::now();
+            let result = nmap
+                .identify(&target_reports, config.transport, &config.identification)
+                .await;
+            identification_time = started.elapsed();
+            on_event(ScanEvent::IdentificationCompleted {
+                elapsed: identification_time,
+            });
+            Some(result)
+        } else {
+            None
+        };
+
         Ok(ScanExecution {
+            identification_time,
             report: ScanReport {
+                identification,
                 metadata: ScanMetadata {
+                    schema_version: crate::model::REPORT_SCHEMA_VERSION,
                     version: env!("CARGO_PKG_VERSION").to_string(),
                     profile: self.config.profile_name.clone(),
                     recipe: self.config.recipe_name.clone(),
@@ -195,7 +235,7 @@ where
             },
             transport_scan_time,
             followup_probe_time,
-            open_endpoint_count,
+            followup_endpoint_count,
         })
     }
 }
@@ -207,6 +247,7 @@ async fn scan_target_phase<C: Connector>(
     connector: C,
     target_concurrency: usize,
     scan_target_count: usize,
+    connection_cache: Arc<Semaphore>,
 ) -> TargetPhaseResult {
     let mut target_config = config.clone();
     if target_config.adaptive_connect_timeout {
@@ -219,12 +260,15 @@ async fn scan_target_phase<C: Connector>(
     }
 
     let endpoint_concurrency = effective_transport_concurrency(&target_config, target_concurrency);
-    let endpoint_results = stream::iter(ports.into_iter())
+    let endpoint_results = stream::iter(ports)
         .map(|port| {
             let connector = connector.clone();
             let config = target_config.clone();
             let target = target.clone();
-            async move { scan_transport_endpoint(target, port, &config, connector).await }
+            let connection_cache = connection_cache.clone();
+            async move {
+                scan_transport_endpoint(target, port, &config, connector, connection_cache).await
+            }
         })
         .buffer_unordered(endpoint_concurrency)
         .collect::<Vec<_>>()
@@ -234,7 +278,7 @@ async fn scan_target_phase<C: Connector>(
     let mut open_ports = Vec::new();
     let mut reusable_connections = BTreeMap::new();
     for result in endpoint_results {
-        if result.endpoint.state == EndpointState::Open {
+        if is_probe_candidate(&result.endpoint.state) {
             open_ports.push(result.endpoint.port);
         }
         if let Some(connection) = result.reusable_connection {
@@ -246,7 +290,7 @@ async fn scan_target_phase<C: Connector>(
     TargetPhaseResult {
         target,
         endpoints,
-        open_ports,
+        probe_ports: open_ports,
         reusable_connections,
     }
 }
@@ -257,7 +301,7 @@ async fn adaptive_connect_timeout_for_target(
     ports: &[u16],
     scan_target_count: usize,
 ) -> std::time::Duration {
-    if config.transport != Transport::Tcp {
+    if config.transport != Transport::Tcp || config.interface.is_some() {
         return config.connect_timeout;
     }
     let probe_ports = select_rtt_probe_ports(ports);
@@ -408,7 +452,7 @@ async fn scan_syn_target_phase<C: Connector>(
     TargetPhaseResult {
         target,
         endpoints,
-        open_ports,
+        probe_ports: open_ports,
         reusable_connections: BTreeMap::new(),
     }
 }
@@ -418,6 +462,7 @@ async fn scan_transport_endpoint<C: Connector>(
     port: u16,
     config: &ScanConfig,
     connector: C,
+    connection_cache: Arc<Semaphore>,
 ) -> TransportEndpointScan {
     let mut errors = Vec::new();
     let mut last_error = None;
@@ -430,22 +475,53 @@ async fn scan_transport_endpoint<C: Connector>(
                 config.transport,
                 config.connect_timeout,
                 config.interface.as_deref(),
-                target
-                    .hostname
-                    .as_deref()
-                    .or(Some(target.original.as_str())),
+                Some(
+                    &target
+                        .hostname
+                        .clone()
+                        .unwrap_or_else(|| target.address.to_string()),
+                ),
             )
             .await
         {
             Ok(outcome) => {
                 let state = classify_open_state(config.transport, &outcome.connection);
                 let fingerprint = build_fingerprint(config.transport, &outcome.connection, false);
-                let reusable_connection = if state == EndpointState::Open
+                let observations = if let ProbeConnection::Quic(quic) = &outcome.connection {
+                    vec![crate::model::ProbeObservation {
+                        probe_id: "quic-handshake".into(),
+                        service_hint: None,
+                        banner: None,
+                        tls: Some(quic.tls().clone()),
+                        tags: vec!["quic".into()],
+                        evidence: quic
+                            .open_signal()
+                            .map(|signal| crate::model::Evidence {
+                                key: "open_signal".into(),
+                                value: signal.into(),
+                            })
+                            .into_iter()
+                            .collect(),
+                        confidence: if quic.handshake_observed() {
+                            crate::model::Confidence::High
+                        } else {
+                            crate::model::Confidence::Medium
+                        },
+                    }]
+                } else {
+                    Vec::new()
+                };
+                let reusable_connection = if is_probe_candidate(&state)
                     && matches!(
                         config.transport,
                         Transport::Tcp | Transport::Udp | Transport::Quic
                     ) {
-                    Some(outcome.connection)
+                    // Never wait for cache space: follow-up starts after scanning.
+                    connection_cache
+                        .clone()
+                        .try_acquire_owned()
+                        .ok()
+                        .map(|permit| (outcome.connection, permit))
                 } else {
                     None
                 };
@@ -456,7 +532,7 @@ async fn scan_transport_endpoint<C: Connector>(
                         transport: config.transport,
                         state,
                         latency: outcome.latency,
-                        observations: Vec::new(),
+                        observations,
                         fingerprint: Some(fingerprint),
                         fingerprint_matches: Vec::new(),
                         errors,
@@ -499,12 +575,11 @@ async fn run_followup_phase<C: Connector>(
     let mut endpoints = phase.endpoints;
     let mut reusable_connections = phase.reusable_connections;
 
-    if !phase.open_ports.is_empty() {
-        let followups = stream::iter(phase.open_ports.into_iter())
+    if !phase.probe_ports.is_empty() {
+        let followups = stream::iter(phase.probe_ports)
             .map(|port| {
                 let target = target.clone();
                 let config = config.clone();
-                let registry = registry.clone();
                 let connector = connector.clone();
                 let semaphore = semaphore.clone();
                 let reusable_connection = reusable_connections.remove(&port);
@@ -516,9 +591,9 @@ async fn run_followup_phase<C: Connector>(
                             &target,
                             port,
                             &config,
-                            &registry,
+                            registry,
                             connector,
-                            reusable_connection,
+                            reusable_connection.map(|(connection, _permit)| connection),
                         )
                         .await,
                     )
@@ -530,19 +605,22 @@ async fn run_followup_phase<C: Connector>(
 
         for (port, followup) in followups {
             if let Some(endpoint) = endpoints.get_mut(&port) {
-                endpoint.observations = followup.observations;
+                endpoint.observations.extend(followup.observations);
                 endpoint.errors.extend(followup.errors);
+                if endpoint.state == EndpointState::OpenFiltered {
+                    if !endpoint.observations.is_empty() {
+                        endpoint.state = EndpointState::Open;
+                    } else if followup.connection_refused && config.transport == Transport::Udp {
+                        endpoint.state = EndpointState::Closed;
+                    }
+                }
                 if let Some(fingerprint) = endpoint.fingerprint.as_mut() {
-                    fingerprint.response_observed = !endpoint.observations.is_empty();
+                    fingerprint.response_observed |= !endpoint.observations.is_empty();
                     endpoint.fingerprint_matches =
                         collect_fingerprint_matches(fingerprint, registry);
                 }
             }
         }
-    }
-
-    for endpoint in endpoints.values_mut() {
-        let _ = endpoint;
     }
 
     let (target_fingerprint, stack_matches) =
@@ -575,8 +653,10 @@ async fn collect_followup_observations<C: Connector>(
 ) -> FollowupResult {
     let mut observations = Vec::new();
     let mut errors = Vec::new();
+    let mut connection_refused = false;
     let followup_transport = probe_transport(config.transport);
-    let host = target.hostname.as_deref().unwrap_or(&target.original);
+    let address = target.address.to_string();
+    let host = target.hostname.as_deref().unwrap_or(&address);
     let mut reusable_connection = reusable_connection;
 
     if config.builtin_probes {
@@ -591,10 +671,7 @@ async fn collect_followup_observations<C: Connector>(
                         followup_transport,
                         config.connect_timeout,
                         config.interface.as_deref(),
-                        target
-                            .hostname
-                            .as_deref()
-                            .or(Some(target.original.as_str())),
+                        Some(host),
                     )
                     .await
                     .map(|outcome| outcome.connection)
@@ -602,8 +679,9 @@ async fn collect_followup_observations<C: Connector>(
 
             match connection {
                 Ok(probe_connection) => {
-                    if let Ok(observation) = probe
-                        .execute(
+                    match timeout(
+                        config.probe_timeout,
+                        probe.execute(
                             probe_connection,
                             ProbeContext {
                                 host,
@@ -611,17 +689,29 @@ async fn collect_followup_observations<C: Connector>(
                                 timeout: config.probe_timeout,
                                 http_body_preview_bytes: config.http_body_preview_bytes,
                             },
-                        )
-                        .await
+                        ),
+                    )
+                    .await
                     {
-                        let stop = should_stop_after_observation(&observation);
-                        observations.push(observation);
-                        if stop {
-                            break;
+                        Ok(Ok(observation)) => {
+                            let stop = should_stop_after_observation(&observation);
+                            observations.push(observation);
+                            if stop {
+                                break;
+                            }
                         }
+                        Ok(Err(error)) => {
+                            connection_refused |= matches!(&error, crate::error::NrevError::Io(error)
+                                if error.kind() == std::io::ErrorKind::ConnectionRefused);
+                            errors.push(format!("{}: {error}", probe.id()));
+                        }
+                        Err(_) => errors.push(format!("{}: probe timed out", probe.id())),
                     }
                 }
-                Err(error) => errors.push(error.to_string()),
+                Err(error) => {
+                    connection_refused |= error.kind() == std::io::ErrorKind::ConnectionRefused;
+                    errors.push(error.to_string());
+                }
             }
         }
     }
@@ -630,6 +720,9 @@ async fn collect_followup_observations<C: Connector>(
         .external_probes
         .iter()
         .filter(|probe| probe.matches(port, followup_transport))
+        .filter(|probe| {
+            config.enabled_probes.is_empty() || config.enabled_probes.contains(&probe.id)
+        })
     {
         let connection = if let Some(connection) = reusable_connection.take() {
             Ok(connection)
@@ -641,10 +734,7 @@ async fn collect_followup_observations<C: Connector>(
                     followup_transport,
                     config.connect_timeout,
                     config.interface.as_deref(),
-                    target
-                        .hostname
-                        .as_deref()
-                        .or(Some(target.original.as_str())),
+                    Some(host),
                 )
                 .await
                 .map(|outcome| outcome.connection)
@@ -652,16 +742,30 @@ async fn collect_followup_observations<C: Connector>(
 
         match connection {
             Ok(probe_connection) => {
-                if let Ok(observation) = probe.execute(probe_connection, config.probe_timeout).await
+                match timeout(
+                    config.probe_timeout,
+                    probe.execute(probe_connection, config.probe_timeout),
+                )
+                .await
                 {
-                    observations.push(observation);
+                    Ok(Ok(observation)) => observations.push(observation),
+                    Ok(Err(error)) => {
+                        connection_refused |= matches!(&error, crate::error::NrevError::Io(error)
+                            if error.kind() == std::io::ErrorKind::ConnectionRefused);
+                        errors.push(error.to_string());
+                    }
+                    Err(_) => errors.push("external probe timed out".to_string()),
                 }
             }
-            Err(error) => errors.push(error.to_string()),
+            Err(error) => {
+                connection_refused |= error.kind() == std::io::ErrorKind::ConnectionRefused;
+                errors.push(error.to_string());
+            }
         }
     }
 
     FollowupResult {
+        connection_refused,
         observations: {
             let mut observations = observations;
             for observation in &mut observations {
@@ -689,7 +793,9 @@ fn build_fingerprint(
         Transport::Quic => {
             let mut fingerprint = baseline_udp_observation(response_observed);
             fingerprint.transport = Transport::Quic;
-            fingerprint.handshake_observed = true;
+            fingerprint.handshake_observed =
+                matches!(connection, ProbeConnection::Quic(quic) if quic.handshake_observed());
+            fingerprint.response_observed = true;
             fingerprint
         }
         Transport::Syn => match connection {
@@ -731,7 +837,6 @@ fn collect_fingerprint_matches(
     registry: &DataRegistry,
 ) -> Vec<crate::model::FingerprintMatch> {
     let mut matches = match_rules(fingerprint, &registry.fingerprint_rules);
-    matches.extend(match_ttl_classes(fingerprint, &builtin_os_ttl_classes()));
     matches.extend(match_ttl_classes(fingerprint, &registry.os_ttl_classes));
     matches.extend(match_legacy_os_signatures(
         fingerprint,
@@ -924,7 +1029,7 @@ fn is_ttl_class_match(candidate: &crate::model::FingerprintMatch) -> bool {
     candidate
         .evidence
         .iter()
-        .any(|item| item.key == "source" && item.value == "builtin-ttl-class")
+        .any(|item| item.key == "source" && item.value == "external-ttl-class")
 }
 
 fn is_specific_platform_match(candidate: &crate::model::FingerprintMatch) -> bool {
@@ -961,10 +1066,14 @@ fn classify_open_state(transport: Transport, connection: &ProbeConnection) -> En
         Transport::Syn => EndpointState::Open,
         Transport::Quic => EndpointState::Open,
         Transport::Udp => match connection {
-            ProbeConnection::Udp(_) => EndpointState::Open,
+            ProbeConnection::Udp(_) => EndpointState::OpenFiltered,
             _ => EndpointState::Filtered,
         },
     }
+}
+
+fn is_probe_candidate(state: &EndpointState) -> bool {
+    matches!(state, EndpointState::Open | EndpointState::OpenFiltered)
 }
 
 fn classify_error(transport: Transport, error: Option<&std::io::Error>) -> EndpointState {
@@ -1109,7 +1218,7 @@ async fn scan_syn_transport_phase(
             TargetPhaseResult {
                 target,
                 endpoints,
-                open_ports,
+                probe_ports: open_ports,
                 reusable_connections: BTreeMap::new(),
             }
         })
@@ -1174,7 +1283,7 @@ mod tests {
     use async_trait::async_trait;
     use tokio::{
         io::AsyncWriteExt,
-        net::{TcpListener, TcpStream},
+        net::{TcpListener, TcpStream, UdpSocket},
         sync::Mutex,
     };
 
@@ -1188,6 +1297,15 @@ mod tests {
 
     #[derive(Clone, Default)]
     struct TestConnector;
+
+    #[tokio::test]
+    async fn udp_connect_without_response_is_open_filtered() {
+        let socket = UdpSocket::bind("127.0.0.1:0").await.expect("UDP socket");
+        assert_eq!(
+            classify_open_state(Transport::Udp, &ProbeConnection::Udp(socket)),
+            EndpointState::OpenFiltered
+        );
+    }
 
     #[async_trait]
     impl Connector for TestConnector {
@@ -1217,6 +1335,7 @@ mod tests {
         });
 
         let config = ScanConfig {
+            identification: Default::default(),
             profile_name: "test".to_string(),
             recipe_name: None,
             transport: Transport::Tcp,
@@ -1294,6 +1413,7 @@ mod tests {
     #[tokio::test]
     async fn connect_scan_runs_ports_concurrently() {
         let config = ScanConfig {
+            identification: Default::default(),
             profile_name: "test".to_string(),
             recipe_name: None,
             transport: Transport::Tcp,
@@ -1376,6 +1496,7 @@ mod tests {
         };
         let peak = connector.peak.clone();
         let config = ScanConfig {
+            identification: Default::default(),
             profile_name: "test".to_string(),
             recipe_name: None,
             transport: Transport::Tcp,
@@ -1421,6 +1542,7 @@ mod tests {
         };
         let peak = connector.peak.clone();
         let config = ScanConfig {
+            identification: Default::default(),
             profile_name: "test".to_string(),
             recipe_name: None,
             transport: Transport::Tcp,
@@ -1453,11 +1575,19 @@ mod tests {
             })
             .collect();
 
-        let _ = scanner.scan(targets).await.expect("scan");
+        let execution = scanner.scan(targets).await.expect("scan");
 
         assert!(
             *peak.lock().await <= 16,
             "observed peak inflight work exceeded requested global concurrency"
+        );
+        assert!(
+            execution
+                .report
+                .targets
+                .windows(2)
+                .all(|pair| pair[0].target.address < pair[1].target.address),
+            "report targets must be sorted independently of scan scheduling"
         );
     }
 
@@ -1483,7 +1613,7 @@ mod tests {
                     confidence: Confidence::Low,
                     evidence: vec![Evidence {
                         key: "source".to_string(),
-                        value: "builtin-ttl-class".to_string(),
+                        value: "external-ttl-class".to_string(),
                     }],
                 },
                 FingerprintMatch {
@@ -1527,7 +1657,7 @@ mod tests {
                     confidence: Confidence::Low,
                     evidence: vec![Evidence {
                         key: "source".to_string(),
-                        value: "builtin-ttl-class".to_string(),
+                        value: "external-ttl-class".to_string(),
                     }],
                 },
                 FingerprintMatch {
@@ -1565,5 +1695,164 @@ mod tests {
             .map(|item| item.family.as_str())
             .collect::<Vec<_>>();
         assert_eq!(families, vec!["microsoft:windows"]);
+    }
+    fn test_config() -> ScanConfig {
+        use clap::Parser;
+        let cli = crate::cli::Cli::parse_from(["nrev", "port", "127.0.0.1"]);
+        let crate::cli::Command::Port(args) = cli.command else {
+            panic!("port command")
+        };
+        ScanConfig::from_scan_args(&args, &DataRegistry::default()).unwrap()
+    }
+
+    #[tokio::test]
+    async fn followup_without_application_response_preserves_syn_evidence() {
+        let mut config = test_config();
+        config.transport = Transport::Syn;
+        config.builtin_probes = false;
+        let phase = TargetPhaseResult {
+            target: Target {
+                original: "192.0.2.1".into(),
+                hostname: None,
+                address: "192.0.2.1".parse().unwrap(),
+            },
+            endpoints: BTreeMap::from([(
+                80,
+                EndpointResult {
+                    port: 80,
+                    transport: Transport::Syn,
+                    state: EndpointState::Open,
+                    latency: Duration::ZERO,
+                    observations: Vec::new(),
+                    fingerprint: Some(baseline_syn_observation(true, true, false, Some(64), None)),
+                    fingerprint_matches: Vec::new(),
+                    errors: Vec::new(),
+                },
+            )]),
+            probe_ports: vec![80],
+            reusable_connections: BTreeMap::new(),
+        };
+        let report = run_followup_phase(
+            phase,
+            &config,
+            &DataRegistry::default(),
+            SlowConnector,
+            Arc::new(Semaphore::new(1)),
+        )
+        .await;
+        assert!(report.fingerprint.unwrap().response_observed);
+        assert!(
+            report.endpoints[&80]
+                .fingerprint
+                .as_ref()
+                .unwrap()
+                .response_observed
+        );
+    }
+
+    #[tokio::test]
+    async fn connection_cache_is_bounded_without_blocking_scan() {
+        let mut config = test_config();
+        config.adaptive_connect_timeout = false;
+        let cache = Arc::new(Semaphore::new(2));
+        let results = stream::iter(1..=20)
+            .map(|port| {
+                let cache = cache.clone();
+                let config = &config;
+                async move {
+                    scan_transport_endpoint(
+                        Target {
+                            original: "127.0.0.1".into(),
+                            hostname: None,
+                            address: "127.0.0.1".parse().unwrap(),
+                        },
+                        port,
+                        config,
+                        SlowConnector,
+                        cache,
+                    )
+                    .await
+                }
+            })
+            .buffer_unordered(20)
+            .collect::<Vec<_>>()
+            .await;
+        assert_eq!(
+            results
+                .iter()
+                .filter(|result| result.reusable_connection.is_some())
+                .count(),
+            2
+        );
+        assert!(
+            results
+                .iter()
+                .all(|result| result.endpoint.state == EndpointState::Open)
+        );
+        assert_eq!(cache.available_permits(), 0);
+        drop(results);
+        assert_eq!(cache.available_permits(), 2);
+    }
+
+    #[derive(Clone)]
+    struct HostnameConnector;
+    #[async_trait]
+    impl Connector for HostnameConnector {
+        async fn connect(
+            &self,
+            address: IpAddr,
+            _port: u16,
+            _transport: Transport,
+            _timeout: Duration,
+            _interface: Option<&str>,
+            server_name: Option<&str>,
+        ) -> std::io::Result<ConnectOutcome> {
+            assert_eq!(server_name, Some(address.to_string().as_str()));
+            Err(std::io::Error::new(
+                std::io::ErrorKind::ConnectionRefused,
+                "closed",
+            ))
+        }
+    }
+
+    #[tokio::test]
+    async fn connection_uses_resolved_ip_instead_of_target_expression() {
+        let config = test_config();
+        for original in ["192.0.2.0/24", "192.0.2.1:443"] {
+            scan_transport_endpoint(
+                Target {
+                    original: original.into(),
+                    hostname: None,
+                    address: "192.0.2.1".parse().unwrap(),
+                },
+                443,
+                &config,
+                HostnameConnector,
+                Arc::new(Semaphore::new(1)),
+            )
+            .await;
+        }
+    }
+
+    #[tokio::test]
+    async fn probe_failures_are_reported() {
+        let mut config = test_config();
+        config.enabled_probes = vec!["ssh".into()];
+        let target = Target {
+            original: "127.0.0.1".into(),
+            hostname: None,
+            address: "127.0.0.1".parse().unwrap(),
+        };
+        let result = collect_followup_observations(
+            &target,
+            2222,
+            &config,
+            &DataRegistry::default(),
+            SlowConnector,
+            None,
+        )
+        .await;
+        assert!(result.observations.is_empty());
+        assert!(result.errors.iter().any(|error| error.contains("ssh:")));
     }
 }

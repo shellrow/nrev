@@ -1,18 +1,18 @@
-#[path = "capture/mod.rs"]
+//! Network discovery, port scanning, and service observations.
+//!
+//! TLS probing collects certificates without establishing server trust.
+//! Raw-packet operations require platform-specific capture privileges.
+
 pub mod capture;
-#[path = "cli.rs"]
 pub mod cli;
-#[path = "config.rs"]
 pub mod config;
 pub mod data;
 pub mod error;
 pub mod fingerprint;
 pub mod host;
-#[path = "interface.rs"]
 pub mod interface;
 pub mod model;
 pub mod neighbor;
-#[path = "output.rs"]
 pub mod output;
 pub mod ping;
 pub mod probes;
@@ -22,3 +22,5 @@ pub mod target;
 pub mod tls;
 pub mod trace;
 pub mod transport;
+
+pub mod nmap;

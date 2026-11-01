@@ -1,48 +1,55 @@
 # nrev
 
-An observation-first, cross-platform network mapper for discovery and probing.
+A cross-platform tool for port scanning, host discovery, and service probing.
 
-`nrev` focuses on:
+Features:
 
 - Port scanning with TCP, UDP, TCP-SYN, and QUIC transports
 - Host discovery with ICMP, UDP, and TCP probes
-- Active ping with ICMP, UDP, TCP, and QUIC methods
+- Ping with ICMP, UDP, TCP, and QUIC probes
 - Traceroute with UDP and ICMP probes
 - Neighbor discovery with ARP and NDP
-- Built-in service observation for common protocols
+- Service probes, TLS metadata, and HTTP/3 support
+- Optional detailed service and OS identification through Nmap
 - Structured JSON output for automation
 - External data packs for probes, fingerprint rules, profiles, and recipes
-- Task files for repeatable target lists and scan executions
+- Task files for repeatable scans
 
 ## Supported platforms
+
 - Linux
 - macOS
 - Windows
 
 ## Installation
-### Install prebuilt binaries via shell script
+
+### Shell installer
 
 ```sh
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/shellrow/nrev/releases/latest/download/nrev-installer.sh | sh
 ```
 
-### Install prebuilt binaries via powershell script
+### PowerShell installer
 
 ```sh
 irm https://github.com/shellrow/nrev/releases/latest/download/nrev-installer.ps1 | iex
 ```
 
-### From Releases
-You can download archives of precompiled binaries from the [releases](https://github.com/shellrow/nrev/releases) .
+### Release archives
+
+Download prebuilt binaries from [GitHub Releases](https://github.com/shellrow/nrev/releases).
 
 ### Cargo
-If you have Rust and the Cargo package manager installed on your system, you can install (download and build) `nrev` with the following command:
-```
+
+Build and install with Cargo:
+
+```sh
 cargo install nrev
 ```
 
-Or you can use [binstall](https://github.com/cargo-bins/cargo-binstall) for install nrev from github release.
-```
+Or install a prebuilt binary with [cargo-binstall](https://github.com/cargo-bins/cargo-binstall):
+
+```sh
 cargo binstall nrev
 ```
 
@@ -62,96 +69,79 @@ Commands:
   recipe  Show externally loaded scan recipes
 ```
 
-## Output
+## Quick start
 
-`nrev` provides:
+```sh
+nrev port 192.168.10.10 --ports 22,80,443
+nrev port 192.168.10.10 --transport quic --ports 443
+nrev host 192.168.10.0/24 --method tcp --ports 80,443
+nrev port 192.168.10.10 --format json --output result.json
+```
 
-- Compact human-readable reports for interactive use
-- Stable JSON reports for downstream tooling
-- Phase timings for resolution, discovery, scanning, and follow-up probes
+Add `--nmap` for service/version identification or `--os-detect` for OS
+identification. These options require Nmap to be installed separately.
 
-## External Data
+```sh
+nrev port 192.168.10.10 --ports top-100 --nmap
+```
 
-`--data` accepts:
+Only scan systems you own or have permission to test.
 
-- A single `.json` file
-- A single `.toml` file
-- A directory containing multiple `.json` and `.toml` files
+## Documentation and examples
 
-Each file may contain any combination of:
+See the [usage guide](docs/USAGE.md) for scan options, output formats, and
+configuration. Run `nrev <command> --help` for the full option list.
 
-- `probes`
-- `fingerprint_rules`
-- `recipes`
-
-## Samples
-
-The repository includes sample data under [samples/](samples):
-
-- [samples/recipes/](samples/recipes) for recipe-only examples
-- [samples/data-pack/](samples/data-pack) for mixed external data pack examples
-- [samples/tasks/](samples/tasks) for runnable task-file examples
-
-## Documentation
-
-- [Usage Guide](docs/USAGE.md)
+- [Recipes](samples/recipes): reusable scan settings
+- [Data packs](samples/data-pack): custom probes, fingerprint rules, and recipes
+- [Tasks](samples/tasks): targets and scan settings in one file
 
 ## Privileges
-`nrev` uses a raw socket which require elevated privileges. Execute with administrator privileges.
 
-### Note for Linux Users
-`nrev` requires elevated privileges to send/receive raw-packet. On Linux, you can configure these privileges using two main methods:
+Raw-packet modes require elevated network privileges. TCP connect mode does not
+normally require administrator access.
 
-#### 1. Using `setcap`
+### Linux
 
-Granting capabilities to the `nrev` binary allows it to operate with the necessary privileges without requiring `sudo` for each execution.  
-This method is recommended for single-user machines or in environments where all users are trusted.
+Grant raw-packet permissions with `setcap`:
 
-Assign necessary capabilities to the nrev binary
 ```sh
-sudo setcap 'cap_sys_ptrace,cap_dac_read_search,cap_net_raw,cap_net_admin+ep' $(command -v nrev)
+sudo setcap 'cap_net_raw,cap_net_admin+ep' "$(command -v nrev)"
 ```
 
-Run nrev as an unprivileged user:
+These capabilities allow the binary to send and capture raw packets without
+`sudo`. Grant them only to trusted binaries on systems where all users are
+trusted. Alternatively, run individual commands with `sudo`:
+
 ```sh
-nrev
+sudo nrev host 192.168.1.0/24
 ```
 
-#### Capabilities Explained:
-- `cap_sys_ptrace,cap_dac_read_search`: Allows `nrev` to access `/proc/<pid>/fd/` to identify which open port belongs to which process.
-- `cap_net_raw,cap_net_admin`: Enables packet capturing capabilities.
+### macOS
 
-#### 2. Using `sudo` (for multi-user environments)
-For environments with multiple users, requiring privilege escalation each time nrev is run can enhance security.
-```
-sudo nrev
-```
+Raw-packet modes require access to Berkeley Packet Filter (BPF) devices. Run
+commands with `sudo`, or use [chmod-bpf](https://github.com/shellrow/chmod-bpf)
+to manage BPF permissions.
 
-### Note for macOS Users
-On macOS, managing access to the Berkeley Packet Filter (BPF) devices is necessary for `nrev` to send/receive raw-packet
-Alternatively, of course, you can also use `sudo` to temporarily grant the necessary permissions.
-#### Install `chmod-bpf` to automatically manage permissions for BPF devices:
+Install `chmod-bpf`:
 
-Install prebuilt binaries via shell script
-```
+```sh
 curl --proto '=https' --tlsv1.2 -LsSf https://github.com/shellrow/chmod-bpf/releases/latest/download/chmod-bpf-installer.sh | sh
 ```
 
-#### Check BPF device permissions
-```
-chmod-bpf check
-```
+Check permissions and install the daemon:
 
-#### Install the chmod-bpf daemon to automatically manage BPF device permissions
-```
+```sh
+chmod-bpf check
 sudo chmod-bpf install
 ```
 
-### Note for Windows Users
-- Ensure that you have [Npcap](https://npcap.com/#download) installed, which is necessary for `nrev` to send/receive raw-packet on Windows
-- Download and install Npcap from [Npcap](https://npcap.com/#download). Choose the "Install Npcap in WinPcap API-compatible Mode" during installation.
-- Build Dependencies:
-    - Place the Packet.lib file from the [Npcap SDK](https://npcap.com/#download) or WinPcap Developers pack in a directory named lib at the root of this repository.
-    - You can use any of the locations listed in the %LIB% or $Env:LIB environment variables.
-    - For the 64-bit toolchain, the Packet.lib is located in <SDK>/Lib/x64/Packet.lib.
-    - For the 32-bit toolchain, the Packet.lib is located in <SDK>/Lib/Packet.lib.
+### Windows
+
+Raw-packet modes require [Npcap](https://npcap.com/#download). Select
+"Install Npcap in WinPcap API-compatible Mode" during installation.
+Npcap is loaded at runtime; building `nrev` does not require the Npcap SDK.
+
+Raw probes to Windows loopback addresses (`127.0.0.1` and `::1`) are currently
+unsupported by the datalink backend. Use TCP, UDP, or QUIC socket probes for
+loopback targets.

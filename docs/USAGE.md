@@ -1,329 +1,261 @@
-# nrev Usage
+# Usage
 
-This guide shows common command patterns for `nrev`.
+Run `nrev <command> --help` for all options. Examples assume you have permission
+to scan the target. See [Privileges](../README.md#privileges) for raw-packet setup.
 
-Replace example targets with systems you own or are authorized to test.
+## Port scanning
 
-## Command Overview
-
-```text
-Usage: nrev <COMMAND>
-
-Commands:
-  port    Scan ports and collect structured observations
-  task    Run a port-scan task from a JSON or TOML file
-  host    Discover reachable hosts with ICMP, UDP, or TCP probes
-  ping    Send repeated probes to a target with ICMP, UDP, TCP, or QUIC
-  trace   Trace the path to a target with UDP or ICMP probes
-  nei     Discover a neighbor with ARP or NDP
-  probe   Show the built-in and externally loaded probe catalog
-  recipe  Show externally loaded scan recipes
-```
-
-## Port Scanning
-
-Basic TCP scan:
+TCP connect is the default transport. Ports accept lists, ranges, or the named
+sets `top-100` (default), `top-1000`, and `well-known`.
 
 ```sh
 nrev port 192.168.10.10
-nrev port 192.168.10.10 --ports 22,80,443,3389
-nrev port 192.168.10.0/24 --ports top-100
-```
-
-Supported named port sets:
-
-```sh
-nrev port 192.168.10.10 --ports top-100
-nrev port 192.168.10.10 --ports top-1000
-nrev port 192.168.10.10 --ports well-known
-```
-
-UDP scan:
-
-```sh
+nrev port 192.168.10.10 --ports 22,80,443,8000-8010
+nrev port 192.168.10.0/24 --ports top-1000
 nrev port 192.168.10.10 --transport udp --ports 53,123
-```
-
-SYN scan:
-
-```sh
-nrev port 192.168.10.10 --transport syn --ports 22,80,443
-nrev port 192.168.10.0/24 --transport syn --ports top-100
-```
-
-QUIC scan:
-
-```sh
+sudo nrev port 192.168.10.10 --transport syn --ports top-100
 nrev port edge.example --transport quic --ports 443,8443
 ```
 
-Host-and-port input:
+Use `--all-states` to include closed, filtered, and failed endpoints.
+UDP silence is reported as `open_filtered`, a response as `open`, and a
+connection refusal as `closed`.
+
+### Probe selection
+
+Built-in probes run on their default ports. Use `--probes` to select probes
+explicitly, including on nonstandard ports:
 
 ```sh
-nrev port 192.168.10.10:443
+nrev probe
+nrev port 192.168.10.10 --ports 2222 --probes ssh
+nrev port 192.168.10.10 --ports 8080 --probes http
+nrev port 192.168.10.10 --ports 8443 --probes tls
 ```
 
-Show closed and filtered states in the human-readable report:
+Selected built-in probes run on every requested port of the matching transport.
+External probes keep their configured port restrictions. Unknown probe IDs are
+rejected. `--no-builtin-probes` disables built-in probes but allows external ones.
+
+TLS certificates are collected without trust validation; reports set
+`certificate_validation` to `not_performed`. QUIC retains handshake observations
+if HTTP/3 probing fails or is disabled. A QUIC rejection does not count as a
+completed TLS handshake.
+
+### Timeouts and concurrency
 
 ```sh
-nrev port 192.168.10.10 --ports 22,80,443 --all-states
+nrev port 192.168.10.10 --concurrency 128 \
+  --connect-timeout-ms 1200 --probe-timeout-ms 3000 --retries 1
 ```
 
-Write JSON output:
+`--probe-timeout-ms` limits each service probe. Reduce `--concurrency` if you
+encounter file-descriptor limits; connections retained for probing can require
+up to another `--concurrency` descriptors.
+
+For TCP, UDP, and QUIC socket probes, `--interface` selects a source address.
+Routing remains under operating-system control. Specify an interface for IPv6
+link-local targets.
+
+## Nmap identification
+
+Use `--nmap` for service/version identification and `--os-detect` for OS
+identification. nrev looks for `nmap` on `PATH`; `--nmap-path` selects another
+executable. On Windows, use the Nmap executable directly: cancellation stops
+the immediate process but does not terminate descendants started by wrappers.
 
 ```sh
-nrev port 192.168.10.10 --format json --output result.json
+nrev port 192.168.10.10 --ports top-100 --nmap
+sudo nrev port 192.168.10.10 --ports top-100 --nmap --os-detect
+sudo nrev port 192.168.10.10 --transport udp --ports 53,123 --nmap
 ```
 
-## Host Discovery
+OS identification requires TCP/SYN mode and elevated privileges. Nmap UDP
+identification also requires privileges. Nmap uses its own routing and does not
+inherit `--interface` or hostname-based probes.
 
-Basic reachability scan:
+| Option | Default | Purpose |
+| --- | --- | --- |
+| `--nmap-scope` | `candidates` | Identify candidate ports, or use `all` to rescan every requested port |
+| `--nmap-intensity` | `7` | Service probe intensity, from 0 to 9 |
+| `--nmap-timeout-ms` | `120000` | Total time allowed for the identification phase |
+| `--nmap-concurrency` | `2` | Concurrent Nmap processes, from 1 to 16 |
+
+Candidates are open TCP/SYN ports and open or open-filtered UDP/QUIC ports.
+QUIC endpoints are passed to Nmap as UDP. For OS identification, nrev also passes
+one observed closed TCP port when available; Nmap sends additional OS probes.
+
+The human-readable report combines native and Nmap results under each host and
+port. Matching states and services appear once. Only the highest-ranked OS match
+is shown; ties favor generic Linux and general-purpose OS descriptions.
+
+JSON keeps all Nmap results under `identification`, including `requests`,
+`failures`, and `hosts`. Aggregate port states are in `hosts[].port_summaries`.
+If identification fails, completed results are retained, `complete` is `false`,
+and nrev exits with status `1`.
+
+## Host discovery
 
 ```sh
-nrev host 192.168.10.0/24
+nrev host 192.168.10.0/24 --method tcp --ports 80,443
+sudo nrev host 192.168.10.0/24
+sudo nrev host 192.168.10.0/24 --method udp --ports 33434,40125
+nrev host @./targets.txt --method tcp --ports 80,443 --all-hosts
 ```
 
-TCP-based discovery on selected ports:
+The default method is ICMP. `--all-hosts` includes unreachable hosts.
+
+## Ping and traceroute
 
 ```sh
-nrev host yourcorpone.com --method tcp --ports 80,443
+sudo nrev ping 192.168.10.10 --count 5
+nrev ping example.com --method tcp --port 443 --count 5
+nrev ping example.com --method quic --port 443 --count 5
+sudo nrev ping example.com --method udp --port 33435
+sudo nrev trace example.com
+sudo nrev trace example.com --method icmp --max-hops 20
 ```
 
-UDP-based discovery:
+Use `--interval-ms` and `--timeout-ms` to adjust timing. Traceroute defaults to UDP.
+
+## Neighbor discovery
+
+The default method is ARP for IPv4 and NDP for IPv6.
 
 ```sh
-nrev host 192.168.10.0/24 --method udp --ports 33434,40125
+sudo nrev nei 192.168.10.1
+sudo nrev nei fe80::1 --interface en0
 ```
 
-Read targets from a file:
+Use `--method arp` or `--method ndp` to choose explicitly.
+
+## Output
+
+Reports default to a human-readable tree. `--format json` writes JSON to stdout;
+`--output` saves a JSON report regardless of the stdout format.
 
 ```sh
-nrev host @./targets.txt --method tcp --ports 80,443
+nrev port 192.168.10.10 --output result.json
+nrev port 192.168.10.10 --quiet --format json
+nrev host 192.168.10.0/24 --method tcp --ports 443 --output hosts.json
 ```
 
-Show unreachable hosts in the human-readable report:
+Use `--quiet` to disable progress or `--progress verbose` for more detail.
+Progress and diagnostics use color when stderr is a terminal. Use `--no-color`
+(or `--color never`) to disable it, or `--color always` to force it. Automatic
+color respects `NO_COLOR` and `TERM=dumb`. Reports and JSON remain uncolored.
+Probe failures appear in endpoint `errors` and in the tree output. Transport
+errors make port scans exit with status 1; use `--all-states` to inspect failed
+endpoints. Raw host-capture failures also return status 1.
+
+JSON files are replaced atomically. Check `metadata.schema_version` when parsing
+reports. Enum values use `snake_case`. Terminal output escapes control characters;
+JSON preserves observations using JSON escaping.
+
+## Target files and IPv6
 
 ```sh
-nrev host 192.168.10.0/24 --all-hosts
+nrev port @./targets.txt --ports 80,443
+nrev port '[::1]:443' --probes tls
 ```
 
-Write JSON output:
+Target files may include other files using `@relative/path.txt`. Includes resolve
+relative to the containing file; repeated or cyclic includes are read once.
+Use brackets around IPv6 addresses that include a port.
 
-```sh
-nrev host 192.168.10.0/24 --format json --output hosts.json
-```
+Port scans accept up to 65,536 target identities (address and hostname) and
+1,000,000 endpoint assignments. Host discovery accepts up to 65,536 addresses.
+Target files are limited to 1,024 files, 16 MiB total, and 65,536 tokens. Split larger inventories across commands.
 
-## Ping
+## Profiles and recipes
 
-Basic ICMP ping:
+A profile supplies scan defaults. For example, `profile-web.toml`:
 
-```sh
-nrev ping 192.168.10.10
-```
-
-UDP, TCP, and QUIC ping:
-
-```sh
-nrev ping example.com --method udp --port 33435
-nrev ping example.com --method tcp --port 443
-nrev ping example.com --method quic --port 443
-```
-
-Tune probe count and timing:
-
-```sh
-nrev ping example.com --count 5 --interval-ms 250 --timeout-ms 1500
-```
-
-Write JSON output:
-
-```sh
-nrev ping example.com --format json --output ping.json
-```
-
-## Traceroute
-
-Basic UDP trace:
-
-```sh
-nrev trace example.com
-```
-
-ICMP trace:
-
-```sh
-nrev trace example.com --method icmp
-```
-
-Tune hop limit and timeout:
-
-```sh
-nrev trace example.com --max-hops 20 --interval-ms 250 --timeout-ms 1200
-```
-
-Write JSON output:
-
-```sh
-nrev trace example.com --format json --output trace.json
-```
-
-## Neighbor Discovery
-
-Auto-select ARP for IPv4 and NDP for IPv6:
-
-```sh
-nrev nei 192.168.10.1
-nrev nei fe80::1 --interface en0
-```
-
-Force a method explicitly:
-
-```sh
-nrev nei 192.168.10.1 --method arp
-nrev nei fe80::1 --method ndp --interface en0
-```
-
-Write JSON output:
-
-```sh
-nrev nei 192.168.10.1 --format json --output neighbor.json
-```
-
-## Progress and Verbosity
-
-Quiet mode:
-
-```sh
-nrev port 192.168.10.10 --quiet
-```
-
-Explicit progress mode:
-
-```sh
-nrev port 192.168.10.10 --progress verbose
-```
-
-Tune timeout and retry behavior:
-
-```sh
-nrev port 192.168.10.10 --connect-timeout-ms 1200 --probe-timeout-ms 3000 --retries 1
-```
-
-## Profiles
-
-Load a profile file:
-
-```sh
-nrev port 192.168.10.10 --profile ./tmp/manual-tests/profile-web.toml
+```toml
+name = "web"
+ports = "80,443,8080,8443"
+connect_timeout_ms = 1200
+probe_timeout_ms = 3000
 ```
 
 CLI flags override profile values:
 
 ```sh
-nrev port 192.168.10.10 --profile ./tmp/manual-tests/profile-web.toml --ports 80,443
+nrev port 192.168.10.10 --profile ./profile-web.toml --ports 80,443
 ```
 
-## Recipes
-
-List sample recipes:
+Recipes provide named settings in a data pack:
 
 ```sh
 nrev recipe --data ./samples/recipes
-```
-
-Run a built-in sample recipe:
-
-```sh
-nrev port 192.168.10.10 --data ./samples/recipes --recipe web-balanced
-nrev port 192.168.10.0/24 --data ./samples/recipes --recipe fast-syn-triage
-```
-
-Command-line targets and recipe selection remain supported:
-
-```sh
 nrev port 192.168.10.10 --data ./samples/recipes --recipe web-balanced
 ```
+
+A recipe that omits `probes` inherits the profile's selection. An empty list
+restores automatic probe selection.
 
 ## Tasks
 
-Run a task file that includes its own targets and scan settings:
-
-```sh
-nrev task ./samples/tasks/web-balanced.toml
-```
-
-Example task file:
+Task files combine targets and scan settings in JSON or TOML:
 
 ```toml
-name = "web-balanced"
+name = "web-scan"
 targets = ["192.168.10.10", "@./targets.txt"]
-data = "../recipes"
-recipe = "web-balanced"
-format = "json"
-output = "./web-balanced-report.json"
+ports = "80,443,8080,8443"
+transport = "tcp"
+concurrency = 128
+probe_timeout_ms = 3000
+output = "./report.json"
+
+[identification]
+services = true
+os = false
+intensity = 7
+scope = "candidates"
+concurrency = 2
+timeout_ms = 120000
+executable = "nmap"
 ```
 
-Task files support the same port-scan settings as `nrev port`, including:
+```sh
+nrev task ./scan.toml
+```
 
-- `targets` or `target`
-- `ports`
-- `transport`
-- `interface`
-- `concurrency`
-- `connect_timeout_ms`
-- `probe_timeout_ms`
-- `http_body_preview_bytes`
-- `retries`
-- `probes`
-- `builtin_probes`
-- `profile`
-- `data`
-- `recipe`
-- `all_states`
-- `quiet`
-- `progress`
-- `format`
-- `output`
+Task keys use underscores, such as `connect_timeout_ms`, `all_states`, and
+`http_body_preview_bytes`. Use `builtin_probes = false` to disable built-in probes.
+Tasks also accept `profile`, `data`, `recipe`, `probes`, `interface`, `retries`,
+`quiet`, `progress`, and `format`.
 
-Relative paths in `profile`, `data`, and `output` are resolved from the task file location.
+Paths in `profile`, `data`, and `output` resolve relative to the task file.
+Executable names use `PATH`; relative executable paths also resolve from the task
+file. See [sample tasks](../samples/tasks) for more examples.
 
-## External Data Packs
+## External data
 
-Show probes from a mixed data-pack directory:
+`--data` accepts a JSON or TOML file, or a directory of those files. Each file
+can contain `probes`, `fingerprint_rules`, and `recipes`. Data files, profiles,
+and task files are limited to 16 MiB each.
 
 ```sh
 nrev probe --data ./samples/data-pack
-```
-
-Show recipes from the bundled JSON pack:
-
-```sh
-nrev recipe --data ./samples/data-pack/pack.json --json
-```
-
-Run a scan with an external recipe:
-
-```sh
+nrev recipe --data ./samples/data-pack --json
 nrev port 192.168.10.10 --data ./samples/data-pack --recipe corp-web-alt
-nrev port 192.168.10.130 --data ./samples/data-pack/pack.json --recipe corp-quic
+nrev port 192.168.10.10 --ports 8080,8088 --data ./samples/data-pack \
+  --probes corp-http-alt --no-builtin-probes
 ```
 
-Run only external probes:
+External payload probes support TCP and UDP. Use the built-in `quic` probe for
+QUIC and HTTP/3. Probe IDs and recipe names must be unique within a data pack.
 
-```sh
-nrev port 192.168.10.10 --ports 8080,8088 --data ./samples/data-pack --probes corp-http-alt --no-builtin-probes
-```
+See the [sample directory](../samples/data-pack) and the alternative
+[JSON file](../samples/data-pack.json) for definitions. Load either one; do not
+combine them, as they define the same probes and recipes.
 
-## Short Options
+## Response limits
 
-Common short forms:
+HTTP/1 headers are limited to 64 KiB. `--http-body-preview-bytes` limits body
+inspection; chunked framing and compression are not decoded. Invalid text bytes
+are replaced with UTF-8 replacement characters.
 
-```sh
-nrev port 192.168.10.10 -p 80,443 -t tcp -c 128 -q -f json -o result.json
-nrev host 192.168.10.0/24 -m tcp -p 80,443 -c 128 -t 1200 -f json -o hosts.json
-nrev ping example.com -m tcp -p 443 -c 5 -t 1500 -f json -o ping.json
-nrev trace example.com -m icmp -t 1200 -f json -o trace.json
-nrev nei 192.168.10.1 -m arp -t 1000 -f json -o neighbor.json
-nrev probe -d ./samples/data-pack -j
-nrev recipe -d ./samples/recipes -j
-```
+Raw capture stops with an error after 65,536 matching frames or 64 MiB of matching
+packet data. Each batch waits for responses until its timeout after the final send.
