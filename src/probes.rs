@@ -216,6 +216,7 @@ impl Probe for TlsProbe {
                 "TLS probe requires a TCP connection".to_string(),
             ));
         };
+        let started = Instant::now();
         let (tls, tls_stream) = handshake_tls(stream, Some(context.host), context.timeout).await?;
         let request = format!(
             "GET / HTTP/1.1\r\nHost: {}\r\nUser-Agent: nrev\r\nAccept: */*\r\nRange: bytes=0-4095\r\nConnection: close\r\n\r\n",
@@ -233,7 +234,7 @@ impl Probe for TlsProbe {
         if let Ok(response) = read_http_response_stream(
             tls_stream,
             request.as_bytes(),
-            context.timeout,
+            context.timeout.saturating_sub(started.elapsed()) / 2,
             context.http_body_preview_bytes,
         )
         .await
@@ -1673,7 +1674,7 @@ fn parse_rdp_banner(raw: &[u8]) -> Option<String> {
     };
 
     if raw.len() >= 19 && raw[11] == 0x02 {
-        let selected_protocol = u32::from_be_bytes([raw[15], raw[16], raw[17], raw[18]]);
+        let selected_protocol = u32::from_le_bytes([raw[15], raw[16], raw[17], raw[18]]);
         return Some(format!(
             "RDP X.224 {x224_label} tpkt_len={tpkt_len} selected_protocol={}",
             rdp_protocol_name(selected_protocol)
@@ -1681,7 +1682,7 @@ fn parse_rdp_banner(raw: &[u8]) -> Option<String> {
     }
 
     if raw.len() >= 19 && raw[11] == 0x03 {
-        let failure_code = u32::from_be_bytes([raw[15], raw[16], raw[17], raw[18]]);
+        let failure_code = u32::from_le_bytes([raw[15], raw[16], raw[17], raw[18]]);
         return Some(format!(
             "RDP X.224 {x224_label} tpkt_len={tpkt_len} negotiation_failure={failure_code}"
         ));
@@ -1780,11 +1781,63 @@ mod tests {
     fn parses_rdp_negotiation_banner() {
         let raw = [
             0x03, 0x00, 0x00, 0x13, 0x0e, 0xd0, 0x00, 0x00, 0x12, 0x34, 0x00, 0x02, 0x00, 0x08,
-            0x00, 0x00, 0x00, 0x00, 0x02,
+            0x00, 0x02, 0x00, 0x00, 0x00,
         ];
         let banner = parse_rdp_banner(&raw).expect("banner");
         assert!(banner.contains("selected_protocol=hybrid"));
     }
+    #[test]
+    fn parses_rdp_failure_code_in_wire_byte_order() {
+        let raw = [3, 0, 0, 19, 14, 0xd0, 0, 0, 0, 0, 0, 3, 0, 8, 0, 5, 0, 0, 0];
+        assert!(
+            parse_rdp_banner(&raw)
+                .unwrap()
+                .contains("negotiation_failure=5")
+        );
+    }
+
+    #[tokio::test]
+    async fn tls_observation_survives_a_silent_application() {
+        let key = rcgen::generate_simple_self_signed(vec!["localhost".into()]).unwrap();
+        let config = rustls::ServerConfig::builder()
+            .with_no_client_auth()
+            .with_single_cert(
+                vec![key.cert.der().clone()],
+                rustls::pki_types::PrivatePkcs8KeyDer::from(key.signing_key.serialize_der()).into(),
+            )
+            .unwrap();
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let task = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let _tls = tokio_rustls::TlsAcceptor::from(std::sync::Arc::new(config))
+                .accept(stream)
+                .await
+                .unwrap();
+            std::future::pending::<()>().await;
+        });
+        let _guard = AbortOnDrop(task);
+        let stream = tokio::net::TcpStream::connect(address).await.unwrap();
+        let budget = Duration::from_secs(2);
+        let observation = timeout(
+            budget,
+            TlsProbe.execute(
+                ProbeConnection::Tcp(stream),
+                ProbeContext {
+                    host: "localhost",
+                    port: address.port(),
+                    timeout: budget,
+                    http_body_preview_bytes: 4096,
+                },
+            ),
+        )
+        .await
+        .expect("probe must retain evidence within its budget")
+        .unwrap();
+        assert!(observation.tls.is_some());
+        assert_eq!(observation.service_hint.unwrap().name, "tls");
+    }
+
     #[test]
     fn explicitly_selected_probe_supports_nonstandard_ports() {
         let probes = select_builtin_probes(2222, Transport::Tcp, &["ssh".into()]);
