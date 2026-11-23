@@ -11,7 +11,7 @@ documentation = "https://github.com/shellrow/nrev"
 readme = "README.md"
 keywords = ["network", "security", "scan", "cli", "cross-platform"]
 categories = ["network-programming"]
-license = "MIT"
+license = "MIT OR Apache-2.0"
 
 [dependencies]
 anyhow = "1.0.104"
@@ -22,10 +22,11 @@ serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.154"
 thiserror = "2.0.21"
 toml = "1.1.8"
-netdev = { version = "0.47.0", features = ["serde"] }
-nex = { version = "0.28.1", features = ["async", "serde"] }
+netdev = { version = "0.48.0", features = ["serde"] }
+nex = { version = "0.29.0", features = ["async", "serde"] }
 futures = "0.3.34"
-rustls = { version = "0.23.46", default-features = false, features = ["ring", "std"] }
+rustls = { version = "0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
+rustls-webpki = "0.103.16"
 rustls-pki-types = "1.15.1"
 x509-parser = "0.18.1"
 tokio = { version = "1.54.1", features = ["macros", "rt-multi-thread", "time", "net", "io-util", "sync", "process"] }
@@ -43,6 +44,7 @@ http = "1.5.0"
 bytes = "1.12.1"
 tempfile = "3.27.0"
 quick-xml = { version = "0.42.0", features = ["serialize"] }
+h2 = { version = "0.4", default-features = false }
 
 [target.'cfg(unix)'.dependencies]
 libc = "0.2.191"
@@ -55,3 +57,13 @@ tokio = { version = "1.54.1", features = ["test-util"] }
 [profile.dist]
 inherits = "release"
 lto = "thin"
+
+[build-dependencies]
+anyhow = "1"
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[[bench]]
+name = "technology"
+harness = false
