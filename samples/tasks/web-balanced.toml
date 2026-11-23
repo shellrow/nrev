@@ -1,6 +1,6 @@
 name = "web-balanced"
 description = "Run the sample web-balanced recipe against a target list"
-targets = ["192.168.10.10", "@./targets.txt"]
+targets = ["192.0.2.10", "@./targets.txt"]
 data = "../recipes"
 recipe = "web-balanced"
 format = "json"

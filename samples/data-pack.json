@@ -4,7 +4,7 @@
       "id": "corp-http-alt",
       "transport": "tcp",
       "ports": [8080, 8088],
-      "payload": "GET / HTTP/1.1\r\nHost: target.local\r\nUser-Agent: nrev-sample\r\nConnection: close\r\n\r\n",
+      "payload": "GET / HTTP/1.1\r\nHost: target.example\r\nUser-Agent: nrev-sample\r\nConnection: close\r\n\r\n",
       "expect": ["HTTP/", "Server:"]
     },
     {
