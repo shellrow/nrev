@@ -57,6 +57,12 @@ pub struct ScanRecipe {
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ScanTask {
     #[serde(default)]
+    pub inventory: bool,
+    #[serde(default)]
+    pub bundled_advisories: bool,
+    #[serde(default)]
+    pub native_os: bool,
+    #[serde(default)]
     pub identification: crate::nmap::IdentificationOptions,
     pub name: Option<String>,
     pub description: Option<String>,
@@ -87,6 +93,10 @@ pub struct ScanTask {
 
 #[derive(Clone, Debug)]
 pub struct ScanConfig {
+    /// Read a short server-first greeting on otherwise unused open TCP connections.
+    pub passive_greetings: bool,
+    /// Enable automatic web negotiation for individually listed ports on named hosts.
+    pub explicit_web_ports: bool,
     pub identification: crate::nmap::IdentificationOptions,
     pub profile_name: String,
     pub recipe_name: Option<String>,
@@ -167,6 +177,9 @@ impl ScanTask {
         );
 
         ScanArgs {
+            inventory: self.inventory,
+            bundled_advisories: self.bundled_advisories,
+            native_os: self.native_os,
             identification: {
                 let mut options = self.identification.clone();
                 if options.executable.is_relative() && options.executable.components().count() > 1 {
@@ -287,13 +300,24 @@ impl ScanConfig {
         };
 
         let config = Self {
+            passive_greetings: args.inventory || args.native_os,
+            explicit_web_ports: ports_expr
+                .split(',')
+                .all(|p| p.trim().parse::<u16>().is_ok()),
             identification: args.identification.clone(),
             profile_name: profile
                 .as_ref()
                 .map(|p| p.name.clone())
                 .unwrap_or_else(|| "default".to_string()),
             recipe_name: recipe.as_ref().map(|r| r.name.clone()),
-            transport: if sources.transport {
+            transport: if args.native_os {
+                if sources.transport && args.transport != ScanTransport::Syn {
+                    return Err(NrevError::InvalidConfiguration(
+                        "--os uses the SYN transport".into(),
+                    ));
+                }
+                Transport::Syn
+            } else if sources.transport {
                 args.transport.into()
             } else {
                 recipe
@@ -694,6 +718,9 @@ mod tests {
     #[test]
     fn recipe_overrides_profile() {
         let args = ScanArgs {
+            inventory: false,
+            bundled_advisories: false,
+            native_os: false,
             identification: Default::default(),
             targets: vec!["127.0.0.1".to_string()],
             ports: "80".to_string(),
@@ -741,6 +768,9 @@ mod tests {
     #[test]
     fn explicit_cli_values_override_recipe_defaults() {
         let args = ScanArgs {
+            inventory: false,
+            bundled_advisories: false,
+            native_os: false,
             identification: Default::default(),
             targets: vec!["127.0.0.1".to_string()],
             ports: "443".to_string(),
@@ -811,6 +841,9 @@ mod tests {
     #[test]
     fn supports_quic_transport_from_cli() {
         let args = ScanArgs {
+            inventory: false,
+            bundled_advisories: false,
+            native_os: false,
             identification: Default::default(),
             targets: vec!["example.com".to_string()],
             ports: "443".to_string(),
@@ -898,6 +931,9 @@ format = "json"
     #[test]
     fn explicit_task_builtin_probe_setting_overrides_recipe_defaults() {
         let task = ScanTask {
+            inventory: false,
+            bundled_advisories: false,
+            native_os: false,
             identification: Default::default(),
             name: None,
             description: None,
@@ -986,6 +1022,45 @@ format = "json"
             Err(NrevError::InvalidConfiguration(_))
         ));
     }
+    #[test]
+    fn os_detection_only_selects_nmap_by_its_explicit_name() {
+        use clap::Parser;
+        for flag in ["-O", "--os", "--os-detect", "--native-os", "--nmap-os"] {
+            let cli = crate::cli::Cli::parse_from(["nrev", "port", "localhost:43219", flag]);
+            let crate::cli::Command::Port(args) = cli.command else {
+                panic!("port command")
+            };
+            let config = ScanConfig::from_scan_args(&args, &DataRegistry::default()).unwrap();
+            assert_eq!(config.identification.enabled(), flag == "--nmap-os");
+            assert_eq!(config.transport == Transport::Syn, flag != "--nmap-os");
+        }
+    }
+
+    #[test]
+    fn service_inventory_and_default_probes_are_independent() {
+        use clap::Parser;
+        for flag in [
+            None,
+            Some("-S"),
+            Some("--service"),
+            Some("--inventory"),
+            Some("-SO"),
+        ] {
+            let cli = crate::cli::Cli::parse_from(
+                ["nrev", "port", "localhost:43219"].into_iter().chain(flag),
+            );
+            let crate::cli::Command::Port(args) = cli.command else {
+                panic!("port command")
+            };
+            let config = ScanConfig::from_scan_args(&args, &DataRegistry::default()).unwrap();
+            assert!(config.builtin_probes);
+            assert!(!config.identification.enabled());
+            assert_eq!(args.inventory, flag.is_some());
+            assert_eq!(config.passive_greetings, flag.is_some());
+            assert_eq!(config.transport == Transport::Syn, flag == Some("-SO"));
+        }
+    }
+
     #[test]
     fn native_and_external_concurrency_are_independent() {
         use clap::Parser;

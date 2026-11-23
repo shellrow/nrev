@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "records": [
+    {
+      "id": "CVE-2021-23017",
+      "product": "nginx:nginx",
+      "source": "https://mailman.nginx.org/pipermail/nginx-announce/2021/000300.html",
+      "introduced": "0.6.18",
+      "fixed": "1.20.1",
+      "condition": "Check whether the deployed configuration uses the resolver directive."
+    }
+  ]
+}

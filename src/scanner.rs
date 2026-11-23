@@ -660,7 +660,71 @@ async fn collect_followup_observations<C: Connector>(
     let mut reusable_connection = reusable_connection;
 
     if config.builtin_probes {
-        for probe in select_builtin_probes(port, followup_transport, &config.enabled_probes) {
+        let mut probes = select_builtin_probes(port, followup_transport, &config.enabled_probes);
+        let automatic_tcp = followup_transport == Transport::Tcp
+            && config.enabled_probes.is_empty()
+            && !registry
+                .external_probes
+                .iter()
+                .any(|p| p.matches(port, followup_transport));
+        let direct_port = !target.original.contains('/')
+            && (config.explicit_web_ports
+                || crate::target::split_host_port(&target.original).is_some());
+        if automatic_tcp
+            && direct_port
+            && let Some(mode) =
+                crate::probes::web::WebMode::for_probe(port, probes.first().map(|p| p.id()))
+        {
+            probes.clear();
+            let context = ProbeContext {
+                host,
+                port,
+                timeout: config.probe_timeout,
+                http_body_preview_bytes: config.http_body_preview_bytes,
+            };
+            let connect = || async {
+                connector
+                    .connect(
+                        target.address,
+                        port,
+                        Transport::Tcp,
+                        config.connect_timeout,
+                        config.interface.as_deref(),
+                        Some(host),
+                    )
+                    .await
+                    .map(|outcome| outcome.connection)
+            };
+            match crate::probes::web::negotiate(
+                reusable_connection.take(),
+                connect,
+                context,
+                mode,
+                &mut errors,
+            )
+            .await
+            {
+                Ok(received) => observations.extend(received),
+                Err(error) => errors.push(format!("web negotiation: {error}")),
+            }
+        } else if config.passive_greetings
+            && automatic_tcp
+            && probes.is_empty()
+            && let Some(connection) = reusable_connection.take()
+        {
+            let context = ProbeContext {
+                host,
+                port,
+                timeout: config
+                    .probe_timeout
+                    .min(std::time::Duration::from_millis(150)),
+                http_body_preview_bytes: config.http_body_preview_bytes,
+            };
+            if let Ok(observation) = crate::probes::passive_greeting(connection, context).await {
+                observations.push(observation);
+            }
+        }
+        for probe in probes {
             let connection = if let Some(connection) = reusable_connection.take() {
                 Ok(connection)
             } else {
@@ -1335,6 +1399,8 @@ mod tests {
         });
 
         let config = ScanConfig {
+            passive_greetings: false,
+            explicit_web_ports: false,
             identification: Default::default(),
             profile_name: "test".to_string(),
             recipe_name: None,
@@ -1413,6 +1479,8 @@ mod tests {
     #[tokio::test]
     async fn connect_scan_runs_ports_concurrently() {
         let config = ScanConfig {
+            passive_greetings: false,
+            explicit_web_ports: false,
             identification: Default::default(),
             profile_name: "test".to_string(),
             recipe_name: None,
@@ -1496,6 +1564,8 @@ mod tests {
         };
         let peak = connector.peak.clone();
         let config = ScanConfig {
+            passive_greetings: false,
+            explicit_web_ports: false,
             identification: Default::default(),
             profile_name: "test".to_string(),
             recipe_name: None,
@@ -1542,6 +1612,8 @@ mod tests {
         };
         let peak = connector.peak.clone();
         let config = ScanConfig {
+            passive_greetings: false,
+            explicit_web_ports: false,
             identification: Default::default(),
             profile_name: "test".to_string(),
             recipe_name: None,

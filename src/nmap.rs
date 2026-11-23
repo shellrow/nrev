@@ -99,7 +99,7 @@ pub struct IdentificationOptions {
     #[arg(long = "nmap")]
     pub services: bool,
     /// Identify the OS with Nmap (TCP/SYN scans; requires privileges).
-    #[arg(long = "os-detect")]
+    #[arg(long = "nmap-os")]
     pub os: bool,
     /// Nmap executable name or path.
     #[arg(long = "nmap-path", default_value = "nmap")]
@@ -132,6 +132,9 @@ impl IdentificationOptions {
     }
 
     pub fn validate(&self, transport: Transport) -> Result<()> {
+        if !self.enabled() {
+            return Ok(());
+        }
         ensure!(
             (1..=16).contains(&self.concurrency),
             "Nmap concurrency must be between 1 and 16"

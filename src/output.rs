@@ -6,24 +6,29 @@ use termtree::Tree;
 use crate::config::ScanRecipe;
 use crate::model::{
     EndpointResult, EndpointState, HostResult, HostScanReport, NeighborReport, PingReport,
-    ProbeObservation, ScanReport, TlsObservation, TraceReport,
+    ScanReport, TlsObservation, TraceReport,
 };
 use crate::probes::{BuiltinProbeMetadata, ExternalProbeDefinition};
+use crate::technology::{
+    EndpointInventory, EvidenceRef, HostInventory, Inventory, OperatingSystem,
+};
 
 fn render_safe_tree(mut tree: Tree<String>) -> String {
     fn sanitize(tree: &mut Tree<String>) {
-        tree.root = tree
-            .root
-            .chars()
-            .map(|c| {
-                if c.is_control() || matches!(c, '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}')
-                {
-                    c.escape_default().to_string()
+        let escape = |c: char| {
+            c.is_control() || matches!(c, '\u{202a}'..='\u{202e}' | '\u{2066}'..='\u{2069}')
+        };
+        if tree.root.chars().any(escape) {
+            let mut label = String::with_capacity(tree.root.len());
+            for c in tree.root.chars() {
+                if escape(c) {
+                    label.extend(c.escape_default());
                 } else {
-                    c.to_string()
+                    label.push(c);
                 }
-            })
-            .collect();
+            }
+            tree.root = label;
+        }
         for leaf in &mut tree.leaves {
             sanitize(leaf);
         }
@@ -32,63 +37,271 @@ fn render_safe_tree(mut tree: Tree<String>) -> String {
     format!("{tree}\n")
 }
 
-pub fn render_human_scan_report(report: &ScanReport, show_all_states: bool) -> String {
-    let mut root = Tree::new("Scan report(s)".to_string());
-    let mut rendered_targets = 0usize;
-
-    let mut groups = std::collections::BTreeMap::<String, Vec<&crate::model::TargetReport>>::new();
-    for target in &report.targets {
-        groups
-            .entry(target.target.original.clone())
-            .or_default()
-            .push(target);
-    }
-
-    for (group_label, mut targets) in groups {
-        targets.sort_by_key(|target| target.target.address);
-        let needs_grouping = targets.len() > 1;
-
-        if needs_grouping {
-            let mut group = Tree::new(group_label);
-            for target in targets {
-                if let Some(target_tree) = render_scan_target_tree(
-                    target,
-                    show_all_states,
-                    true,
-                    report.identification.as_ref(),
-                ) {
-                    group.push(target_tree);
-                }
+pub fn render_inventory(inventory: &crate::technology::Inventory) -> String {
+    let mut root = inventory_root(inventory);
+    for host in &inventory.hosts {
+        let mut host_tree = Tree::new(host.address.to_string());
+        append_os(&mut host_tree, &host.operating_system, true);
+        for ep in &host.endpoints {
+            let mut endpoint = Tree::new(format!(
+                "{}/{} ({}, identity {})",
+                ep.port,
+                ep.transport.as_str(),
+                state_label(&ep.state),
+                ep.identity_status
+            ));
+            if ep.latency_ms > 0 {
+                endpoint.push(Tree::new(format!("Latency: {}ms", ep.latency_ms)));
             }
-
-            if group.leaves.is_empty() {
-                if show_all_states {
-                    group.push(Tree::new("no endpoints".to_string()));
-                } else {
-                    continue;
-                }
+            for error in &ep.errors {
+                endpoint.push(Tree::new(format!("Collection error: {error}")));
             }
-
-            root.push(group);
-            rendered_targets += 1;
-        } else if let Some(target) = targets.first()
-            && let Some(target_tree) = render_scan_target_tree(
-                target,
-                show_all_states,
+            append_identification(
+                &mut endpoint,
+                ep,
+                true,
+                inventory.advisory_records.is_some(),
                 false,
-                report.identification.as_ref(),
+            );
+            if ep.collection_errors > ep.errors.len() {
+                endpoint.push(Tree::new(format!(
+                    "Collection errors: {}",
+                    ep.collection_errors
+                )));
+            }
+            host_tree.push(endpoint);
+        }
+        root.push(host_tree);
+    }
+    render_safe_tree(root)
+}
+
+fn inventory_root(inventory: &Inventory) -> Tree<String> {
+    let mut root = Tree::new(format!(
+        "Technology inventory (NKDB {})",
+        inventory.knowledge_revision
+    ));
+    if let Some(count) = inventory.advisory_records {
+        root.push(Tree::new(format!(
+            "Advisory review: {count} supplied records"
+        )));
+    }
+    if let Some(c) = &inventory.nvd_coverage {
+        root.push(Tree::new(format!("NVD snapshot {}: page offset {}, {} of {} CVEs, {} imported, {} skipped by status, {} unsupported configurations, {} outside catalog",
+            c.timestamp, c.start_index, c.page_records, c.total_results, c.imported, c.skipped_status, c.skipped_configuration, c.outside_catalog)));
+    }
+    root
+}
+
+fn append_os(host_tree: &mut Tree<String>, os: &OperatingSystem, detailed: bool) {
+    let status = os.status.replace('_', " ");
+    let label = match &os.family {
+        Some(family) => format!("{family} ({status})"),
+        None => status,
+    };
+    host_tree.push(Tree::new(format!("OS: {label}")));
+    if !detailed {
+        return;
+    }
+    for matched in &os.stack_matches {
+        let location = matched
+            .port
+            .map_or_else(|| "host fingerprint".into(), |p| format!("TCP port {p}"));
+        host_tree.push(Tree::new(format!(
+            "{} stack on {location} ({})",
+            matched.family, matched.profile
+        )));
+    }
+}
+
+fn append_identification(
+    endpoint: &mut Tree<String>,
+    ep: &EndpointInventory,
+    detailed: bool,
+    reviewed: bool,
+    has_raw: bool,
+) {
+    if let Some(note) = ep.external_identity_note {
+        endpoint.push(Tree::new(format!(
+            "External identity withheld: {}",
+            note.replace('_', " ")
+        )));
+    }
+    for service in &ep.services {
+        endpoint.push(Tree::new(format!(
+            "Service: {} ({})",
+            service.name,
+            service.basis.replace('_', " ")
+        )));
+    }
+    for platform in &ep.service_platforms {
+        endpoint.push(Tree::new(
+            format!(
+                "Service platform: {} {}",
+                platform.environment,
+                platform.declared_release.as_deref().unwrap_or("")
+            )
+            .trim_end()
+            .to_string(),
+        ));
+    }
+    for t in &ep.technologies {
+        let mut product = Tree::new(format!(
+            "{} {} ({}, {:?} version)",
+            t.id,
+            t.version.as_deref().unwrap_or("?"),
+            t.role,
+            t.version_status
+        ));
+        if reviewed {
+            product.push(Tree::new(format!(
+                "Advisory review: {}",
+                t.advisory_status.replace('_', " ")
+            )));
+        }
+        for d in t.declarations.iter().filter(|_| detailed) {
+            let at = match &d.evidence {
+                EvidenceRef::Probe {
+                    observation,
+                    probe,
+                    field,
+                } => format!("observation {observation}, {probe}.{field}"),
+                EvidenceRef::Nmap { host, port, cpe } => {
+                    format!("Nmap host {host}, port entry {port}, CPE {cpe}")
+                }
+            };
+            product.push(Tree::new(format!(
+                "{at} ({})",
+                d.version.as_deref().unwrap_or("version unavailable")
+            )));
+        }
+        endpoint.push(product);
+    }
+    for fact in ep.observed.iter().chain(&ep.review) {
+        if has_raw
+            && matches!(
+                fact.name,
+                "http.title"
+                    | "http.server_product"
+                    | "tls.cipher_suite"
+                    | "tls.alpn"
+                    | "http.via_header"
             )
         {
-            root.push(target_tree);
-            rendered_targets += 1;
+            continue;
+        }
+        endpoint.push(Tree::new(format!("{}: {}", fact.name, fact.value)));
+    }
+    for candidate in &ep.advisory_candidates {
+        let mut item = Tree::new(format!(
+            "{} on {} (potential, {})",
+            candidate.id, candidate.product, candidate.applicability
+        ));
+        if let Some(config) = &candidate.configuration {
+            item.push(Tree::new(format!(
+                "{} = {} ({})",
+                config.requirement.fact, config.requirement.equals, config.status
+            )));
+        }
+        if let Some(condition) = &candidate.condition {
+            item.push(Tree::new(condition.clone()));
+        }
+        item.push(Tree::new(candidate.review.to_owned()));
+        item.push(Tree::new(candidate.source.clone()));
+        endpoint.push(item);
+    }
+}
+
+/// Render the raw scan without loading a technology catalog.
+pub fn render_human_scan_report(report: &ScanReport, show_all_states: bool) -> String {
+    render_port_report(report, show_all_states, None, false)
+}
+
+/// Render observations and their inventory together. The inventory must be
+/// derived from the same report with its targets in the original order.
+pub fn render_port_report(
+    report: &ScanReport,
+    show_all_states: bool,
+    inventory: Option<&Inventory>,
+    detailed: bool,
+) -> String {
+    let mut root = match inventory {
+        Some(inv) if detailed => inventory_root(inv),
+        _ => Tree::new("Scan report(s)".to_string()),
+    };
+    let mut rendered_targets = 0usize;
+
+    let mut groups = std::collections::BTreeMap::<&str, Vec<usize>>::new();
+    for (index, target) in report.targets.iter().enumerate() {
+        groups
+            .entry(&target.target.original)
+            .or_default()
+            .push(index);
+    }
+    if !show_all_states {
+        let mut totals = std::collections::BTreeMap::new();
+        for ep in report
+            .targets
+            .iter()
+            .flat_map(|target| target.endpoints.values())
+        {
+            if matches!(
+                ep.state,
+                EndpointState::Closed | EndpointState::Filtered | EndpointState::Unreachable
+            ) {
+                *totals.entry(state_label(&ep.state)).or_insert(0usize) += 1;
+            }
+        }
+        if !totals.is_empty() {
+            let counts = totals
+                .into_iter()
+                .map(|(state, count)| format!("{count} {state}"))
+                .collect::<Vec<_>>()
+                .join(", ");
+            root.push(Tree::new(format!(
+                "Native port states: {counts} (use --all-states for details)"
+            )));
         }
     }
-
+    for (label, mut indices) in groups {
+        indices.sort_by_key(|&i| report.targets[i].target.address);
+        let grouped = indices.len() > 1;
+        let mut group = Tree::new(label.to_owned());
+        for i in indices {
+            let target = &report.targets[i];
+            let host_inventory = inventory.and_then(|inv| inv.hosts.get(i)).filter(|h| {
+                h.address == target.target.address && h.hostname == target.target.hostname
+            });
+            if let Some(node) = render_scan_target_tree(
+                target,
+                show_all_states,
+                grouped,
+                report.identification.as_ref(),
+                host_inventory,
+                detailed,
+                inventory.is_some_and(|inv| inv.advisory_records.is_some()),
+            ) {
+                if grouped {
+                    group.push(node);
+                } else {
+                    root.push(node);
+                }
+                rendered_targets += 1;
+            }
+        }
+        if grouped && !group.leaves.is_empty() {
+            root.push(group);
+        }
+    }
     if rendered_targets == 0 {
-        root.push(Tree::new(if show_all_states {
-            "no endpoints".to_string()
+        let message = if show_all_states {
+            "no endpoints"
         } else {
-            "no open ports".to_string()
+            "no open ports"
+        };
+        root.push(Tree::new(match report.targets.as_slice() {
+            [target] => format!("{}: {message}", render_target_label(target, false)),
+            _ => message.to_string(),
         }));
     }
 
@@ -113,31 +326,48 @@ pub fn write_json_report(report: &ScanReport, path: &Path) -> anyhow::Result<()>
 }
 
 pub fn filtered_scan_report(report: &ScanReport, show_all_states: bool) -> ScanReport {
-    let mut filtered = report.clone();
-    if !show_all_states {
-        let external_candidates: std::collections::BTreeSet<_> = report
-            .identification
-            .iter()
-            .flat_map(|details| &details.hosts)
-            .flat_map(|host| {
-                host.ports
-                    .iter()
-                    .filter(|port| is_visible_external_port(port))
-                    .map(move |port| (host.ip, port.port, port.protocol.as_str()))
-            })
-            .collect();
-        for target in &mut filtered.targets {
-            target.endpoints.retain(|_, endpoint| {
-                is_visible_state(&endpoint.state)
-                    || external_candidates.contains(&(
-                        target.target.address,
-                        endpoint.port,
-                        wire_protocol(endpoint.transport),
-                    ))
-            });
-        }
+    if show_all_states {
+        return report.clone();
     }
-    filtered
+    let external_candidates: std::collections::BTreeSet<_> = report
+        .identification
+        .iter()
+        .flat_map(|details| &details.hosts)
+        .flat_map(|host| {
+            host.ports
+                .iter()
+                .filter(|port| is_visible_external_port(port))
+                .map(move |port| (host.ip, port.port, port.protocol.as_str()))
+        })
+        .collect();
+    let targets = report
+        .targets
+        .iter()
+        .map(|target| crate::model::TargetReport {
+            target: target.target.clone(),
+            fingerprint: target.fingerprint.clone(),
+            fingerprint_matches: target.fingerprint_matches.clone(),
+            os_guesses: target.os_guesses.clone(),
+            endpoints: target
+                .endpoints
+                .iter()
+                .filter(|(_, endpoint)| {
+                    is_visible_state(&endpoint.state)
+                        || external_candidates.contains(&(
+                            target.target.address,
+                            endpoint.port,
+                            endpoint.transport.wire_protocol(),
+                        ))
+                })
+                .map(|(&port, endpoint)| (port, endpoint.clone()))
+                .collect(),
+        })
+        .collect();
+    ScanReport {
+        metadata: report.metadata.clone(),
+        identification: report.identification.clone(),
+        targets,
+    }
 }
 
 pub fn render_human_host_report(report: &HostScanReport, show_all_hosts: bool) -> String {
@@ -146,7 +376,7 @@ pub fn render_human_host_report(report: &HostScanReport, show_all_hosts: bool) -
     let visible_targets = report
         .targets
         .iter()
-        .filter(|target| show_all_hosts || target.reachable)
+        .filter(|target| show_all_hosts || target.reachable || report.targets.len() == 1)
         .collect::<Vec<_>>();
 
     let mut groups = std::collections::BTreeMap::<String, Vec<&HostResult>>::new();
@@ -175,6 +405,14 @@ pub fn render_human_host_report(report: &HostScanReport, show_all_hosts: bool) -
         }
     }
 
+    if !show_all_hosts && report.targets.len() > 1 {
+        let omitted = report.targets.iter().filter(|host| !host.reachable).count();
+        if omitted > 0 {
+            root.push(Tree::new(format!(
+                "{omitted} unreachable host(s); use --all-hosts for details"
+            )));
+        }
+    }
     if root.leaves.is_empty() {
         root.push(Tree::new(if show_all_hosts {
             "no hosts".to_string()
@@ -198,6 +436,14 @@ pub fn filtered_host_report(report: &HostScanReport, show_all_hosts: bool) -> Ho
     filtered
 }
 
+fn elapsed_ms(value: std::time::Duration) -> String {
+    if !value.is_zero() && value.as_millis() == 0 {
+        format!("{:.3}", value.as_secs_f64() * 1000.0)
+    } else {
+        value.as_millis().to_string()
+    }
+}
+
 pub fn render_human_ping_report(report: &PingReport) -> String {
     let target = &report.metadata.target;
     let label = match &target.hostname {
@@ -219,23 +465,33 @@ pub fn render_human_ping_report(report: &PingReport) -> String {
             format!("#{} *", reply.seq)
         };
         let mut node = Tree::new(label);
+        node.push(Tree::new(format!("outcome: {}", reply.outcome)));
+        if let Some(mac) = &reply.mac_address {
+            node.push(Tree::new(format!("MAC: {mac}")));
+        }
         if let Some(latency) = reply.latency {
-            node.push(Tree::new(format!("RTT: {}ms", latency.as_millis())));
+            node.push(Tree::new(format!("RTT: {}ms", elapsed_ms(latency))));
         }
         if let Some(ttl_hint) = reply.ttl_hint {
             node.push(Tree::new(format!("TTL: {ttl_hint}")));
         }
         root.push(node);
     }
-    root.push(Tree::new(format!(
-        "summary: tx={} rx={} loss={:.1}% min/avg/max={}/{}/{}ms",
-        report.summary.transmitted,
-        report.summary.received,
-        report.summary.packet_loss_percent,
-        report.summary.min.map(|v| v.as_millis()).unwrap_or(0),
-        report.summary.avg.map(|v| v.as_millis()).unwrap_or(0),
-        report.summary.max.map(|v| v.as_millis()).unwrap_or(0)
-    )));
+    let mut summary = format!(
+        "summary: tx={} rx={} loss={:.1}%",
+        report.summary.transmitted, report.summary.received, report.summary.packet_loss_percent,
+    );
+    if let (Some(min), Some(avg), Some(max)) =
+        (report.summary.min, report.summary.avg, report.summary.max)
+    {
+        summary.push_str(&format!(
+            " min/avg/max={}/{}/{}ms",
+            elapsed_ms(min),
+            elapsed_ms(avg),
+            elapsed_ms(max)
+        ));
+    }
+    root.push(Tree::new(summary));
     if !report.errors.is_empty() {
         for error in &report.errors {
             root.push(Tree::new(format!("error: {error}")));
@@ -278,8 +534,12 @@ pub fn render_human_trace_report(report: &TraceReport) -> String {
                 "hop"
             }
         )));
+        node.push(Tree::new(format!("outcome: {}", hop.outcome)));
+        if let Some(mac) = &hop.mac_address {
+            node.push(Tree::new(format!("MAC: {mac}")));
+        }
         if let Some(latency) = hop.latency {
-            node.push(Tree::new(format!("RTT: {}ms", latency.as_millis())));
+            node.push(Tree::new(format!("RTT: {}ms", elapsed_ms(latency))));
         }
         if let Some(ttl_hint) = hop.ttl_hint {
             node.push(Tree::new(format!("TTL: {ttl_hint}")));
@@ -317,9 +577,18 @@ pub fn render_human_neighbor_report(report: &NeighborReport) -> String {
         root.push(Tree::new(format!("mac: {}", result.mac_address)));
         root.push(Tree::new(format!(
             "latency: {}ms",
-            result.latency.as_millis()
+            elapsed_ms(result.latency)
         )));
-        root.push(Tree::new(format!("interface: {}", result.interface_name)));
+        let mut interface = format!(
+            "interface: {} (index {})",
+            result.interface_name, result.interface_index
+        );
+        if let Some(name) = &result.interface_friendly_name
+            && name != &result.interface_name
+        {
+            interface.push_str(&format!(" {name}"));
+        }
+        root.push(Tree::new(interface));
     } else {
         root.push(Tree::new("no neighbor information".to_string()));
     }
@@ -453,7 +722,12 @@ pub fn render_human_probe_catalog(
     render_safe_tree(root)
 }
 
-fn render_endpoint_tree(endpoint: &EndpointResult) -> Tree<String> {
+fn render_endpoint_tree(
+    endpoint: &EndpointResult,
+    identity: Option<&EndpointInventory>,
+    detailed: bool,
+    reviewed: bool,
+) -> Tree<String> {
     let mut node = Tree::new(format!(
         "{}/{}",
         endpoint.port,
@@ -469,37 +743,87 @@ fn render_endpoint_tree(endpoint: &EndpointResult) -> Tree<String> {
             endpoint.latency.as_millis()
         )));
     }
-    if let Some(service) = primary_service(endpoint) {
-        node.push(Tree::new(format!("service: {service}")));
-    }
-    if let Some(server) = primary_server(endpoint) {
-        node.push(Tree::new(format!("server: {server}")));
-    }
-    for (label, key) in [
-        ("X-Powered-By", "x-powered-by"),
-        ("Via", "via"),
-        ("X-Cache", "x-cache"),
-        ("CF-Cache-Status", "cf-cache-status"),
-        ("Alt-Svc", "alt-svc"),
-        ("Set-Cookie", "set-cookie"),
-        ("Access-Control-Allow-Origin", "access-control-allow-origin"),
-        (
-            "Access-Control-Allow-Credentials",
-            "access-control-allow-credentials",
-        ),
-        ("title", "title"),
-        ("description", "description"),
-        ("generator", "generator"),
-    ] {
-        if let Some(value) = primary_evidence(endpoint, key) {
-            node.push(Tree::new(format!("{label}: {}", truncate(&value, 140))));
+    if let Some(identity) = identity {
+        if identity.identity_status == "conflicting"
+            || (detailed && identity.identity_status == "unknown")
+        {
+            node.push(Tree::new(format!(
+                "Product identity: {}",
+                identity.identity_status
+            )));
         }
+        append_identification(&mut node, identity, detailed, reviewed, true);
     }
-    if let Some(banner) = primary_banner(endpoint) {
-        node.push(Tree::new(format!("banner: {}", truncate(&banner, 140))));
-    }
-    if let Some(tls) = primary_tls(endpoint) {
-        node.push(Tree::new(format!("tls: {tls}")));
+    let mut seen = std::collections::BTreeSet::new();
+    for (index, obs) in endpoint.observations.iter().enumerate() {
+        let mut observation = Tree::new(format!("Observation {index} ({})", obs.probe_id));
+        let grouped = endpoint.observations.len() > 1 && detailed;
+        if grouped {
+            seen.clear();
+        }
+        let mut push = |line: String| {
+            if seen.insert(line.clone()) {
+                if grouped {
+                    observation.push(Tree::new(line));
+                } else {
+                    node.push(Tree::new(line));
+                }
+            }
+        };
+        if let Some(service) = &obs.service_hint
+            && !identity.is_some_and(|id| id.services.iter().any(|s| s.name == service.name))
+        {
+            push(format!("service: {}", service.name));
+        }
+        for item in &obs.evidence {
+            let label = match item.key.as_str() {
+                "server" | "title" | "description" | "generator" => item.key.as_str(),
+                "location" => "Location",
+                "x-powered-by" => "X-Powered-By",
+                "via" => "Via",
+                "x-cache" => "X-Cache",
+                "cf-cache-status" => "CF-Cache-Status",
+                "alt-svc" => "Alt-Svc",
+                "access-control-allow-origin" => "Access-Control-Allow-Origin",
+                "access-control-allow-credentials" => "Access-Control-Allow-Credentials",
+                "set-cookie" => { push("Set-Cookie: present".into()); continue; }
+                "match" | "open_signal" | "instance" => item.key.as_str(),
+                "body_preview" | "status_line" | "default_port" | "response_validated" | "generator_validated" => continue,
+                key if detailed && !identity.is_some_and(|id| id.observed.iter().any(|fact| matches!(fact.evidence, EvidenceRef::Probe { observation, field, .. } if observation == index && field == key))) => key,
+                _ => continue,
+            };
+            push(format!("{label}: {}", truncate(&item.value, 160)));
+        }
+        if let Some(banner) = &obs.banner {
+            if banner.raw.starts_with("HTTP/") {
+                // Older reports may only contain Location in the captured head.
+                if !obs.evidence.iter().any(|e| e.key == "location") {
+                    for value in crate::probes::extract_header_values(&banner.raw, "location") {
+                        push(format!("Location: {}", truncate(&value, 160)));
+                    }
+                }
+                if let Some(status) = banner.raw.lines().next() {
+                    push(format!("banner: {}", truncate(status, 160)));
+                }
+            } else if !banner.normalized.trim().is_empty() {
+                push(format!(
+                    "banner: {}",
+                    truncate(banner.normalized.trim(), 160)
+                ));
+            }
+        }
+        if let Some(tls) = &obs.tls {
+            push(format!("tls: {}", summarize_tls(tls)));
+            if detailed {
+                for issuer in &tls.certificate_issuers {
+                    push(format!("Certificate issuer: {}", truncate(issuer, 160)));
+                }
+                push("Certificate trust: not verified".into());
+            }
+        }
+        if !observation.leaves.is_empty() {
+            node.push(observation);
+        }
     }
     for error in &endpoint.errors {
         node.push(Tree::new(format!("error: {error}")));
@@ -507,15 +831,8 @@ fn render_endpoint_tree(endpoint: &EndpointResult) -> Tree<String> {
     node
 }
 
-fn wire_protocol(transport: crate::model::Transport) -> &'static str {
-    match transport {
-        crate::model::Transport::Tcp | crate::model::Transport::Syn => "tcp",
-        crate::model::Transport::Udp | crate::model::Transport::Quic => "udp",
-    }
-}
-
 fn matches_external_port(endpoint: &EndpointResult, port: &crate::nmap::PortDetails) -> bool {
-    endpoint.port == port.port && wire_protocol(endpoint.transport) == port.protocol
+    endpoint.port == port.port && endpoint.transport.wire_protocol() == port.protocol
 }
 
 fn is_visible_external_port(port: &crate::nmap::PortDetails) -> bool {
@@ -598,8 +915,16 @@ fn render_scan_target_tree(
     show_all_states: bool,
     grouped: bool,
     identification: Option<&crate::nmap::Identification>,
+    inventory: Option<&HostInventory>,
+    detailed: bool,
+    reviewed: bool,
 ) -> Option<Tree<String>> {
     let mut target_tree = Tree::new(render_target_label(target, grouped));
+    if let Some(inv) = inventory
+        && (inv.operating_system.status != "unknown" || (detailed && !inv.endpoints.is_empty()))
+    {
+        append_os(&mut target_tree, &inv.operating_system, detailed);
+    }
     let host = identification.and_then(|details| {
         details
             .hosts
@@ -612,13 +937,20 @@ fn render_scan_target_tree(
         .map(|port| ((port.port, port.protocol.as_str()), port))
         .collect();
     for endpoint in target.endpoints.values() {
-        let protocol = wire_protocol(endpoint.transport);
+        let protocol = endpoint.transport.wire_protocol();
         let external = external_ports.get(&(endpoint.port, protocol)).copied();
         if show_all_states
             || is_visible_state(&endpoint.state)
+            || endpoint.state == EndpointState::Error
             || external.is_some_and(is_visible_external_port)
         {
-            let mut node = render_endpoint_tree(endpoint);
+            let identity = inventory.and_then(|host| {
+                host.endpoints
+                    .binary_search_by_key(&endpoint.port, |e| e.port)
+                    .ok()
+                    .map(|i| &host.endpoints[i])
+            });
+            let mut node = render_endpoint_tree(endpoint, identity, detailed, reviewed);
             if let Some(port) = external {
                 append_external_port(&mut node, port, Some(endpoint));
             }
@@ -739,6 +1071,14 @@ fn render_target_label(target: &crate::model::TargetReport, grouped: bool) -> St
 
     match &target.target.hostname {
         Some(hostname) if hostname != &address => format!("{hostname} ({address})"),
+        _ if target
+            .target
+            .original
+            .parse::<std::net::SocketAddr>()
+            .is_ok_and(|socket| socket.ip() == target.target.address) =>
+        {
+            address
+        }
         _ if target.target.original != address => format!("{} ({address})", target.target.original),
         _ => address,
     }
@@ -764,7 +1104,7 @@ fn render_host_tree(target: &HostResult) -> Tree<String> {
             parts.push(format!("port={port}"));
         }
         if let Some(latency) = observation.latency {
-            parts.push(format!("latency={}ms", latency.as_millis()));
+            parts.push(format!("latency={}ms", elapsed_ms(latency)));
         }
         if let Some(ttl_hint) = observation.ttl_hint {
             parts.push(format!("ttl={ttl_hint}"));
@@ -805,34 +1145,6 @@ fn primary_service(endpoint: &EndpointResult) -> Option<String> {
     })
 }
 
-fn primary_server(endpoint: &EndpointResult) -> Option<String> {
-    primary_evidence(endpoint, "server")
-}
-
-fn primary_evidence(endpoint: &EndpointResult, key: &str) -> Option<String> {
-    endpoint
-        .observations
-        .iter()
-        .find_map(|observation| evidence_value(observation, key).map(|value| value.to_string()))
-}
-
-fn primary_banner(endpoint: &EndpointResult) -> Option<String> {
-    endpoint.observations.iter().find_map(|observation| {
-        observation
-            .banner
-            .as_ref()
-            .map(|banner| banner.normalized.trim().to_string())
-            .filter(|banner| !banner.is_empty())
-    })
-}
-
-fn primary_tls(endpoint: &EndpointResult) -> Option<String> {
-    endpoint
-        .observations
-        .iter()
-        .find_map(|observation| observation.tls.as_ref().map(summarize_tls))
-}
-
 fn state_label(state: &EndpointState) -> &'static str {
     match state {
         EndpointState::Open => "Open",
@@ -867,21 +1179,10 @@ fn summarize_tls(tls: &TlsObservation) -> String {
 }
 
 fn truncate(value: &str, limit: usize) -> String {
-    if value.chars().count() <= limit {
-        value.to_string()
-    } else {
-        let mut truncated = value.chars().take(limit).collect::<String>();
-        truncated.push_str("...");
-        truncated
+    match value.char_indices().nth(limit) {
+        Some((end, _)) => format!("{}...", &value[..end]),
+        None => value.to_owned(),
     }
-}
-
-fn evidence_value<'a>(observation: &'a ProbeObservation, key: &str) -> Option<&'a str> {
-    observation
-        .evidence
-        .iter()
-        .find(|item| item.key == key)
-        .map(|item| item.value.as_str())
 }
 
 #[cfg(test)]
@@ -1308,9 +1609,9 @@ mod tests {
             targets: vec![
                 TargetReport {
                     target: Target {
-                        original: "192.168.10.0/24".to_string(),
+                        original: "192.0.2.0/24".to_string(),
                         hostname: None,
-                        address: IpAddr::from_str("192.168.10.101").expect("ip"),
+                        address: IpAddr::from_str("192.0.2.101").expect("ip"),
                     },
                     fingerprint: None,
                     fingerprint_matches: Vec::new(),
@@ -1331,9 +1632,9 @@ mod tests {
                 },
                 TargetReport {
                     target: Target {
-                        original: "192.168.10.0/24".to_string(),
+                        original: "192.0.2.0/24".to_string(),
                         hostname: None,
-                        address: IpAddr::from_str("192.168.10.102").expect("ip"),
+                        address: IpAddr::from_str("192.0.2.102").expect("ip"),
                     },
                     fingerprint: None,
                     fingerprint_matches: Vec::new(),
@@ -1356,11 +1657,11 @@ mod tests {
         };
 
         let rendered = render_human_scan_report(&report, false);
-        assert!(rendered.contains("192.168.10.0/24"));
-        assert!(rendered.contains("192.168.10.102"));
+        assert!(rendered.contains("192.0.2.0/24"));
+        assert!(rendered.contains("192.0.2.102"));
         assert!(rendered.contains("443/TCP"));
-        assert!(!rendered.contains("192.168.10.0/24 (192.168.10.102)"));
-        assert!(!rendered.contains("192.168.10.101"));
+        assert!(!rendered.contains("192.0.2.0/24 (192.0.2.102)"));
+        assert!(!rendered.contains("192.0.2.101"));
     }
 
     #[test]

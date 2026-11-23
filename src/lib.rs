@@ -19,6 +19,7 @@ pub mod probes;
 pub mod scanner;
 pub mod service_db;
 pub mod target;
+pub mod technology;
 pub mod tls;
 pub mod trace;
 pub mod transport;

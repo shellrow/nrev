@@ -329,7 +329,7 @@ mod tests {
     #[test]
     fn resolves_targets_from_file_and_cidr() {
         let path = std::env::temp_dir().join("nrev-host-targets.txt");
-        fs::write(&path, "127.0.0.1\n192.168.0.0/30\n").expect("write target file");
+        fs::write(&path, "127.0.0.1\n192.0.2.0/30\n").expect("write target file");
         let targets = resolve_host_targets(&[format!("@{}", path.display())]).expect("targets");
         assert!(
             targets
@@ -339,12 +339,12 @@ mod tests {
         assert!(
             targets
                 .iter()
-                .any(|target| target.address == "192.168.0.1".parse::<IpAddr>().unwrap())
+                .any(|target| target.address == "192.0.2.1".parse::<IpAddr>().unwrap())
         );
         assert!(
             targets
                 .iter()
-                .any(|target| target.address == "192.168.0.2".parse::<IpAddr>().unwrap())
+                .any(|target| target.address == "192.0.2.2".parse::<IpAddr>().unwrap())
         );
         fs::remove_file(path).ok();
     }

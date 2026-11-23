@@ -53,8 +53,8 @@ fn http_scan_on_nonstandard_port_preserves_json_and_file_output() {
         .args([
             "port",
             &address.to_string(),
-            "--probes",
-            "http",
+            "--nmap-path",
+            "missing-test-executable",
             "--connect-timeout-ms",
             "500",
             "--probe-timeout-ms",
@@ -381,7 +381,7 @@ executable = "./fake nmap"
         let dir = tempfile::tempdir().unwrap();
         let fake = fake_nmap(dir.path(), "exit 99");
         let output = scan_command("127.0.0.1:53")
-            .args(["--transport", "udp", "--os-detect", "--nmap-path"])
+            .args(["--transport", "udp", "--nmap-os", "--nmap-path"])
             .arg(fake)
             .output()
             .unwrap();
@@ -462,4 +462,121 @@ fn invalid_interfaces_fail_instead_of_reporting_successful_empty_scans() {
         assert!(!output.status.success());
         assert!(!output.stderr.is_empty());
     }
+}
+
+#[tokio::test]
+async fn terminal_inventory_and_saved_reports_keep_their_output_contracts() {
+    use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap().to_string();
+    let server = tokio::spawn(async move {
+        loop {
+            let (stream, _) = listener.accept().await.unwrap();
+            let mut stream = BufReader::new(stream);
+            let mut line = String::new();
+            while stream.read_line(&mut line).await.unwrap() > 0 && line != "\r\n" {
+                line.clear();
+            }
+            stream.get_mut().write_all(b"HTTP/1.1 307 Temporary Redirect\r\nServer: nginx/1.26.0\r\nLocation: /login\r\nSet-Cookie: session=fixture-only\r\nContent-Length: 0\r\n\r\n").await.unwrap();
+        }
+    });
+    let temp = tempfile::tempdir().unwrap();
+    let path = temp.path().join("report.json");
+    for (flags, detailed, json) in [
+        (&[][..], false, false),
+        (&["-S"][..], true, false),
+        (&["--format", "json"][..], false, true),
+        (&["-S", "--format", "json"][..], true, true),
+        (&["--bundled-advisories"][..], true, false),
+        (
+            &["--bundled-advisories", "--format", "json"][..],
+            true,
+            true,
+        ),
+    ] {
+        let output = tokio::process::Command::new(env!("CARGO_BIN_EXE_nrev"))
+            .args([
+                "port",
+                &address,
+                "--probes",
+                "http",
+                "--quiet",
+                "--connect-timeout-ms",
+                "500",
+            ])
+            .args(flags)
+            .arg("--output")
+            .arg(&path)
+            .output()
+            .await
+            .unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(output.stderr.is_empty());
+        let raw: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(&path).unwrap()).unwrap();
+        assert!(raw["targets"].is_array());
+        let stdout = String::from_utf8(output.stdout).unwrap();
+        if json {
+            let parsed: serde_json::Value = serde_json::from_str(&stdout).unwrap();
+            if detailed {
+                assert_eq!(
+                    parsed["hosts"][0]["endpoints"][0]["technologies"][0]["id"],
+                    "nginx:nginx"
+                );
+            } else {
+                assert_eq!(parsed, raw);
+            }
+        } else {
+            for text in [
+                "nginx:nginx 1.26.0",
+                "http.status: 307",
+                "Location: /login",
+                "banner: HTTP/1.1 307",
+            ] {
+                assert!(stdout.contains(text), "{stdout}");
+            }
+            assert!(!stdout.contains("session=fixture-only"));
+            assert_eq!(stdout.contains("observation 0, http.server"), detailed);
+            assert_eq!(stdout.matches("Location: /login").count(), 1);
+        }
+        if detailed {
+            let mut replay = tokio::process::Command::new(env!("CARGO_BIN_EXE_nrev"));
+            replay
+                .arg("inventory")
+                .arg(&path)
+                .args(["--format", if json { "json" } else { "human" }]);
+            let bundled = flags.contains(&"--bundled-advisories");
+            if bundled {
+                replay.arg("--bundled-advisories");
+            }
+            assert_eq!(stdout.contains("CVE-2024-31079"), bundled);
+            let output = replay.output().await.unwrap();
+            assert!(output.status.success());
+            assert_eq!(stdout.as_bytes(), output.stdout);
+        }
+    }
+    let direct = tokio::process::Command::new(env!("CARGO_BIN_EXE_nrev"))
+        .current_dir(temp.path())
+        .args([
+            "port",
+            &address,
+            "--probes",
+            "http",
+            "--quiet",
+            "--bundled-advisories",
+        ])
+        .output()
+        .await
+        .unwrap();
+    assert!(direct.status.success());
+    assert!(
+        String::from_utf8(direct.stdout)
+            .unwrap()
+            .contains("CVE-2024-31079")
+    );
+    server.abort();
 }

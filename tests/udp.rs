@@ -136,3 +136,98 @@ async fn native_ntp_response_is_correlated_and_records_stratum() {
     );
     server.await.unwrap();
 }
+
+fn version_txt(query: &[u8], name: &str) -> Vec<u8> {
+    let mut packet = query.to_vec();
+    packet[2] = 0x84;
+    packet[7] = 1;
+    packet.extend_from_slice(&[0xc0, 12, 0, 16, 0, 3, 0, 0, 0, 0]);
+    packet.extend_from_slice(&u16::try_from(name.len() + 1).unwrap().to_be_bytes());
+    packet.push(u8::try_from(name.len()).unwrap());
+    packet.extend_from_slice(name.as_bytes());
+    packet
+}
+
+#[tokio::test]
+async fn dns_txt_product_requires_the_matching_question_and_record() {
+    let db = nrev::technology::KnowledgeBase::builtin().unwrap();
+    for changed in [
+        None,
+        Some(0),
+        Some(2),
+        Some(3),
+        Some(13),
+        Some(31),
+        Some(33),
+        Some(35),
+        Some(41),
+        Some(42),
+    ] {
+        let socket = UdpSocket::bind("127.0.0.1:0").await.unwrap();
+        let port = socket.local_addr().unwrap().port();
+        let server = tokio::spawn(async move {
+            let mut bytes = [0; 512];
+            let (len, peer) = socket.recv_from(&mut bytes).await.unwrap();
+            let mut reply = version_txt(&bytes[..len], "dnsmasq-2.90");
+            if let Some(offset) = changed {
+                reply[offset] ^= if offset == 2 { 2 } else { 1 };
+            }
+            socket.send_to(&reply, peer).await.unwrap();
+        });
+        let endpoint = scan(port).await;
+        let inventory = db.identify(&endpoint).unwrap();
+        if changed.is_none() {
+            assert_eq!(inventory.technologies[0].id, "dnsmasq:dnsmasq");
+            assert_eq!(inventory.technologies[0].version.as_deref(), Some("2.90"));
+        } else {
+            assert!(
+                inventory.technologies.is_empty(),
+                "changed offset {changed:?}"
+            );
+        }
+        server.await.unwrap();
+    }
+}
+
+#[tokio::test]
+async fn dns_over_tcp_reassembles_the_response_before_identifying_it() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let address = listener.local_addr().unwrap();
+    let server = tokio::spawn(async move {
+        let (mut stream, _) = listener.accept().await.unwrap();
+        let mut query = [0; 32];
+        stream.read_exact(&mut query).await.unwrap();
+        let reply = version_txt(&query[2..], "CoreDNS-1.12.0");
+        stream
+            .write_all(&(reply.len() as u16).to_be_bytes())
+            .await
+            .unwrap();
+        for part in reply.chunks(7) {
+            stream.write_all(part).await.unwrap();
+            tokio::task::yield_now().await;
+        }
+    });
+    let output = tokio::process::Command::new(env!("CARGO_BIN_EXE_nrev"))
+        .args([
+            "port",
+            &address.to_string(),
+            "--connect-timeout-ms",
+            "500",
+            "--probes",
+            "dns-tcp",
+            "-S",
+            "--format",
+            "json",
+            "--quiet",
+        ])
+        .output()
+        .await
+        .unwrap();
+    assert!(output.status.success());
+    let inventory: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    let product = &inventory["hosts"][0]["endpoints"][0]["technologies"][0];
+    assert_eq!(product["id"], "coredns:coredns");
+    assert_eq!(product["version"], "1.12.0");
+    server.await.unwrap();
+}

@@ -336,7 +336,7 @@ pub fn parse_ports(input: &str) -> Result<Vec<u16>> {
     Ok(set.into_iter().collect())
 }
 
-fn split_host_port(input: &str) -> Option<(String, u16)> {
+pub(crate) fn split_host_port(input: &str) -> Option<(String, u16)> {
     if let Ok(socket) = input.parse::<SocketAddr>() {
         return Some((socket.ip().to_string(), socket.port()));
     }
@@ -396,7 +396,7 @@ mod tests {
     #[test]
     fn resolves_cidr() {
         let targets = TargetResolver::new(vec![80])
-            .resolve(&["192.168.1.0/30".to_string()])
+            .resolve(&["192.0.2.0/30".to_string()])
             .expect("targets");
         let addresses: Vec<IpAddr> = targets
             .into_iter()
@@ -405,8 +405,8 @@ mod tests {
         assert_eq!(
             addresses,
             vec![
-                IpAddr::V4(Ipv4Addr::new(192, 168, 1, 1)),
-                IpAddr::V4(Ipv4Addr::new(192, 168, 1, 2))
+                IpAddr::V4(Ipv4Addr::new(192, 0, 2, 1)),
+                IpAddr::V4(Ipv4Addr::new(192, 0, 2, 2))
             ]
         );
     }
@@ -456,7 +456,7 @@ mod tests {
     #[test]
     fn resolves_targets_from_file() {
         let path = std::env::temp_dir().join("nrev-port-targets.txt");
-        fs::write(&path, "127.0.0.1\n192.168.1.0/30\n").expect("write target file");
+        fs::write(&path, "127.0.0.1\n192.0.2.0/30\n").expect("write target file");
 
         let targets = TargetResolver::new(vec![80])
             .resolve(&[format!("@{}", path.display())])
@@ -468,12 +468,12 @@ mod tests {
         assert!(
             targets
                 .iter()
-                .any(|(target, _)| target.address == "192.168.1.1".parse::<IpAddr>().unwrap())
+                .any(|(target, _)| target.address == "192.0.2.1".parse::<IpAddr>().unwrap())
         );
         assert!(
             targets
                 .iter()
-                .any(|(target, _)| target.address == "192.168.1.2".parse::<IpAddr>().unwrap())
+                .any(|(target, _)| target.address == "192.0.2.2".parse::<IpAddr>().unwrap())
         );
 
         fs::remove_file(path).ok();

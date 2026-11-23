@@ -1,0 +1,150 @@
+{
+  "metadata": {
+    "schema_version": 1,
+    "version": "0.8.0",
+    "profile": "platform-replay",
+    "recipe": null,
+    "tags": [
+      "redacted-handshakes"
+    ],
+    "generated_at": "2026-11-23T00:00:00Z"
+  },
+  "targets": [
+    {
+      "target": {
+        "original": "192.0.2.1",
+        "hostname": null,
+        "address": "192.0.2.1"
+      },
+      "endpoints": {
+        "8080": {
+          "port": 8080,
+          "transport": "syn",
+          "state": "open",
+          "latency": 0,
+          "observations": [],
+          "fingerprint": {
+            "transport": "syn",
+            "handshake_observed": true,
+            "response_observed": true,
+            "ttl_hint": 64,
+            "ttl_class": 64,
+            "window_size": 65535,
+            "syn_ack_seen": true,
+            "rst_seen": false,
+            "tcp_option_order": "MSS,NOP,WS,NOP,NOP,TS,SACK",
+            "tcp_option_set": "{MSS,SACK,TS,WS,NOP}",
+            "mss": 16344,
+            "window_scale": 6,
+            "sack_permitted": true,
+            "timestamps": true
+          },
+          "fingerprint_matches": [],
+          "errors": []
+        }
+      }
+    },
+    {
+      "target": {
+        "original": "192.0.2.2",
+        "hostname": null,
+        "address": "192.0.2.2"
+      },
+      "endpoints": {
+        "8080": {
+          "port": 8080,
+          "transport": "syn",
+          "state": "open",
+          "latency": 0,
+          "observations": [],
+          "fingerprint": {
+            "transport": "syn",
+            "handshake_observed": true,
+            "response_observed": true,
+            "ttl_hint": 64,
+            "ttl_class": 64,
+            "window_size": 65483,
+            "syn_ack_seen": true,
+            "rst_seen": false,
+            "tcp_option_order": "MSS,SACK,TS,NOP,WS",
+            "tcp_option_set": "{MSS,SACK,TS,WS,NOP}",
+            "mss": 65495,
+            "window_scale": 6,
+            "sack_permitted": true,
+            "timestamps": true
+          },
+          "fingerprint_matches": [],
+          "errors": []
+        }
+      }
+    },
+    {
+      "target": {
+        "original": "192.0.2.3",
+        "hostname": null,
+        "address": "192.0.2.3"
+      },
+      "endpoints": {
+        "8080": {
+          "port": 8080,
+          "transport": "syn",
+          "state": "open",
+          "latency": 0,
+          "observations": [],
+          "fingerprint": {
+            "transport": "syn",
+            "handshake_observed": true,
+            "response_observed": true,
+            "ttl_hint": 128,
+            "ttl_class": 128,
+            "window_size": 8192,
+            "syn_ack_seen": true,
+            "rst_seen": false,
+            "tcp_option_order": "MSS,NOP,WS,NOP,NOP,SACK",
+            "tcp_option_set": "{MSS,SACK,WS,NOP}",
+            "mss": 1460,
+            "window_scale": 8,
+            "sack_permitted": true,
+            "timestamps": false
+          },
+          "fingerprint_matches": [],
+          "errors": []
+        }
+      }
+    },
+    {
+      "target": {
+        "original": "192.0.2.4",
+        "hostname": null,
+        "address": "192.0.2.4"
+      },
+      "endpoints": {
+        "8080": {
+          "port": 8080,
+          "transport": "syn",
+          "state": "open",
+          "latency": 0,
+          "observations": [],
+          "fingerprint": {
+            "transport": "syn",
+            "handshake_observed": true,
+            "response_observed": true,
+            "ttl_hint": 128,
+            "ttl_class": 128,
+            "window_size": 65535,
+            "syn_ack_seen": true,
+            "rst_seen": false,
+            "tcp_option_order": "MSS,NOP,WS,NOP,NOP,SACK",
+            "tcp_option_set": "{MSS,SACK,WS,NOP}",
+            "mss": 1460,
+            "window_scale": 8,
+            "sack_permitted": true,
+            "timestamps": false
+          },
+          "fingerprint_matches": [],
+          "errors": []
+        }
+      }
+    }
+  ]
+}

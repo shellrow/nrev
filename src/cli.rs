@@ -39,6 +39,26 @@ impl ColorMode {
 
 #[derive(Debug, Subcommand)]
 pub enum Command {
+    /// Replay a saved port report as an evidence-based technology inventory.
+    Inventory {
+        /// Path to a schema-v1 nrev port report.
+        report: PathBuf,
+        /// Optional local NKDB catalog to use for replay.
+        #[arg(long, value_name = "FILE")]
+        knowledge: Option<PathBuf>,
+        /// Optional local advisory file for upstream range review.
+        #[arg(long, value_name = "FILE")]
+        advisories: Option<PathBuf>,
+        /// Review the inventory against the bundled vendor advisories.
+        #[arg(long, conflicts_with = "advisories")]
+        bundled_advisories: bool,
+        /// Review a saved NVD CVE API 2.0 response (up to 8 MiB).
+        #[arg(long, value_name = "FILE", conflicts_with_all = ["advisories", "bundled_advisories"])]
+        nvd: Option<PathBuf>,
+        /// Select the inventory output format.
+        #[arg(short, long, value_enum, default_value_t = OutputFormat::Json)]
+        format: OutputFormat,
+    },
     /// Scan ports and collect structured observations.
     Port(Box<ScanArgs>),
     /// Run a port-scan task from a JSON or TOML file.
@@ -153,6 +173,15 @@ pub struct TaskArgs {
 
 #[derive(Debug, Args)]
 pub struct ScanArgs {
+    /// Show detailed service identification and its evidence (JSON: technology inventory).
+    #[arg(short = 'S', long = "service", visible_alias = "inventory")]
+    pub inventory: bool,
+    /// Display the technology inventory with candidates from the bundled vendor advisories.
+    #[arg(long)]
+    pub bundled_advisories: bool,
+    /// Collect TCP SYN fingerprints and display the native OS and service inventory (requires packet capture access).
+    #[arg(short = 'O', long = "os", visible_aliases = ["native-os", "os-detect"])]
+    pub native_os: bool,
     #[command(flatten)]
     pub identification: crate::nmap::IdentificationOptions,
     /// Target hosts, IPs, CIDRs, or host:port expressions.
@@ -171,7 +200,7 @@ pub struct ScanArgs {
     #[arg(short = 'c', long, default_value_t = 512)]
     pub concurrency: usize,
 
-    /// Show closed and filtered ports in the human-readable report.
+    /// Include closed, filtered, unreachable and failed ports in report details and JSON.
     #[arg(long, action = ArgAction::SetTrue)]
     pub all_states: bool,
 

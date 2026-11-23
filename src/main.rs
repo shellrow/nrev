@@ -21,7 +21,7 @@ use nrev::{
     output::{
         filtered_host_report, filtered_scan_report, render_human_host_report,
         render_human_neighbor_report, render_human_ping_report, render_human_probe_catalog,
-        render_human_recipe_catalog, render_human_scan_report, render_human_trace_report,
+        render_human_recipe_catalog, render_human_trace_report, render_port_report,
         write_json_host_report, write_json_neighbor_report, write_json_ping_report,
         write_json_report, write_json_trace_report,
     },
@@ -67,6 +67,39 @@ async fn run() -> anyhow::Result<()> {
     let (progress_mode, quiet) = command_logging_mode(&cli.command, task.as_ref());
     init_logging(progress_mode, quiet, color)?;
     match cli.command {
+        Command::Inventory {
+            report,
+            advisories,
+            bundled_advisories,
+            nvd,
+            knowledge,
+            format,
+        } => {
+            use nrev::technology::{Advisories, KnowledgeBase};
+            let db = match knowledge {
+                Some(path) => KnowledgeBase::from_bytes(&read_inventory_input(&path, 256 << 10)?)?,
+                None => KnowledgeBase::builtin()?,
+            };
+            let saved = serde_json::from_slice(&read_inventory_input(&report, 32 << 20)?)?;
+            let advisories = match (advisories, nvd) {
+                (Some(path), _) => Some(Advisories::from_bytes(
+                    &read_inventory_input(&path, 4 << 20)?,
+                    &db,
+                )?),
+                (_, Some(path)) => Some(Advisories::from_nvd_bytes(
+                    &read_inventory_input(&path, 8 << 20)?,
+                    &db,
+                )?),
+                _ if bundled_advisories => Some(Advisories::bundled(&db)?),
+                _ => None,
+            };
+            let inventory = db.inventory(&saved, advisories.as_ref())?;
+            if format.is_json() {
+                write_json_stdout(&inventory)?;
+            } else {
+                write_stdout(&render_port_report(&saved, true, Some(&inventory), true))?;
+            }
+        }
         Command::Port(args) => {
             let arg_sources = scan_arg_sources(matches.subcommand_matches("port"));
             run_port_scan(&args, &arg_sources).await?;
@@ -114,9 +147,13 @@ async fn run() -> anyhow::Result<()> {
 
             log_reachable_host_summary(config.quiet, &execution.report);
 
-            if args.format.is_json() {
-                let json_report = filtered_host_report(&execution.report, config.show_all_hosts);
-                write_stdout(&serde_json::to_string_pretty(&json_report)?)?;
+            let filtered = (args.format.is_json() || args.output.is_some())
+                .then(|| filtered_host_report(&execution.report, config.show_all_hosts));
+            if let (Some(path), Some(report)) = (&args.output, &filtered) {
+                write_json_host_report(report, path)?;
+            }
+            if let Some(report) = filtered.as_ref().filter(|_| args.format.is_json()) {
+                write_json_stdout(report)?;
             } else {
                 write_stdout(&render_human_host_report(
                     &execution.report,
@@ -141,46 +178,41 @@ async fn run() -> anyhow::Result<()> {
                     )
                 ),
             );
-
-            if let Some(path) = &args.output {
-                let json_report = filtered_host_report(&execution.report, config.show_all_hosts);
-                write_json_host_report(&json_report, path)?;
-            }
         }
         Command::Ping(args) => {
             let config = PingConfig::from_ping_args(&args);
             let report = run_ping(&args.target, &config).await?;
-            if args.format.is_json() {
-                write_stdout(&serde_json::to_string_pretty(&report)?)?;
-            } else {
-                write_stdout(&render_human_ping_report(&report))?;
-            }
             if let Some(path) = &args.output {
                 write_json_ping_report(&report, path)?;
+            }
+            if args.format.is_json() {
+                write_json_stdout(&report)?;
+            } else {
+                write_stdout(&render_human_ping_report(&report))?;
             }
         }
         Command::Trace(args) => {
             let config = TraceConfig::from_trace_args(&args);
             let report = run_trace(&args.target, &config).await?;
-            if args.format.is_json() {
-                write_stdout(&serde_json::to_string_pretty(&report)?)?;
-            } else {
-                write_stdout(&render_human_trace_report(&report))?;
-            }
             if let Some(path) = &args.output {
                 write_json_trace_report(&report, path)?;
+            }
+            if args.format.is_json() {
+                write_json_stdout(&report)?;
+            } else {
+                write_stdout(&render_human_trace_report(&report))?;
             }
         }
         Command::Nei(args) => {
             let config = NeighborConfig::from_neighbor_args(&args);
             let report = resolve_neighbor(&args.target, &config).await?;
-            if args.format.is_json() {
-                write_stdout(&serde_json::to_string_pretty(&report)?)?;
-            } else {
-                write_stdout(&render_human_neighbor_report(&report))?;
-            }
             if let Some(path) = &args.output {
                 write_json_neighbor_report(&report, path)?;
+            }
+            if args.format.is_json() {
+                write_json_stdout(&report)?;
+            } else {
+                write_stdout(&render_human_neighbor_report(&report))?;
             }
         }
         Command::Probe(args) => {
@@ -273,7 +305,9 @@ fn command_logging_mode(
         Command::Host(args) => (args.progress, args.quiet),
         Command::Ping(args) => (args.progress, args.quiet),
         Command::Trace(args) => (args.progress, args.quiet),
-        Command::Nei(_) | Command::Probe(_) | Command::Recipe(_) => (ProgressMode::Quiet, true),
+        Command::Inventory { .. } | Command::Nei(_) | Command::Probe(_) | Command::Recipe(_) => {
+            (ProgressMode::Quiet, true)
+        }
     }
 }
 
@@ -460,21 +494,49 @@ async fn run_port_scan(
         total: started.elapsed(),
     });
 
+    let show_inventory = args.inventory || args.native_os || args.bundled_advisories;
+    let filtered = if config.show_all_states {
+        std::borrow::Cow::Borrowed(&execution.report)
+    } else {
+        std::borrow::Cow::Owned(filtered_scan_report(&execution.report, false))
+    };
     if let Some(path) = &args.output {
-        let json_report = filtered_scan_report(&execution.report, config.show_all_states);
-        write_json_report(&json_report, path)?;
+        write_json_report(&filtered, path)?;
     }
 
     log_open_port_summary(config.quiet, &execution.report);
-
-    if args.format.is_json() {
-        let json_report = filtered_scan_report(&execution.report, config.show_all_states);
-        write_stdout(&serde_json::to_string_pretty(&json_report)?)?;
+    if args.format.is_json() && !show_inventory {
+        write_json_stdout(filtered.as_ref())?;
     } else {
-        write_stdout(&render_human_scan_report(
-            &execution.report,
-            config.show_all_states,
-        ))?;
+        let inventory = nrev::technology::KnowledgeBase::builtin().and_then(|db| {
+            let advisories = args
+                .bundled_advisories
+                .then(|| nrev::technology::Advisories::bundled(&db))
+                .transpose()?;
+            db.inventory(&filtered, advisories.as_ref())
+        });
+        let inventory = match inventory {
+            Ok(inventory) => inventory,
+            Err(error) => {
+                if !args.format.is_json() {
+                    write_stdout(&nrev::output::render_human_scan_report(
+                        &execution.report,
+                        config.show_all_states,
+                    ))?;
+                }
+                return Err(error.context("could not derive the technology inventory"));
+            }
+        };
+        if args.format.is_json() {
+            write_json_stdout(&inventory)?;
+        } else {
+            write_stdout(&render_port_report(
+                &execution.report,
+                config.show_all_states,
+                Some(&inventory),
+                show_inventory,
+            ))?;
+        }
     }
 
     progress(
@@ -504,7 +566,7 @@ async fn run_port_scan(
         .count();
     anyhow::ensure!(
         failed_endpoints == 0,
-        "transport failed for {failed_endpoints} endpoint(s); use --all-states to inspect errors"
+        "transport failed for {failed_endpoints} endpoint(s); --all-states includes failed endpoints in JSON reports"
     );
 
     if let Some(details) = &execution.report.identification {
@@ -515,6 +577,28 @@ async fn run_port_scan(
         );
     }
     Ok(())
+}
+
+fn write_json_stdout(value: &impl serde::Serialize) -> anyhow::Result<()> {
+    let mut stdout = io::BufWriter::new(io::stdout().lock());
+    serde_json::to_writer_pretty(&mut stdout, value).map_err(io::Error::from)?;
+    writeln!(stdout)?;
+    stdout.flush()?;
+    Ok(())
+}
+
+fn read_inventory_input(path: &std::path::Path, limit: u64) -> anyhow::Result<Vec<u8>> {
+    use anyhow::Context;
+    use std::io::Read;
+    let file =
+        std::fs::File::open(path).with_context(|| format!("cannot open {}", path.display()))?;
+    let mut bytes = Vec::new();
+    file.take(limit + 1).read_to_end(&mut bytes)?;
+    anyhow::ensure!(
+        bytes.len() as u64 <= limit,
+        "inventory input exceeds {limit} bytes"
+    );
+    Ok(bytes)
 }
 
 fn write_stdout(output: &str) -> io::Result<()> {
