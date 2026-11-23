@@ -1,0 +1,870 @@
+[
+  {
+    "field": "server",
+    "value": "nginx/1.27.3",
+    "product": "nginx:nginx",
+    "version": "1.27.3"
+  },
+  {
+    "field": "server",
+    "value": "Apache/2.4.62",
+    "product": "apache:http_server",
+    "version": "2.4.62"
+  },
+  {
+    "field": "server",
+    "value": "Microsoft-IIS/10.0",
+    "product": "microsoft:iis",
+    "version": "10.0"
+  },
+  {
+    "field": "server",
+    "value": "Caddy/2.8.4",
+    "product": "caddyserver:caddy",
+    "version": "2.8.4"
+  },
+  {
+    "field": "server",
+    "value": "lighttpd/1.4.76",
+    "product": "lighttpd:lighttpd",
+    "version": "1.4.76"
+  },
+  {
+    "field": "server",
+    "value": "openresty/1.27.1.1",
+    "product": "openresty:openresty",
+    "version": "1.27.1.1"
+  },
+  {
+    "field": "server_component",
+    "value": "Python/3.13.1",
+    "product": "python:python",
+    "version": "3.13.1"
+  },
+  {
+    "field": "powered_by",
+    "value": "PHP/8.3.11",
+    "product": "php:php",
+    "version": "8.3.11"
+  },
+  {
+    "field": "generator",
+    "value": "WordPress 6.2.0",
+    "product": "wordpress:wordpress",
+    "version": "6.2.0"
+  },
+  {
+    "field": "generator",
+    "value": "GitLab 6.2.0",
+    "product": "gitlab:gitlab",
+    "version": "6.2.0"
+  },
+  {
+    "field": "generator",
+    "value": "Grafana 6.2.0",
+    "product": "grafana:grafana",
+    "version": "6.2.0"
+  },
+  {
+    "field": "generator",
+    "value": "Gitea 6.2.0",
+    "product": "gitea:gitea",
+    "version": "6.2.0"
+  },
+  {
+    "field": "generator",
+    "value": "Nextcloud 6.2.0",
+    "product": "nextcloud:nextcloud",
+    "version": "6.2.0"
+  },
+  {
+    "field": "generator",
+    "value": "phpMyAdmin 6.2.0",
+    "product": "phpmyadmin:phpmyadmin",
+    "version": "6.2.0"
+  },
+  {
+    "field": "ssh_ident",
+    "value": "SSH-2.0-OpenSSH_9.7p1 Debian-5",
+    "product": "openbsd:openssh",
+    "version": "9.7p1"
+  },
+  {
+    "field": "ssh_ident",
+    "value": "SSH-2.0-dropbear_2024.86",
+    "product": "dropbear:dropbear",
+    "version": "2024.86"
+  },
+  {
+    "field": "smtp_greeting",
+    "value": "220 mail.example.test ESMTP Postfix",
+    "product": "postfix:postfix",
+    "version": null
+  },
+  {
+    "field": "ftp_greeting",
+    "value": "220 (vsFTPd 3.0.5)",
+    "product": "vsftpd:vsftpd",
+    "version": "3.0.5"
+  },
+  {
+    "field": "mysql_version",
+    "value": "5.5.5-10.11.6-MariaDB-1:10.11.6+maria",
+    "product": "mariadb:mariadb",
+    "version": "10.11.6"
+  },
+  {
+    "field": "server",
+    "value": "not-nginx/1.1.1",
+    "product": null
+  },
+  {
+    "field": "server",
+    "value": "nginx/",
+    "product": null
+  },
+  {
+    "field": "server",
+    "value": "Apache/2.4.62; nginx/1.2.3",
+    "product": null
+  },
+  {
+    "field": "powered_by",
+    "value": "PHP-FPM compatible",
+    "product": null
+  },
+  {
+    "field": "generator",
+    "value": "Moved from WordPress 6.0",
+    "product": null
+  },
+  {
+    "field": "ssh_ident",
+    "value": "SSH-2.0-Acme OpenSSH_9.7p1",
+    "product": null
+  },
+  {
+    "field": "ssh_ident",
+    "value": "SSH-2.0-OpenSSH_",
+    "product": null
+  },
+  {
+    "field": "ftp_greeting",
+    "value": "220 Not vsFTPd 3.0.5",
+    "product": null
+  },
+  {
+    "field": "smtp_greeting",
+    "value": "500 ESMTP Postfix",
+    "product": null
+  },
+  {
+    "field": "mysql_version",
+    "value": "8.4.0",
+    "product": null
+  },
+  {
+    "field": "server_component",
+    "value": "PHP/8.1.7",
+    "product": "php:php",
+    "version": "8.1.7"
+  },
+  {
+    "field": "server_component",
+    "value": "Pythonista/1.0",
+    "product": null
+  },
+  {
+    "field": "smtp_greeting",
+    "value": "220 mail.example.test ESMTP Postfix 3.2.2 (distribution)",
+    "product": "postfix:postfix",
+    "version": "3.2.2"
+  },
+  {
+    "field": "smtp_greeting",
+    "value": "220 mail.example.test ESMTP Postfix compatible 3.2.2",
+    "product": null
+  },
+  {
+    "field": "ssh_ident",
+    "value": "SSH-2.0-OpenSSH_for_Windows_9.5p1",
+    "product": "openbsd:openssh",
+    "version": "9.5p1"
+  },
+  {
+    "field": "imap_greeting",
+    "value": "* OK [CAPABILITY IMAP4rev1 STARTTLS] Dovecot ready.",
+    "product": "dovecot:dovecot",
+    "version": null
+  },
+  {
+    "field": "pop3_greeting",
+    "value": "+OK Dovecot v2.4.0 ready.",
+    "product": "dovecot:dovecot",
+    "version": "2.4.0"
+  },
+  {
+    "field": "imap_greeting",
+    "value": "* OK welcome from a Dovecot proxy",
+    "product": null,
+    "version": null
+  },
+  {
+    "field": "pop3_greeting",
+    "value": "+OK Compatible with Dovecot ready.",
+    "product": null,
+    "version": null
+  },
+  {
+    "field": "server",
+    "value": "envoy",
+    "product": "envoyproxy:envoy",
+    "version": null
+  },
+  {
+    "field": "server",
+    "value": "envoy compatible",
+    "product": null
+  },
+  {
+    "field": "server",
+    "value": "kong/3.8.0",
+    "product": "kong:kong",
+    "version": "3.8.0"
+  },
+  {
+    "field": "server",
+    "value": "kong/3.8.0 compatible",
+    "product": null
+  },
+  {
+    "field": "server",
+    "value": "ATS/10.0.3",
+    "product": "apache:traffic_server",
+    "version": "10.0.3"
+  },
+  {
+    "field": "server",
+    "value": "ATS/10.0.3 compatible",
+    "product": null
+  },
+  {
+    "field": "server",
+    "value": "cloudflare",
+    "product": "cloudflare:edge",
+    "version": null
+  },
+  {
+    "field": "server",
+    "value": "cloudflare compatible",
+    "product": null
+  },
+  {
+    "field": "server",
+    "value": "AmazonS3",
+    "product": "amazon:s3",
+    "version": null
+  },
+  {
+    "field": "server",
+    "value": "AmazonS3 compatible",
+    "product": null
+  },
+  {
+    "field": "server",
+    "value": "awselb/2.0",
+    "product": "amazon:application_load_balancer",
+    "version": null
+  },
+  {
+    "field": "server",
+    "value": "awselb/2.0 compatible",
+    "product": null
+  },
+  {
+    "field": "server",
+    "value": "MinIO",
+    "product": "minio:minio",
+    "version": null
+  },
+  {
+    "field": "server",
+    "value": "MinIO compatible",
+    "product": null
+  },
+  {
+    "field": "server",
+    "value": "Kestrel",
+    "product": "microsoft:kestrel",
+    "version": null
+  },
+  {
+    "field": "server",
+    "value": "Kestrel compatible",
+    "product": null
+  },
+  {
+    "field": "powered_by",
+    "value": "ASP.NET",
+    "product": "microsoft:asp_net",
+    "version": null
+  },
+  {
+    "field": "powered_by",
+    "value": "ASP.NET compatible",
+    "product": null
+  },
+  {
+    "field": "server",
+    "value": "uvicorn",
+    "product": "encode:uvicorn",
+    "version": null
+  },
+  {
+    "field": "server",
+    "value": "uvicorn compatible",
+    "product": null
+  },
+  {
+    "field": "server",
+    "value": "gunicorn/23.0.0",
+    "product": "gunicorn:gunicorn",
+    "version": "23.0.0"
+  },
+  {
+    "field": "server",
+    "value": "gunicorn/23.0.0 compatible",
+    "product": null
+  },
+  {
+    "field": "server",
+    "value": "Werkzeug/3.1.3",
+    "product": "pallets:werkzeug",
+    "version": "3.1.3"
+  },
+  {
+    "field": "server",
+    "value": "Werkzeug/3.1.3 compatible",
+    "product": null
+  },
+  {
+    "field": "server",
+    "value": "TornadoServer/6.4.1",
+    "product": "tornadoweb:tornado",
+    "version": "6.4.1"
+  },
+  {
+    "field": "server",
+    "value": "TornadoServer/6.4.1 compatible",
+    "product": null
+  },
+  {
+    "field": "server",
+    "value": "TwistedWeb/24.7.0",
+    "product": "twisted:twisted_web",
+    "version": "24.7.0"
+  },
+  {
+    "field": "server",
+    "value": "TwistedWeb/24.7.0 compatible",
+    "product": null
+  },
+  {
+    "field": "server",
+    "value": "waitress",
+    "product": "pylons:waitress",
+    "version": null
+  },
+  {
+    "field": "server",
+    "value": "waitress compatible",
+    "product": null
+  },
+  {
+    "field": "server",
+    "value": "hypercorn-h11",
+    "product": "pgjones:hypercorn",
+    "version": null
+  },
+  {
+    "field": "server",
+    "value": "hypercorn-h11 compatible",
+    "product": null
+  },
+  {
+    "field": "server",
+    "value": "granian",
+    "product": "emmett:granian",
+    "version": null
+  },
+  {
+    "field": "server",
+    "value": "granian compatible",
+    "product": null
+  },
+  {
+    "field": "server",
+    "value": "Cheroot/10.0.1",
+    "product": "cherrypy:cheroot",
+    "version": "10.0.1"
+  },
+  {
+    "field": "server",
+    "value": "Cheroot/10.0.1 compatible",
+    "product": null
+  },
+  {
+    "field": "server",
+    "value": "Cowboy",
+    "product": "ninenines:cowboy",
+    "version": null
+  },
+  {
+    "field": "server",
+    "value": "Cowboy compatible",
+    "product": null
+  },
+  {
+    "field": "server",
+    "value": "WEBrick/1.9.1",
+    "product": "ruby:webrick",
+    "version": "1.9.1"
+  },
+  {
+    "field": "server",
+    "value": "WEBrick/1.9.1 compatible",
+    "product": null
+  },
+  {
+    "field": "server",
+    "value": "CouchDB/3.4.2",
+    "product": "apache:couchdb",
+    "version": "3.4.2"
+  },
+  {
+    "field": "server",
+    "value": "CouchDB/3.4.2 compatible",
+    "product": null
+  },
+  {
+    "field": "server_component",
+    "value": "aiohttp/3.12.2",
+    "product": "aio_libraries:aiohttp",
+    "version": "3.12.2"
+  },
+  {
+    "field": "server_component",
+    "value": "aiohttp/3.12.2 compatible",
+    "product": null
+  },
+  {
+    "field": "powered_by",
+    "value": "Express",
+    "product": "expressjs:express",
+    "version": null
+  },
+  {
+    "field": "powered_by",
+    "value": "Express compatible",
+    "product": null
+  },
+  {
+    "field": "powered_by",
+    "value": "Next.js",
+    "product": "vercel:nextjs",
+    "version": null
+  },
+  {
+    "field": "powered_by",
+    "value": "Next.js compatible",
+    "product": null
+  },
+  {
+    "field": "generator",
+    "value": "Jekyll v4.3.4",
+    "product": "jekyll:jekyll",
+    "version": "4.3.4"
+  },
+  {
+    "field": "generator",
+    "value": "Jekyll v4.3.4 compatible",
+    "product": null
+  },
+  {
+    "field": "generator",
+    "value": "Hugo 0.139.0",
+    "product": "gohugo:hugo",
+    "version": "0.139.0"
+  },
+  {
+    "field": "generator",
+    "value": "Hugo 0.139.0 compatible",
+    "product": null
+  },
+  {
+    "field": "generator",
+    "value": "MediaWiki 1.43.0",
+    "product": "wikimedia:mediawiki",
+    "version": "1.43.0"
+  },
+  {
+    "field": "generator",
+    "value": "MediaWiki 1.43.0 compatible",
+    "product": null
+  },
+  {
+    "field": "generator_header",
+    "value": "Drupal 10 (https://www.drupal.org)",
+    "product": "drupal:drupal",
+    "version": "10"
+  },
+  {
+    "field": "generator_header",
+    "value": "Drupal 10 (https://www.drupal.org) compatible",
+    "product": null
+  },
+  {
+    "field": "generator",
+    "value": "Drupal 10 (https://www.drupal.org)",
+    "product": "drupal:drupal",
+    "version": "10"
+  },
+  {
+    "field": "generator",
+    "value": "Drupal 10 (https://www.drupal.org) compatible",
+    "product": null
+  },
+  {
+    "field": "jenkins_version",
+    "value": "2.479.3",
+    "product": "jenkins:jenkins",
+    "version": "2.479.3"
+  },
+  {
+    "field": "jenkins_version",
+    "value": "2.479.3 compatible",
+    "product": null
+  },
+  {
+    "field": "influxdb_version",
+    "value": "1.8.10",
+    "product": "influxdata:influxdb",
+    "version": "1.8.10"
+  },
+  {
+    "field": "influxdb_version",
+    "value": "1.8.10 compatible",
+    "product": null
+  },
+  {
+    "field": "elastic_product",
+    "value": "Elasticsearch",
+    "product": "elastic:elasticsearch",
+    "version": null
+  },
+  {
+    "field": "elastic_product",
+    "value": "Elasticsearch compatible",
+    "product": null
+  },
+  {
+    "field": "github_enterprise_version",
+    "value": "enterprise-server@3.16.1",
+    "product": "github:enterprise_server",
+    "version": "3.16.1"
+  },
+  {
+    "field": "github_enterprise_version",
+    "value": "enterprise-server@3.16.1 compatible",
+    "product": null
+  },
+  {
+    "field": "consul_leader",
+    "value": "true",
+    "product": "hashicorp:consul",
+    "version": null
+  },
+  {
+    "field": "consul_leader",
+    "value": "true compatible",
+    "product": null
+  },
+  {
+    "field": "nomad_leader",
+    "value": "false",
+    "product": "hashicorp:nomad",
+    "version": null
+  },
+  {
+    "field": "nomad_leader",
+    "value": "false compatible",
+    "product": null
+  },
+  {
+    "field": "ssh_ident",
+    "value": "SSH-2.0-paramiko_3.5.0",
+    "product": "paramiko:paramiko",
+    "version": "3.5.0"
+  },
+  {
+    "field": "ssh_ident",
+    "value": "SSH-2.0-paramiko_3.5.0 compatible",
+    "product": null
+  },
+  {
+    "field": "ssh_ident",
+    "value": "SSH-2.0-AsyncSSH_2.19.0",
+    "product": "asyncssh:asyncssh",
+    "version": "2.19.0"
+  },
+  {
+    "field": "ssh_ident",
+    "value": "SSH-2.0-AsyncSSH_2.19.0 compatible",
+    "product": null
+  },
+  {
+    "field": "ftp_greeting",
+    "value": "220 pyftpdlib 2.0.1 ready.",
+    "product": "pyftpdlib:pyftpdlib",
+    "version": "2.0.1"
+  },
+  {
+    "field": "ftp_greeting",
+    "value": "220 pyftpdlib 2.0.1 ready. compatible",
+    "product": null
+  },
+  {
+    "field": "smtp_greeting",
+    "value": "220 mx.example ESMTP Exim 4.98 Mon, 01 Jun 2026 12:30:00 +0000",
+    "product": "exim:exim",
+    "version": "4.98"
+  },
+  {
+    "field": "smtp_greeting",
+    "value": "220 mx.example ESMTP Exim 4.98 Mon, 01 Jun 2026 12:30:00 +0000 compatible",
+    "product": null
+  },
+  {
+    "field": "imap_greeting",
+    "value": "* OK [CAPABILITY IMAP4rev1 STARTTLS] mx.example Cyrus IMAP 3.8.4 server ready",
+    "product": "cyrusimap:cyrus_imap",
+    "version": "3.8.4"
+  },
+  {
+    "field": "imap_greeting",
+    "value": "* OK [CAPABILITY IMAP4rev1 STARTTLS] mx.example Cyrus IMAP 3.8.4 server ready compatible",
+    "product": null
+  },
+  {
+    "field": "mysql_version",
+    "value": "8.0.11-TiDB-v8.4.0",
+    "product": "pingcap:tidb",
+    "version": "8.4.0"
+  },
+  {
+    "field": "mysql_version",
+    "value": "8.0.11-TiDB-v8.4.0 compatible",
+    "product": null
+  },
+  {
+    "field": "server_header",
+    "value": "Jetty(12.0.18)",
+    "product": "eclipse:jetty",
+    "version": "12.0.18"
+  },
+  {
+    "field": "server_header",
+    "value": "Jetty(12.0.18) compatible",
+    "product": null
+  },
+  {
+    "field": "server",
+    "value": "Jetty",
+    "product": "eclipse:jetty",
+    "version": null
+  },
+  {
+    "field": "server",
+    "value": "Jetty compatible",
+    "product": null
+  },
+  {
+    "field": "kubernetes_flow_control",
+    "value": "paired_uids",
+    "product": "kubernetes:kubernetes",
+    "version": null
+  },
+  {
+    "field": "kubernetes_flow_control",
+    "value": "paired_uids compatible",
+    "product": null
+  },
+  {
+    "field": "generator",
+    "value": "Ghost 6.79",
+    "product": "ghost:ghost",
+    "version": "6.79"
+  },
+  {
+    "field": "generator",
+    "value": "Ghost 6.79 compatible",
+    "product": null
+  },
+  {
+    "field": "server_component",
+    "value": "OpenSSL/3.0.15",
+    "product": "openssl:openssl",
+    "version": "3.0.15"
+  },
+  {
+    "field": "server_component",
+    "value": "OpenSSL/3.0.15 compatible",
+    "product": null
+  },
+  {
+    "field": "server",
+    "value": "CloudFront",
+    "product": "amazon:cloudfront",
+    "version": null
+  },
+  {
+    "field": "server",
+    "value": "CloudFront compatible",
+    "product": null
+  },
+  {
+    "field": "server",
+    "value": "Python/3.13",
+    "product": "python:python",
+    "version": "3.13"
+  },
+  {
+    "field": "server",
+    "value": "Python-compatible/3.13",
+    "product": null
+  },
+  {
+    "field": "mysql_version",
+    "value": "8.0.11-TiDB-CLOUD.202601.1",
+    "product": null
+  },
+  {
+    "field": "server",
+    "value": "awselb/3.0",
+    "product": null
+  },
+  {
+    "field": "github_enterprise_version",
+    "value": "enterprise-cloud",
+    "product": null
+  },
+  {
+    "field": "jenkins_version",
+    "value": "2; 3",
+    "product": null
+  },
+  {
+    "field": "dns_version",
+    "value": "dnsmasq-2.90",
+    "product": "dnsmasq:dnsmasq",
+    "version": "2.90"
+  },
+  {
+    "field": "dns_version",
+    "value": "dnsmasq-2.90 compatible",
+    "product": null
+  },
+  {
+    "field": "dns_version",
+    "value": "unbound 1.22.0",
+    "product": "nlnetlabs:unbound",
+    "version": "1.22.0"
+  },
+  {
+    "field": "dns_version",
+    "value": "unbound 1.22.0 compatible",
+    "product": null
+  },
+  {
+    "field": "dns_version",
+    "value": "CoreDNS-1.12.0",
+    "product": "coredns:coredns",
+    "version": "1.12.0"
+  },
+  {
+    "field": "dns_version",
+    "value": "CoreDNS-1.12.0 compatible",
+    "product": null
+  },
+  {
+    "field": "dns_version",
+    "value": "PowerDNS Authoritative Server 4.9.3",
+    "product": "powerdns:authoritative_server",
+    "version": "4.9.3"
+  },
+  {
+    "field": "dns_version",
+    "value": "PowerDNS Authoritative Server 4.9.3 compatible",
+    "product": null
+  },
+  {
+    "field": "dns_version",
+    "value": "PowerDNS Recursor 5.1.2",
+    "product": "powerdns:recursor",
+    "version": "5.1.2"
+  },
+  {
+    "field": "dns_version",
+    "value": "PowerDNS Recursor 5.1.2 compatible",
+    "product": null
+  },
+  {
+    "field": "dns_version",
+    "value": "9.18.34",
+    "product": null
+  },
+  {
+    "field": "server",
+    "value": "Varnish",
+    "product": "varnish:varnish_cache",
+    "version": null
+  },
+  {
+    "field": "server",
+    "value": "not-Varnish",
+    "product": null
+  },
+  {
+    "field": "server",
+    "value": "squid/6.12",
+    "product": "squid:squid",
+    "version": "6.12"
+  },
+  {
+    "field": "server",
+    "value": "not-squid/6.12",
+    "product": null
+  },
+  {
+    "field": "server",
+    "value": "GoAhead-http",
+    "product": "embedthis:goahead",
+    "version": null
+  },
+  {
+    "field": "server",
+    "value": "not-GoAhead-http",
+    "product": null
+  },
+  {
+    "field": "server_component",
+    "value": "MiniUPnPd/2.3.8",
+    "product": "miniupnp:miniupnpd",
+    "version": "2.3.8"
+  },
+  {
+    "field": "server_component",
+    "value": "not-MiniUPnPd/2.3.8",
+    "product": null
+  }
+]

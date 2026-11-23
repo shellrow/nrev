@@ -1,0 +1,1287 @@
+{
+  "schema": 1,
+  "revision": "2026.11.23.3",
+  "products": [
+    {
+      "id": "nginx:nginx",
+      "role": "http_server",
+      "source": "nrev_header_review",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "server",
+          "pattern": "(?i:nginx)(?:/(?P<version>[0-9][0-9A-Za-z.+_~-]{0,47}))?"
+        }
+      ],
+      "cpe_names": [
+        "cpe:2.3:a:f5:nginx:*:*:*:*:*:*:*:*",
+        "cpe:2.3:a:f5:nginx_open_source:*:*:*:*:*:*:*:*",
+        "cpe:2.3:a:nginx:nginx:*:*:*:*:*:*:*:*"
+      ]
+    },
+    {
+      "id": "apache:http_server",
+      "role": "http_server",
+      "source": "nrev_header_review",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "server",
+          "pattern": "(?i:Apache)(?:/(?P<version>[0-9][0-9A-Za-z.+_~-]{0,47}))?"
+        }
+      ],
+      "cpe_names": [
+        "cpe:2.3:a:apache:http_server:*:*:*:*:*:*:*:*"
+      ]
+    },
+    {
+      "id": "microsoft:iis",
+      "role": "http_server",
+      "source": "nrev_header_review",
+      "version_scheme": "numeric",
+      "components": 2,
+      "signatures": [
+        {
+          "field": "server",
+          "pattern": "(?i:Microsoft-IIS)(?:/(?P<version>[0-9][0-9A-Za-z.+_~-]{0,47}))?"
+        }
+      ],
+      "cpe_names": [
+        "cpe:2.3:a:microsoft:internet_information_services:*:*:*:*:*:*:*:*"
+      ]
+    },
+    {
+      "id": "caddyserver:caddy",
+      "role": "http_server",
+      "source": "nrev_header_review",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "server",
+          "pattern": "(?i:Caddy)(?:/(?P<version>[0-9][0-9A-Za-z.+_~-]{0,47}))?"
+        }
+      ],
+      "cpe_names": [
+        "cpe:2.3:a:caddyserver:caddy:*:*:*:*:*:*:*:*"
+      ]
+    },
+    {
+      "id": "lighttpd:lighttpd",
+      "role": "http_server",
+      "source": "nrev_header_review",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "server",
+          "pattern": "(?i:lighttpd)(?:/(?P<version>[0-9][0-9A-Za-z.+_~-]{0,47}))?"
+        }
+      ],
+      "cpe_names": [
+        "cpe:2.3:a:lighttpd:lighttpd:*:*:*:*:*:*:*:*"
+      ]
+    },
+    {
+      "id": "openresty:openresty",
+      "role": "http_server",
+      "source": "nrev_header_review",
+      "version_scheme": "numeric",
+      "components": 4,
+      "signatures": [
+        {
+          "field": "server",
+          "pattern": "(?i:openresty)(?:/(?P<version>[0-9][0-9A-Za-z.+_~-]{0,47}))?"
+        }
+      ],
+      "cpe_names": [
+        "cpe:2.3:a:openresty:openresty:*:*:*:*:*:*:*:*"
+      ]
+    },
+    {
+      "id": "python:python",
+      "role": "runtime",
+      "source": "python_http_server",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "server_component",
+          "pattern": "Python/(?P<version>[0-9][0-9A-Za-z.+_~-]{0,47})"
+        },
+        {
+          "field": "server",
+          "pattern": "Python/(?P<version>[0-9][0-9A-Za-z.+_~-]{0,47})"
+        }
+      ],
+      "cpe_names": []
+    },
+    {
+      "id": "php:php",
+      "role": "runtime",
+      "source": "nrev_header_review",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "powered_by",
+          "pattern": "(?i:PHP)(?:/(?P<version>[0-9][0-9A-Za-z.+_~-]{0,47}))?"
+        },
+        {
+          "field": "server_component",
+          "pattern": "(?i:PHP)(?:/(?P<version>[0-9][0-9A-Za-z.+_~-]{0,47}))?"
+        }
+      ],
+      "cpe_names": [
+        "cpe:2.3:a:php:php:*:*:*:*:*:*:*:*"
+      ]
+    },
+    {
+      "id": "wordpress:wordpress",
+      "role": "generator",
+      "source": "nrev_header_review",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "generator",
+          "pattern": "(?i:WordPress)(?:[ /](?P<version>[0-9][0-9A-Za-z.+_~-]{0,47}))?"
+        }
+      ],
+      "cpe_names": [
+        "cpe:2.3:a:wordpress:wordpress:*:*:*:*:*:*:*:*"
+      ]
+    },
+    {
+      "id": "gitlab:gitlab",
+      "role": "generator",
+      "source": "nrev_header_review",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "generator",
+          "pattern": "(?i:GitLab)(?:[ /](?P<version>[0-9][0-9A-Za-z.+_~-]{0,47}))?"
+        }
+      ],
+      "cpe_names": [
+        "cpe:2.3:a:gitlab:gitlab:*:*:*:*:*:*:*:*"
+      ]
+    },
+    {
+      "id": "grafana:grafana",
+      "role": "generator",
+      "source": "nrev_header_review",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "generator",
+          "pattern": "(?i:Grafana)(?:[ /](?P<version>[0-9][0-9A-Za-z.+_~-]{0,47}))?"
+        }
+      ],
+      "cpe_names": [
+        "cpe:2.3:a:grafana:grafana:*:*:*:*:*:*:*:*"
+      ]
+    },
+    {
+      "id": "gitea:gitea",
+      "role": "generator",
+      "source": "nrev_header_review",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "generator",
+          "pattern": "(?i:Gitea)(?:[ /](?P<version>[0-9][0-9A-Za-z.+_~-]{0,47}))?"
+        }
+      ],
+      "cpe_names": [
+        "cpe:2.3:a:gitea:gitea:*:*:*:*:*:*:*:*"
+      ]
+    },
+    {
+      "id": "nextcloud:nextcloud",
+      "role": "generator",
+      "source": "nrev_header_review",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "generator",
+          "pattern": "(?i:Nextcloud)(?:[ /](?P<version>[0-9][0-9A-Za-z.+_~-]{0,47}))?"
+        }
+      ],
+      "cpe_names": [
+        "cpe:2.3:a:nextcloud:nextcloud:*:*:*:*:*:*:*:*"
+      ]
+    },
+    {
+      "id": "phpmyadmin:phpmyadmin",
+      "role": "generator",
+      "source": "nrev_header_review",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "generator",
+          "pattern": "(?i:phpMyAdmin)(?:[ /](?P<version>[0-9][0-9A-Za-z.+_~-]{0,47}))?"
+        }
+      ],
+      "cpe_names": [
+        "cpe:2.3:a:phpmyadmin:phpmyadmin:*:*:*:*:*:*:*:*"
+      ]
+    },
+    {
+      "id": "openbsd:openssh",
+      "role": "ssh_server",
+      "source": "nrev_ssh_review",
+      "version_scheme": "portable_ssh",
+      "components": 2,
+      "signatures": [
+        {
+          "field": "ssh_ident",
+          "pattern": "SSH-(?:2\\.0|1\\.99)-OpenSSH_(?P<version>[0-9][0-9A-Za-z.+_~-]{0,47})(?: (?P<distribution>[ -~]{1,160}))?"
+        },
+        {
+          "field": "ssh_ident",
+          "pattern": "SSH-(?:2\\.0|1\\.99)-OpenSSH(?P<distribution>_for_Windows)_(?P<version>[0-9][0-9A-Za-z.+_~-]{0,47})(?: [ -~]{1,160})?"
+        }
+      ],
+      "cpe_names": [
+        "cpe:2.3:a:openbsd:openssh:*:*:*:*:*:*:*:*"
+      ]
+    },
+    {
+      "id": "dropbear:dropbear",
+      "role": "ssh_server",
+      "source": "nrev_ssh_review",
+      "version_scheme": "numeric",
+      "components": 2,
+      "signatures": [
+        {
+          "field": "ssh_ident",
+          "pattern": "SSH-2\\.0-dropbear_(?P<version>[0-9][0-9A-Za-z.+_~-]{0,47})"
+        }
+      ],
+      "cpe_names": [
+        "cpe:2.3:a:dropbear_ssh_project:dropbear_ssh:*:*:*:*:*:*:*:*"
+      ]
+    },
+    {
+      "id": "postfix:postfix",
+      "role": "smtp_server",
+      "source": "nrev_greeting_review",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "smtp_greeting",
+          "pattern": "220 [A-Za-z0-9._-]+ ESMTP Postfix(?: (?P<version>[0-9][0-9A-Za-z.+_~-]{0,47}))?(?: \\((?P<distribution>[A-Za-z0-9 ._-]{1,64})\\))?"
+        }
+      ],
+      "cpe_names": [
+        "cpe:2.3:a:postfix:postfix:*:*:*:*:*:*:*:*"
+      ]
+    },
+    {
+      "id": "vsftpd:vsftpd",
+      "role": "ftp_server",
+      "source": "nrev_greeting_review",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "ftp_greeting",
+          "pattern": "220 \\(vsFTPd (?P<version>[0-9][0-9A-Za-z.+_~-]{0,47})\\)"
+        }
+      ],
+      "cpe_names": [
+        "cpe:2.3:a:vsftpd_project:vsftpd:*:*:*:*:*:*:*:*"
+      ]
+    },
+    {
+      "id": "mariadb:mariadb",
+      "role": "database",
+      "source": "nrev_handshake_review",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "mysql_version",
+          "pattern": "(?:5\\.5\\.5-)?(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)-MariaDB(?:[-+](?P<distribution>[0-9a-zA-Z.+:~_-]{1,80}))?"
+        }
+      ],
+      "cpe_names": [
+        "cpe:2.3:a:mariadb:mariadb:*:*:*:*:*:*:*:*"
+      ]
+    },
+    {
+      "id": "dovecot:dovecot",
+      "role": "mail_server",
+      "source": "dovecot_greeting",
+      "version_scheme": "numeric",
+      "components": 3,
+      "cpe_names": [
+        "cpe:2.3:a:dovecot:dovecot:*:*:*:*:*:*:*:*"
+      ],
+      "signatures": [
+        {
+          "field": "imap_greeting",
+          "pattern": "\\* OK (?:\\[CAPABILITY [A-Za-z0-9=.+_ -]{1,400}\\] )?Dovecot(?: v?(?P<version>[0-9][0-9A-Za-z.+_~-]{0,47}))? ready\\."
+        },
+        {
+          "field": "pop3_greeting",
+          "pattern": "\\+OK Dovecot(?: v?(?P<version>[0-9][0-9A-Za-z.+_~-]{0,47}))? ready\\."
+        }
+      ]
+    },
+    {
+      "id": "envoyproxy:envoy",
+      "role": "proxy",
+      "source": "envoyproxy_envoy_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "server",
+          "pattern": "envoy"
+        }
+      ],
+      "cpe_names": []
+    },
+    {
+      "id": "kong:kong",
+      "role": "api_gateway",
+      "source": "kong_kong_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "server",
+          "pattern": "kong(?:/(?P<version>[0-9][0-9A-Za-z.+_~-]{0,47}))?"
+        }
+      ],
+      "cpe_names": []
+    },
+    {
+      "id": "apache:traffic_server",
+      "role": "proxy",
+      "source": "apache_traffic_server_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "server",
+          "pattern": "ATS(?:/(?P<version>[0-9][0-9A-Za-z.+_~-]{0,47}))?"
+        }
+      ],
+      "cpe_names": [
+        "cpe:2.3:a:apache:traffic_server:*:*:*:*:*:*:*:*"
+      ]
+    },
+    {
+      "id": "cloudflare:edge",
+      "role": "cdn",
+      "source": "cloudflare_edge_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "server",
+          "pattern": "cloudflare"
+        }
+      ],
+      "cpe_names": []
+    },
+    {
+      "id": "amazon:s3",
+      "role": "object_storage",
+      "source": "amazon_s3_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "server",
+          "pattern": "AmazonS3"
+        }
+      ],
+      "cpe_names": []
+    },
+    {
+      "id": "amazon:application_load_balancer",
+      "role": "load_balancer",
+      "source": "amazon_application_load_balancer_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "server",
+          "pattern": "awselb/2\\.0"
+        }
+      ],
+      "cpe_names": []
+    },
+    {
+      "id": "minio:minio",
+      "role": "object_storage",
+      "source": "minio_minio_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "server",
+          "pattern": "MinIO"
+        }
+      ],
+      "cpe_names": [
+        "cpe:2.3:a:minio:minio:*:*:*:*:*:*:*:*"
+      ]
+    },
+    {
+      "id": "microsoft:kestrel",
+      "role": "http_server",
+      "source": "microsoft_kestrel_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "server",
+          "pattern": "Kestrel"
+        }
+      ],
+      "cpe_names": []
+    },
+    {
+      "id": "microsoft:asp_net",
+      "role": "framework",
+      "source": "microsoft_asp_net_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "powered_by",
+          "pattern": "ASP\\.NET"
+        }
+      ],
+      "cpe_names": []
+    },
+    {
+      "id": "encode:uvicorn",
+      "role": "http_server",
+      "source": "encode_uvicorn_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "server",
+          "pattern": "uvicorn"
+        }
+      ],
+      "cpe_names": []
+    },
+    {
+      "id": "gunicorn:gunicorn",
+      "role": "http_server",
+      "source": "gunicorn_gunicorn_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "server",
+          "pattern": "gunicorn(?:/(?P<version>[0-9][0-9A-Za-z.+_~-]{0,47}))?"
+        }
+      ],
+      "cpe_names": []
+    },
+    {
+      "id": "pallets:werkzeug",
+      "role": "http_server",
+      "source": "pallets_werkzeug_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "server",
+          "pattern": "Werkzeug(?:/(?P<version>[0-9][0-9A-Za-z.+_~-]{0,47}))?"
+        }
+      ],
+      "cpe_names": [
+        "cpe:2.3:a:palletsprojects:werkzeug:*:*:*:*:*:*:*:*"
+      ]
+    },
+    {
+      "id": "tornadoweb:tornado",
+      "role": "http_server",
+      "source": "tornadoweb_tornado_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "server",
+          "pattern": "TornadoServer(?:/(?P<version>[0-9][0-9A-Za-z.+_~-]{0,47}))?"
+        }
+      ],
+      "cpe_names": []
+    },
+    {
+      "id": "twisted:twisted_web",
+      "role": "http_server",
+      "source": "twisted_twisted_web_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "server",
+          "pattern": "TwistedWeb(?:/(?P<version>[0-9][0-9A-Za-z.+_~-]{0,47}))?"
+        }
+      ],
+      "cpe_names": []
+    },
+    {
+      "id": "pylons:waitress",
+      "role": "http_server",
+      "source": "pylons_waitress_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "server",
+          "pattern": "waitress"
+        }
+      ],
+      "cpe_names": []
+    },
+    {
+      "id": "pgjones:hypercorn",
+      "role": "http_server",
+      "source": "pgjones_hypercorn_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "server",
+          "pattern": "hypercorn-(?:h11|h2|h3)"
+        }
+      ],
+      "cpe_names": []
+    },
+    {
+      "id": "emmett:granian",
+      "role": "http_server",
+      "source": "emmett_granian_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "server",
+          "pattern": "granian"
+        }
+      ],
+      "cpe_names": []
+    },
+    {
+      "id": "cherrypy:cheroot",
+      "role": "http_server",
+      "source": "cherrypy_cheroot_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "server",
+          "pattern": "Cheroot(?:/(?P<version>[0-9][0-9A-Za-z.+_~-]{0,47}))?"
+        }
+      ],
+      "cpe_names": []
+    },
+    {
+      "id": "ninenines:cowboy",
+      "role": "http_server",
+      "source": "ninenines_cowboy_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "server",
+          "pattern": "Cowboy"
+        }
+      ],
+      "cpe_names": []
+    },
+    {
+      "id": "ruby:webrick",
+      "role": "http_server",
+      "source": "ruby_webrick_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "server",
+          "pattern": "WEBrick(?:/(?P<version>[0-9][0-9A-Za-z.+_~-]{0,47}))?"
+        }
+      ],
+      "cpe_names": []
+    },
+    {
+      "id": "apache:couchdb",
+      "role": "database",
+      "source": "apache_couchdb_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "server",
+          "pattern": "CouchDB(?:/(?P<version>[0-9][0-9A-Za-z.+_~-]{0,47}))?"
+        }
+      ],
+      "cpe_names": [
+        "cpe:2.3:a:apache:couchdb:*:*:*:*:*:*:*:*"
+      ]
+    },
+    {
+      "id": "aio_libraries:aiohttp",
+      "role": "http_server",
+      "source": "aio_libraries_aiohttp_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "server_component",
+          "pattern": "aiohttp/(?P<version>[0-9][0-9A-Za-z.+_~-]{0,47})"
+        }
+      ],
+      "cpe_names": []
+    },
+    {
+      "id": "expressjs:express",
+      "role": "framework",
+      "source": "expressjs_express_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "powered_by",
+          "pattern": "Express"
+        }
+      ],
+      "cpe_names": []
+    },
+    {
+      "id": "vercel:nextjs",
+      "role": "framework",
+      "source": "vercel_nextjs_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "powered_by",
+          "pattern": "Next\\.js"
+        }
+      ],
+      "cpe_names": []
+    },
+    {
+      "id": "jekyll:jekyll",
+      "role": "generator",
+      "source": "jekyll_jekyll_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "generator",
+          "pattern": "Jekyll v(?P<version>[0-9][0-9A-Za-z.+_~-]{0,47})"
+        }
+      ],
+      "cpe_names": []
+    },
+    {
+      "id": "gohugo:hugo",
+      "role": "generator",
+      "source": "gohugo_hugo_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "generator",
+          "pattern": "Hugo (?P<version>[0-9][0-9A-Za-z.+_~-]{0,47})"
+        }
+      ],
+      "cpe_names": []
+    },
+    {
+      "id": "wikimedia:mediawiki",
+      "role": "generator",
+      "source": "wikimedia_mediawiki_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "generator",
+          "pattern": "MediaWiki (?P<version>[0-9][0-9A-Za-z.+_~-]{0,47})"
+        }
+      ],
+      "cpe_names": []
+    },
+    {
+      "id": "drupal:drupal",
+      "role": "generator",
+      "source": "drupal_drupal_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "generator_header",
+          "pattern": "Drupal (?P<version>[0-9][0-9A-Za-z.+_~-]{0,47}) \\(https://www\\.drupal\\.org\\)"
+        },
+        {
+          "field": "generator",
+          "pattern": "Drupal (?P<version>[0-9][0-9A-Za-z.+_~-]{0,47}) \\(https://www\\.drupal\\.org\\)"
+        }
+      ],
+      "cpe_names": [
+        "cpe:2.3:a:drupal:drupal:*:*:*:*:*:*:*:*"
+      ]
+    },
+    {
+      "id": "jenkins:jenkins",
+      "role": "ci_server",
+      "source": "jenkins_jenkins_declaration",
+      "version_scheme": "optional_patch",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "jenkins_version",
+          "pattern": "(?P<version>[0-9]+(?:\\.[0-9]+){1,3})"
+        }
+      ],
+      "cpe_names": [
+        "cpe:2.3:a:jenkins:jenkins:*:*:*:*:*:*:*:*"
+      ]
+    },
+    {
+      "id": "influxdata:influxdb",
+      "role": "database",
+      "source": "influxdata_influxdb_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "influxdb_version",
+          "pattern": "v?(?P<version>[0-9]+(?:\\.[0-9]+){1,3})"
+        }
+      ],
+      "cpe_names": [
+        "cpe:2.3:a:influxdata:influxdb:*:*:*:*:*:*:*:*"
+      ]
+    },
+    {
+      "id": "elastic:elasticsearch",
+      "role": "search_engine",
+      "source": "elastic_elasticsearch_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "elastic_product",
+          "pattern": "Elasticsearch"
+        }
+      ],
+      "cpe_names": [
+        "cpe:2.3:a:elastic:elasticsearch:*:*:*:*:*:*:*:*"
+      ]
+    },
+    {
+      "id": "github:enterprise_server",
+      "role": "source_control",
+      "source": "github_enterprise_server_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "github_enterprise_version",
+          "pattern": "(?:enterprise-server@)?(?P<version>[0-9]+(?:\\.[0-9]+){1,3})"
+        }
+      ],
+      "cpe_names": [
+        "cpe:2.3:a:github:enterprise_server:*:*:*:*:*:*:*:*"
+      ]
+    },
+    {
+      "id": "hashicorp:consul",
+      "role": "service_discovery",
+      "source": "hashicorp_consul_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "consul_leader",
+          "pattern": "true|false"
+        }
+      ],
+      "cpe_names": [
+        "cpe:2.3:a:hashicorp:consul:*:*:*:*:*:*:*:*"
+      ]
+    },
+    {
+      "id": "hashicorp:nomad",
+      "role": "scheduler",
+      "source": "hashicorp_nomad_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "nomad_leader",
+          "pattern": "true|false"
+        }
+      ],
+      "cpe_names": [
+        "cpe:2.3:a:hashicorp:nomad:*:*:*:*:*:*:*:*"
+      ]
+    },
+    {
+      "id": "paramiko:paramiko",
+      "role": "ssh_server",
+      "source": "paramiko_paramiko_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "ssh_ident",
+          "pattern": "SSH-2\\.0-paramiko_(?P<version>[0-9][0-9A-Za-z.+_~-]{0,47})"
+        }
+      ],
+      "cpe_names": []
+    },
+    {
+      "id": "asyncssh:asyncssh",
+      "role": "ssh_server",
+      "source": "asyncssh_asyncssh_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "ssh_ident",
+          "pattern": "SSH-2\\.0-AsyncSSH_(?P<version>[0-9][0-9A-Za-z.+_~-]{0,47})"
+        }
+      ],
+      "cpe_names": []
+    },
+    {
+      "id": "pyftpdlib:pyftpdlib",
+      "role": "ftp_server",
+      "source": "pyftpdlib_pyftpdlib_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "ftp_greeting",
+          "pattern": "220 pyftpdlib (?P<version>[0-9][0-9A-Za-z.+_~-]{0,47}) ready\\."
+        }
+      ],
+      "cpe_names": []
+    },
+    {
+      "id": "exim:exim",
+      "role": "smtp_server",
+      "source": "exim_exim_declaration",
+      "version_scheme": "optional_patch",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "smtp_greeting",
+          "pattern": "220 [A-Za-z0-9._-]+ ESMTP Exim (?P<version>[0-9]+(?:\\.[0-9]+){1,3})(?: (?:Mon|Tue|Wed|Thu|Fri|Sat|Sun), [0-9]{1,2} [A-Za-z]{3} [0-9]{4} [0-9]{2}:[0-9]{2}:[0-9]{2} [+-][0-9]{4})?"
+        }
+      ],
+      "cpe_names": [
+        "cpe:2.3:a:exim:exim:*:*:*:*:*:*:*:*"
+      ]
+    },
+    {
+      "id": "cyrusimap:cyrus_imap",
+      "role": "mail_server",
+      "source": "cyrusimap_cyrus_imap_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "imap_greeting",
+          "pattern": "\\* OK (?:\\[CAPABILITY [A-Za-z0-9=.+_ -]{1,400}\\] )?[A-Za-z0-9._-]+ Cyrus IMAP (?P<version>[0-9][0-9A-Za-z.+_~-]{0,47}) server ready"
+        }
+      ],
+      "cpe_names": []
+    },
+    {
+      "id": "pingcap:tidb",
+      "role": "database",
+      "source": "pingcap_tidb_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "mysql_version",
+          "pattern": "[0-9]+\\.[0-9]+\\.[0-9]+-TiDB-v(?P<version>[0-9]+\\.[0-9]+\\.[0-9]+)"
+        }
+      ],
+      "cpe_names": []
+    },
+    {
+      "id": "eclipse:jetty",
+      "role": "http_server",
+      "source": "eclipse_jetty_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "server_header",
+          "pattern": "Jetty\\((?P<version>[0-9][0-9A-Za-z.+_~-]{0,47})\\)"
+        },
+        {
+          "field": "server",
+          "pattern": "Jetty(?:/(?P<version>[0-9][0-9A-Za-z.+_~-]{0,47}))?"
+        }
+      ],
+      "cpe_names": [
+        "cpe:2.3:a:eclipse:jetty:*:*:*:*:*:*:*:*"
+      ]
+    },
+    {
+      "id": "kubernetes:kubernetes",
+      "role": "api_server",
+      "source": "kubernetes_kubernetes_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "kubernetes_flow_control",
+          "pattern": "paired_uids"
+        }
+      ],
+      "cpe_names": [
+        "cpe:2.3:a:kubernetes:kubernetes:*:*:*:*:*:*:*:*"
+      ]
+    },
+    {
+      "id": "ghost:ghost",
+      "role": "generator",
+      "source": "ghost_ghost_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "generator",
+          "pattern": "Ghost (?P<version>[0-9][0-9A-Za-z.+_~-]{0,47})"
+        }
+      ],
+      "cpe_names": []
+    },
+    {
+      "id": "openssl:openssl",
+      "role": "crypto_library",
+      "source": "openssl_openssl_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "server_component",
+          "pattern": "OpenSSL/(?P<version>[0-9][0-9A-Za-z.+_~-]{0,47})"
+        }
+      ],
+      "cpe_names": [
+        "cpe:2.3:a:openssl:openssl:*:*:*:*:*:*:*:*"
+      ]
+    },
+    {
+      "id": "amazon:cloudfront",
+      "role": "cdn",
+      "source": "amazon_cloudfront_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "server",
+          "pattern": "CloudFront"
+        }
+      ],
+      "cpe_names": []
+    },
+    {
+      "id": "dnsmasq:dnsmasq",
+      "role": "dns_server",
+      "source": "dnsmasq_dnsmasq_declaration",
+      "version_scheme": "numeric",
+      "components": 2,
+      "signatures": [
+        {
+          "field": "dns_version",
+          "pattern": "dnsmasq-(?P<version>[0-9]+(?:\\.[0-9]+){1,3})"
+        }
+      ],
+      "cpe_names": []
+    },
+    {
+      "id": "nlnetlabs:unbound",
+      "role": "dns_server",
+      "source": "nlnetlabs_unbound_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "dns_version",
+          "pattern": "unbound (?P<version>[0-9]+(?:\\.[0-9]+){1,3})"
+        }
+      ],
+      "cpe_names": []
+    },
+    {
+      "id": "coredns:coredns",
+      "role": "dns_server",
+      "source": "coredns_coredns_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "dns_version",
+          "pattern": "CoreDNS-(?P<version>[0-9]+(?:\\.[0-9]+){1,3})"
+        }
+      ],
+      "cpe_names": []
+    },
+    {
+      "id": "powerdns:authoritative_server",
+      "role": "dns_server",
+      "source": "powerdns_authoritative_server_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "dns_version",
+          "pattern": "PowerDNS Authoritative Server (?P<version>[0-9]+(?:\\.[0-9]+){1,3})(?: \\(built [A-Za-z0-9 :._-]{1,100}\\))?"
+        }
+      ],
+      "cpe_names": []
+    },
+    {
+      "id": "powerdns:recursor",
+      "role": "dns_server",
+      "source": "powerdns_recursor_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "dns_version",
+          "pattern": "PowerDNS Recursor (?P<version>[0-9]+(?:\\.[0-9]+){1,3})(?: \\(built [A-Za-z0-9 :._-]{1,100}\\))?"
+        }
+      ],
+      "cpe_names": []
+    },
+    {
+      "id": "varnish:varnish_cache",
+      "role": "proxy",
+      "source": "varnish_varnish_cache_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "server",
+          "pattern": "Varnish"
+        }
+      ],
+      "cpe_names": []
+    },
+    {
+      "id": "squid:squid",
+      "role": "proxy",
+      "source": "squid_squid_declaration",
+      "version_scheme": "numeric",
+      "components": 2,
+      "signatures": [
+        {
+          "field": "server",
+          "pattern": "squid(?:/(?P<version>[0-9][0-9A-Za-z.+_~-]{0,47}))?"
+        }
+      ],
+      "cpe_names": [
+        "cpe:2.3:a:squid-cache:squid:*:*:*:*:*:*:*:*"
+      ]
+    },
+    {
+      "id": "embedthis:goahead",
+      "role": "http_server",
+      "source": "embedthis_goahead_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "server",
+          "pattern": "GoAhead-http"
+        }
+      ],
+      "cpe_names": []
+    },
+    {
+      "id": "miniupnp:miniupnpd",
+      "role": "upnp_service",
+      "source": "miniupnp_miniupnpd_declaration",
+      "version_scheme": "numeric",
+      "components": 3,
+      "signatures": [
+        {
+          "field": "server_component",
+          "pattern": "MiniUPnPd/(?P<version>[0-9][0-9A-Za-z.+_~-]{0,47})"
+        }
+      ],
+      "cpe_names": []
+    }
+  ],
+  "provenance": {
+    "nrev_header_review": "nrev MIT experimental HTTP declarations, reviewed and rewritten for structured fields. Additional web server names use authored protocol fixtures.",
+    "python_http_server": "nrev loopback observations of the Python standard library HTTP server and interpreter version.",
+    "nrev_ssh_review": "nrev MIT SSH selector research and SSH protocol identification lines.",
+    "nrev_greeting_review": "nrev authored SMTP and FTP grammar examples. Validation uses synthetic greetings.",
+    "nrev_handshake_review": "nrev authored protocol-10 server version selector and independent database process validation.",
+    "linux_tcp_output": "Linux TCP option serialization in net/ipv4/tcp_output.c, tcp_options_write.",
+    "xnu_loopback": "Apple XNU TCP output and a macOS 26.7.3 arm64 loopback SYN/ACK captured on 2026-11-23.",
+    "windows_tcp_features": "Wireshark SampleCaptures: Windows 10 SMB and Windows Server 2022 DHCP failover SYN/ACK traces.",
+    "dovecot_greeting": "Dovecot CE login_greeting setting and authored IMAP and POP3 response fixtures.",
+    "envoyproxy_envoy_declaration": "https://www.envoyproxy.io/docs/envoy/latest/configuration/http/http_conn_man/headers",
+    "kong_kong_declaration": "https://developer.konghq.com/gateway/configuration/",
+    "apache_traffic_server_declaration": "https://github.com/apache/trafficserver/blob/master/src/records/RecordsConfig.cc",
+    "cloudflare_edge_declaration": "https://developers.cloudflare.com/learning-paths/mtls/mtls-cloudflare-access/",
+    "amazon_s3_declaration": "https://docs.aws.amazon.com/AmazonS3/latest/API/API_GetObject.html",
+    "amazon_application_load_balancer_declaration": "https://docs.aws.amazon.com/elasticloadbalancing/latest/application/header-modification.html",
+    "minio_minio_declaration": "https://github.com/minio/minio/blob/master/cmd/api-headers.go",
+    "microsoft_kestrel_declaration": "https://github.com/dotnet/aspnetcore/blob/main/src/Servers/Kestrel/Core/src/Internal/Infrastructure/Constants.cs",
+    "microsoft_asp_net_declaration": "https://learn.microsoft.com/en-us/iis/configuration/system.webserver/httpprotocol/customheaders/",
+    "encode_uvicorn_declaration": "https://github.com/Kludex/uvicorn/blob/master/uvicorn/config.py",
+    "gunicorn_gunicorn_declaration": "https://github.com/benoitc/gunicorn/blob/master/gunicorn/__init__.py",
+    "pallets_werkzeug_declaration": "https://github.com/pallets/werkzeug/blob/main/src/werkzeug/serving.py",
+    "tornadoweb_tornado_declaration": "https://github.com/tornadoweb/tornado/blob/master/tornado/web.py",
+    "twisted_twisted_web_declaration": "https://github.com/twisted/twisted/blob/trunk/src/twisted/web/server.py",
+    "pylons_waitress_declaration": "https://github.com/Pylons/waitress/blob/main/src/waitress/adjustments.py",
+    "pgjones_hypercorn_declaration": "https://github.com/pgjones/hypercorn/blob/main/src/hypercorn/config.py",
+    "emmett_granian_declaration": "https://github.com/emmett-framework/granian/blob/master/src/http.rs",
+    "cherrypy_cheroot_declaration": "https://github.com/cherrypy/cheroot/blob/main/cheroot/server.py",
+    "ninenines_cowboy_declaration": "https://github.com/ninenines/cowboy/blob/master/src/cowboy_req.erl",
+    "ruby_webrick_declaration": "https://github.com/ruby/webrick/blob/master/lib/webrick/config.rb",
+    "apache_couchdb_declaration": "https://github.com/apache/couchdb/blob/main/src/couch/src/couch_httpd.erl",
+    "aio_libraries_aiohttp_declaration": "https://github.com/aio-libs/aiohttp/blob/master/aiohttp/http.py",
+    "expressjs_express_declaration": "https://github.com/expressjs/express/blob/master/lib/application.js",
+    "vercel_nextjs_declaration": "https://github.com/vercel/next.js/blob/canary/packages/next/src/server/send-payload.ts",
+    "jekyll_jekyll_declaration": "https://github.com/jekyll/jekyll-seo-tag/blob/master/lib/template.html",
+    "gohugo_hugo_declaration": "https://gohugo.io/functions/hugo/generator/",
+    "wikimedia_mediawiki_declaration": "https://github.com/wikimedia/mediawiki/blob/master/includes/Output/OutputPage.php",
+    "drupal_drupal_declaration": "https://github.com/drupal/drupal/blob/11.x/core/lib/Drupal/Core/EventSubscriber/ResponseGeneratorSubscriber.php",
+    "jenkins_jenkins_declaration": "https://www.jenkins.io/doc/book/using/remote-access-api/",
+    "influxdata_influxdb_declaration": "https://github.com/influxdata/influxdb/blob/1.8/services/httpd/handler.go",
+    "elastic_elasticsearch_declaration": "https://github.com/elastic/elasticsearch-py/blob/main/elasticsearch/_sync/client/_base.py",
+    "github_enterprise_server_declaration": "https://docs.github.com/en/enterprise-server@latest/rest/enterprise-admin",
+    "hashicorp_consul_declaration": "https://github.com/hashicorp/consul/blob/main/agent/http.go",
+    "hashicorp_nomad_declaration": "https://github.com/hashicorp/nomad/blob/main/command/agent/http.go",
+    "paramiko_paramiko_declaration": "https://github.com/paramiko/paramiko/blob/main/paramiko/transport.py",
+    "asyncssh_asyncssh_declaration": "https://github.com/ronf/asyncssh/blob/develop/asyncssh/connection.py",
+    "pyftpdlib_pyftpdlib_declaration": "https://github.com/giampaolo/pyftpdlib/blob/master/pyftpdlib/handlers/ftp/control.py",
+    "exim_exim_declaration": "https://www.exim.org/exim-html-current/doc/html/spec_html/ch-main_configuration.html",
+    "cyrusimap_cyrus_imap_declaration": "https://github.com/cyrusimap/cyrus-imapd/blob/master/imap/imapd.c",
+    "pingcap_tidb_declaration": "https://github.com/pingcap/tidb/blob/master/pkg/parser/mysql/const.go",
+    "eclipse_jetty_declaration": "https://jetty.org/docs/jetty/12/operations-guide/modules/standard.html",
+    "kubernetes_kubernetes_declaration": "https://kubernetes.io/docs/reference/debug-cluster/flow-control/",
+    "ghost_ghost_declaration": "https://ghost.org/changelog/",
+    "openssl_openssl_declaration": "https://github.com/apache/httpd/blob/trunk/modules/ssl/ssl_engine_init.c",
+    "amazon_cloudfront_declaration": "https://docs.aws.amazon.com/AmazonCloudFront/latest/DeveloperGuide/understanding-response-headers-policies.html",
+    "dnsmasq_dnsmasq_declaration": "https://thekelleys.org.uk/gitweb/?p=dnsmasq.git;a=blob;f=src/option.c",
+    "nlnetlabs_unbound_declaration": "https://github.com/NLnetLabs/unbound/blob/master/daemon/worker.c",
+    "coredns_coredns_declaration": "https://github.com/coredns/coredns/blob/master/plugin/chaos/README.md",
+    "powerdns_authoritative_server_declaration": "https://github.com/PowerDNS/pdns/blob/master/pdns/version.cc",
+    "powerdns_recursor_declaration": "https://github.com/PowerDNS/pdns/blob/master/pdns/version.cc",
+    "varnish_varnish_cache_declaration": "https://github.com/varnishcache/varnish-cache/blob/7.6/bin/varnishd/cache/cache_fetch.c",
+    "squid_squid_declaration": "https://github.com/squid-cache/squid/blob/master/src/HttpReply.cc",
+    "embedthis_goahead_declaration": "https://github.com/embedthis/goahead/blob/main/src/http.c",
+    "miniupnp_miniupnpd_declaration": "https://github.com/miniupnp/miniupnp/blob/master/miniupnpd/upnphttp.h"
+  },
+  "stack_profiles": [
+    {
+      "id": "linux_synack",
+      "family": "linux",
+      "order": "MSS,SACK,TS,NOP,WS",
+      "ttl_class": 64,
+      "window": null,
+      "source": "linux_tcp_output"
+    },
+    {
+      "id": "darwin_synack",
+      "family": "darwin",
+      "order": "MSS,NOP,WS,NOP,NOP,TS,SACK",
+      "ttl_class": 64,
+      "window": 65535,
+      "source": "xnu_loopback"
+    },
+    {
+      "id": "windows_synack",
+      "family": "windows",
+      "order": "MSS,NOP,WS,NOP,NOP,SACK",
+      "ttl_class": 128,
+      "window": 65535,
+      "source": "windows_tcp_features"
+    },
+    {
+      "id": "windows_synack_8192",
+      "family": "windows",
+      "order": "MSS,NOP,WS,NOP,NOP,SACK",
+      "ttl_class": 128,
+      "window": 8192,
+      "source": "windows_tcp_features"
+    }
+  ],
+  "platform_claims": [
+    {
+      "field": "server",
+      "family": "linux",
+      "environment": "Ubuntu",
+      "pattern": "[a-zA-Z0-9./_+~-]{1,160} \\(Ubuntu(?: (?P<version>[0-9]{1,3}(?:\\.[0-9]{1,3}){0,2}))?\\)"
+    },
+    {
+      "field": "server",
+      "family": "linux",
+      "environment": "Debian",
+      "pattern": "[a-zA-Z0-9./_+~-]{1,160} \\(Debian(?: (?P<version>[0-9]{1,3}(?:\\.[0-9]{1,3}){0,2}))?\\)"
+    },
+    {
+      "field": "server",
+      "family": "darwin",
+      "environment": "macOS",
+      "pattern": "[a-zA-Z0-9./_+~-]{1,160} \\(macOS(?: (?P<version>[0-9]{1,3}(?:\\.[0-9]{1,3}){0,2}))?\\)"
+    },
+    {
+      "field": "server",
+      "family": "freebsd",
+      "environment": "FreeBSD",
+      "pattern": "[a-zA-Z0-9./_+~-]{1,160} \\(FreeBSD(?: (?P<version>[0-9]{1,3}(?:\\.[0-9]{1,3}){0,2}))?\\)"
+    },
+    {
+      "field": "server",
+      "family": "windows",
+      "environment": "Win64",
+      "pattern": "[a-zA-Z0-9./_+~-]{1,160} \\(Win64\\)"
+    },
+    {
+      "field": "ssh_ident",
+      "family": "linux",
+      "environment": "Debian",
+      "pattern": "SSH-(?:2\\.0|1\\.99)-OpenSSH_[0-9a-zA-Z.p_-]+ Debian[- ][0-9a-zA-Z.+:~_-]{1,80}"
+    },
+    {
+      "field": "ssh_ident",
+      "family": "linux",
+      "environment": "Ubuntu",
+      "pattern": "SSH-(?:2\\.0|1\\.99)-OpenSSH_[0-9a-zA-Z.p_-]+ Ubuntu[- ][0-9a-zA-Z.+:~_-]{1,80}"
+    },
+    {
+      "field": "ssh_ident",
+      "family": "windows",
+      "environment": "Windows",
+      "pattern": "SSH-2\\.0-OpenSSH_for_Windows_[0-9a-zA-Z.p_-]+(?: [ -~]{1,100})?"
+    }
+  ]
+}

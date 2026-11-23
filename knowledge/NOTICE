@@ -1,0 +1,20 @@
+nrev Knowledge Database
+
+The nrev project authors developed the selectors, fixtures and replay engine.
+The selector research is copyright 2025 shellrow and is available under
+the MIT License (../LICENSE-MIT) or the Apache License, Version 2.0
+(../LICENSE-APACHE), at your option.
+
+The CPE alias lists draw on earlier work on product normalization and NVD
+product selection (copyright 2025 shellrow, Apache License 2.0).
+The extracted lists use fully formatted, product-only names and include only
+reviewed NKDB identities. See ../LICENSE-APACHE for the license.
+No NVD records or advisory database are embedded in the runtime catalog.
+
+The separate optional advisory pack records upstream release boundaries and
+links to project advisories or published CVE records. The CISA Known Exploited
+Vulnerabilities Catalog informed the selection of records.
+The review instructions are authored by nrev.
+
+The native OS profiles were written by nrev. The OS replay fixture and its
+capture sources are described in ../docs/TECHNOLOGY.md.
