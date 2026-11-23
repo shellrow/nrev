@@ -10,6 +10,7 @@ Features:
 - Traceroute with UDP and ICMP probes
 - Neighbor discovery with ARP and NDP
 - Service probes, TLS metadata, and HTTP/3 support
+- Evidence-based product inventory, offline report replay, and optional local advisory correlation
 - Optional detailed service and OS identification through Nmap
 - Structured JSON output for automation
 - External data packs for probes, fingerprint rules, profiles, and recipes
@@ -59,6 +60,7 @@ cargo binstall nrev
 Usage: nrev <COMMAND>
 
 Commands:
+  inventory  Replay a saved port report as a technology inventory
   port    Scan ports and collect structured observations
   task    Run a port-scan task from a JSON or TOML file
   host    Discover reachable hosts with ICMP, UDP, or TCP probes
@@ -71,21 +73,46 @@ Commands:
 
 ## Quick start
 
+Replace the example addresses with your own targets.
+
 ```sh
-nrev port 192.168.10.10 --ports 22,80,443
-nrev port 192.168.10.10 --transport quic --ports 443
-nrev host 192.168.10.0/24 --method tcp --ports 80,443
-nrev port 192.168.10.10 --format json --output result.json
+nrev port 192.0.2.10 --ports 22,80,443
+nrev port 192.0.2.10 --transport quic --ports 443
+nrev host 192.0.2.0/24 --method tcp --ports 80,443
+nrev port 192.0.2.10 --format json --output result.json
 ```
 
-Add `--nmap` for service/version identification or `--os-detect` for OS
-identification. These options require Nmap to be installed separately.
+The default port report shows native probe observations, identified products
+and versions. Use `-S` or `--service` for the evidence supporting each identification.
+A directly addressed web service such as `nrev port localhost:44321` can be
+identified as HTTP or HTTPS without choosing a probe. Add `-O` or
+`--os` to collect TCP stack evidence with SYN transport. Existing
+users can request a separately installed Nmap with `--nmap` or `--nmap-os`.
 
 ```sh
-nrev port 192.168.10.10 --ports top-100 --nmap
+nrev port 127.0.0.1 --ports 22,80,443 -O
 ```
 
 Only scan systems you own or have permission to test.
+
+## Technology inventory
+
+The embedded database identifies web servers and frameworks, proxies, managed
+services, platform APIs, data stores, DNS servers and remote access services.
+The [coverage guide](docs/TECHNOLOGY.md#bundled-product-coverage) describes
+which observations identify each product and when a version can be reported.
+
+Replay the included synthetic scan with a local advisory. The inventory includes
+the observed version, evidence references, upstream range and configuration
+review needed for each candidate.
+
+```sh
+nrev inventory samples/inventory/scan.json --advisories samples/inventory/advisories.json --format human
+```
+
+For live collection, add `--service` to a port scan. Save the underlying
+observations with `--output` to reproduce the inference later. See the
+[technology inventory guide](docs/TECHNOLOGY.md).
 
 ## Documentation and examples
 
@@ -114,7 +141,7 @@ These capabilities allow the binary to send and capture raw packets without
 trusted. Alternatively, run individual commands with `sudo`:
 
 ```sh
-sudo nrev host 192.168.1.0/24
+sudo nrev host 192.0.2.0/24
 ```
 
 ### macOS
@@ -145,3 +172,9 @@ Npcap is loaded at runtime; building `nrev` does not require the Npcap SDK.
 Raw probes to Windows loopback addresses (`127.0.0.1` and `::1`) are currently
 unsupported by the datalink backend. Use TCP, UDP, or QUIC socket probes for
 loopback targets.
+
+## License
+
+nrev is available under the [MIT License](LICENSE-MIT) or the
+[Apache License, Version 2.0](LICENSE-APACHE), at your option.
+Attribution for the embedded knowledge database is in [knowledge/NOTICE](knowledge/NOTICE).
