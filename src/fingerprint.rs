@@ -445,7 +445,10 @@ fn score_legacy_os_signature<'a>(
     if let Some(expected) = signature.signature.set_key.as_deref() {
         match observation.tcp_option_set.as_deref() {
             Some(observed) if tcp_option_sets_equal(expected, observed) => {
-                score += 40;
+                // Option membership is already implied by an exact order match.
+                if signature.signature.order_key.is_none() {
+                    score += 40;
+                }
                 matched_on.push("set_key");
             }
             Some(_) => return (0, Vec::new()),
@@ -471,7 +474,7 @@ fn score_legacy_os_signature<'a>(
     (score, matched_on)
 }
 
-fn tcp_option_sets_equal(left: &str, right: &str) -> bool {
+pub(crate) fn tcp_option_sets_equal(left: &str, right: &str) -> bool {
     parse_tcp_option_set(left) == parse_tcp_option_set(right)
 }
 

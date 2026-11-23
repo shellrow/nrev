@@ -20,6 +20,13 @@ pub enum Transport {
 }
 
 impl Transport {
+    pub fn wire_protocol(self) -> &'static str {
+        match self {
+            Self::Tcp | Self::Syn => "tcp",
+            Self::Udp | Self::Quic => "udp",
+        }
+    }
+
     pub fn as_str(self) -> &'static str {
         match self {
             Self::Tcp => "tcp",

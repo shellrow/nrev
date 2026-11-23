@@ -1,0 +1,59 @@
+{
+  "metadata": {
+    "schema_version": 1,
+    "version": "0.8.0",
+    "profile": "fixture",
+    "recipe": null,
+    "tags": [],
+    "generated_at": "2026-01-01T00:00:00Z"
+  },
+  "targets": [
+    {
+      "target": {
+        "original": "127.0.0.1",
+        "hostname": null,
+        "address": "127.0.0.1"
+      },
+      "endpoints": {
+        "8080": {
+          "port": 8080,
+          "transport": "tcp",
+          "state": "open",
+          "latency": 1,
+          "observations": [
+            {
+              "probe_id": "http",
+              "service_hint": {
+                "name": "http",
+                "confidence": "high"
+              },
+              "banner": null,
+              "tls": null,
+              "tags": [
+                "web"
+              ],
+              "evidence": [
+                {
+                  "key": "status_line",
+                  "value": "HTTP/1.1 200 OK"
+                },
+                {
+                  "key": "server",
+                  "value": "nginx/1.20.0"
+                },
+                {
+                  "key": "x-powered-by",
+                  "value": "PHP/8.3.7"
+                }
+              ],
+              "confidence": "high"
+            }
+          ],
+          "fingerprint": null,
+          "fingerprint_matches": [],
+          "errors": []
+        }
+      }
+    }
+  ]
+}

@@ -114,6 +114,17 @@ async fn native_http3_collects_metadata_without_external_identification() {
         .find_map(|observation| observation.tls.as_ref())
         .unwrap();
     assert_eq!(tls.negotiated_protocol.as_deref(), Some("h3"));
+    let inventory = nrev::technology::KnowledgeBase::builtin()
+        .unwrap()
+        .identify(result)
+        .unwrap();
+    assert!(
+        inventory
+            .observed
+            .iter()
+            .any(|f| f.name == "http.carrier" && f.value == "quic")
+    );
+    assert!(inventory.technologies.is_empty());
     assert_eq!(
         tls.certificate_validation,
         TlsCertificateValidation::NotPerformed

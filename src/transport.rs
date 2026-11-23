@@ -28,11 +28,7 @@ use nex::{
     },
 };
 use quinn::{ClientConfig, Connection, Endpoint};
-use rustls::{
-    ClientConfig as RustlsClientConfig, RootCertStore,
-    client::danger::{HandshakeSignatureValid, ServerCertVerified, ServerCertVerifier},
-    pki_types::{CertificateDer, ServerName, UnixTime},
-};
+use rustls::{ClientConfig as RustlsClientConfig, RootCertStore, pki_types::CertificateDer};
 use std::convert::TryFrom;
 use tokio::{
     net::{TcpSocket, TcpStream, UdpSocket},
@@ -544,7 +540,7 @@ fn quic_client_config() -> std::io::Result<ClientConfig> {
         .with_no_client_auth();
     tls.alpn_protocols = quic_alpn_protocols();
     tls.dangerous()
-        .set_certificate_verifier(SkipServerVerification::new());
+        .set_certificate_verifier(crate::tls::ObservationCertificateVerifier::new());
     let quic_config =
         quinn::crypto::rustls::QuicClientConfig::try_from(tls).map_err(std::io::Error::other)?;
     Ok(ClientConfig::new(Arc::new(quic_config)))
@@ -626,60 +622,6 @@ fn format_quic_error(error: &quinn::ConnectionError) -> String {
         }
         quinn::ConnectionError::Reset => "reset".to_string(),
         other => other.to_string(),
-    }
-}
-
-#[derive(Debug)]
-struct SkipServerVerification(Arc<rustls::crypto::CryptoProvider>);
-
-impl SkipServerVerification {
-    fn new() -> Arc<Self> {
-        Arc::new(Self(Arc::new(rustls::crypto::ring::default_provider())))
-    }
-}
-
-impl ServerCertVerifier for SkipServerVerification {
-    fn verify_server_cert(
-        &self,
-        _end_entity: &CertificateDer<'_>,
-        _intermediates: &[CertificateDer<'_>],
-        _server_name: &ServerName<'_>,
-        _ocsp: &[u8],
-        _now: UnixTime,
-    ) -> std::result::Result<ServerCertVerified, rustls::Error> {
-        Ok(ServerCertVerified::assertion())
-    }
-
-    fn verify_tls12_signature(
-        &self,
-        message: &[u8],
-        cert: &CertificateDer<'_>,
-        dss: &rustls::DigitallySignedStruct,
-    ) -> std::result::Result<HandshakeSignatureValid, rustls::Error> {
-        rustls::crypto::verify_tls12_signature(
-            message,
-            cert,
-            dss,
-            &self.0.signature_verification_algorithms,
-        )
-    }
-
-    fn verify_tls13_signature(
-        &self,
-        message: &[u8],
-        cert: &CertificateDer<'_>,
-        dss: &rustls::DigitallySignedStruct,
-    ) -> std::result::Result<HandshakeSignatureValid, rustls::Error> {
-        rustls::crypto::verify_tls13_signature(
-            message,
-            cert,
-            dss,
-            &self.0.signature_verification_algorithms,
-        )
-    }
-
-    fn supported_verify_schemes(&self) -> Vec<rustls::SignatureScheme> {
-        self.0.signature_verification_algorithms.supported_schemes()
     }
 }
 
@@ -1188,26 +1130,23 @@ fn extract_tcp_option_signature(options: &[TcpOptionPacket]) -> TcpOptionSignatu
         let token = match option.kind() {
             TcpOptionKind::MSS => {
                 mss = Some(option.maximum_segment_size());
-                Some("MSS")
+                "MSS"
             }
             TcpOptionKind::SACK_PERMITTED => {
                 sack_permitted = Some(true);
-                Some("SACK")
+                "SACK"
             }
             TcpOptionKind::TIMESTAMPS => {
                 timestamps = Some(true);
-                Some("TS")
+                "TS"
             }
             TcpOptionKind::WSCALE => {
                 window_scale = Some(option.window_scale());
-                Some("WS")
+                "WS"
             }
-            TcpOptionKind::NOP => Some("NOP"),
-            _ => None,
-        };
-
-        let Some(token) = token else {
-            continue;
+            TcpOptionKind::NOP => "NOP",
+            TcpOptionKind::EOL => break,
+            _ => "OTHER",
         };
 
         ordered.push(token);

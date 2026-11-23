@@ -1,3 +1,5 @@
+pub(crate) mod web;
+
 use std::{collections::BTreeSet, sync::OnceLock, time::Duration};
 
 use async_trait::async_trait;
@@ -8,14 +10,14 @@ use http::{Method, Request};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use tokio::{
-    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
+    io::{AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt, BufReader},
     time::{Instant, timeout, timeout_at},
 };
 
 use crate::{
     error::{NrevError, Result},
     model::{Banner, Confidence, Evidence, ProbeObservation, ServiceHint, Transport},
-    tls::handshake_tls,
+    tls::handshake_tls_with_alpn,
     transport::ProbeConnection,
 };
 
@@ -159,6 +161,7 @@ fn builtin_probes() -> Vec<Box<dyn Probe>> {
         Box::new(TlsProbe),
         Box::new(HttpProbe),
         Box::new(SshProbe),
+        Box::new(LineProbe::greeting()),
         Box::new(LineProbe::ftp()),
         Box::new(LineProbe::smtp()),
         Box::new(LineProbe::pop3()),
@@ -217,28 +220,45 @@ impl Probe for TlsProbe {
             ));
         };
         let started = Instant::now();
-        let (tls, tls_stream) = handshake_tls(stream, Some(context.host), context.timeout).await?;
-        let request = format!(
-            "GET / HTTP/1.1\r\nHost: {}\r\nUser-Agent: nrev\r\nAccept: */*\r\nRange: bytes=0-4095\r\nConnection: close\r\n\r\n",
-            http_authority(context.host, context.port)
-        );
+        let protocols: &[&[u8]] = match context.port {
+            465 | 636 | 853 | 989 | 990 | 993 | 995 => &[],
+            _ => &[b"h2", b"http/1.1"],
+        };
+        let (tls, tls_stream) =
+            handshake_tls_with_alpn(stream, Some(context.host), context.timeout, protocols).await?;
 
         let mut evidence = vec![Evidence {
             key: "default_port".to_string(),
             value: context.port.to_string(),
         }];
+        let version = match tls_stream.get_ref().1.protocol_version() {
+            Some(rustls::ProtocolVersion::TLSv1_2) => Some("1.2"),
+            Some(rustls::ProtocolVersion::TLSv1_3) => Some("1.3"),
+            _ => None,
+        };
+        if let Some(value) = version {
+            evidence.push(Evidence {
+                key: "tls_version".into(),
+                value: value.into(),
+            });
+        }
         let mut banner = None;
         let mut service_name = "tls".to_string();
         let mut tags = vec!["encryption".to_string()];
 
-        if let Ok(response) = read_http_response_stream(
-            tls_stream,
-            request.as_bytes(),
-            context.timeout.saturating_sub(started.elapsed()) / 2,
-            context.http_body_preview_bytes,
-        )
-        .await
-        {
+        let budget = context.timeout.saturating_sub(started.elapsed()) / 2;
+        let response = if tls.negotiated_protocol.as_deref() == Some("h2") {
+            read_http2_response(tls_stream, &context, budget).await
+        } else {
+            read_http_response_stream(
+                tls_stream,
+                http_preview_request(&context).as_bytes(),
+                budget,
+                context.http_body_preview_bytes,
+            )
+            .await
+        };
+        if let Ok(response) = response {
             banner = Some(normalize_banner(response.header_text.clone()));
             evidence.extend(extract_http_evidence(&response));
             service_name = "https".to_string();
@@ -281,10 +301,7 @@ impl Probe for HttpProbe {
         connection: ProbeConnection,
         context: ProbeContext<'_>,
     ) -> Result<ProbeObservation> {
-        let request = format!(
-            "GET / HTTP/1.1\r\nHost: {}\r\nUser-Agent: nrev\r\nAccept: */*\r\nRange: bytes=0-255\r\nConnection: close\r\n\r\n",
-            http_authority(context.host, context.port)
-        );
+        let request = http_preview_request(&context);
         let response = read_http_response(
             connection,
             request.as_bytes(),
@@ -330,7 +347,7 @@ impl Probe for SshProbe {
         connection: ProbeConnection,
         context: ProbeContext<'_>,
     ) -> Result<ProbeObservation> {
-        let raw = exchange_string(connection, &[], context.timeout).await?;
+        let raw = read_ssh_identification(connection, context.timeout).await?;
         Ok(ProbeObservation {
             probe_id: self.id().to_string(),
             service_hint: Some(ServiceHint {
@@ -342,11 +359,46 @@ impl Probe for SshProbe {
             tags: vec!["remote-access".to_string()],
             evidence: vec![Evidence {
                 key: "ident".to_string(),
-                value: raw.lines().next().unwrap_or_default().to_string(),
+                value: raw.lines().last().unwrap_or_default().to_string(),
             }],
             confidence: Confidence::High,
         })
     }
+}
+
+/// Read complete identification lines under one deadline, including any preamble.
+async fn read_ssh_identification(connection: ProbeConnection, budget: Duration) -> Result<String> {
+    let ProbeConnection::Tcp(stream) = connection else {
+        return Err(
+            std::io::Error::new(std::io::ErrorKind::InvalidInput, "SSH requires TCP").into(),
+        );
+    };
+    let mut reader = BufReader::new(stream.take(4096));
+    let mut captured = Vec::new();
+    timeout(budget, async {
+        loop {
+            let start = captured.len();
+            if reader.read_until(b'\n', &mut captured).await? == 0 {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "incomplete SSH identification",
+                ));
+            }
+            let line = &captured[start..];
+            if line.starts_with(b"SSH-") && line.ends_with(b"\n") && line.len() <= 255 {
+                return Ok(String::from_utf8_lossy(&captured).into_owned());
+            }
+            if line.starts_with(b"SSH-") {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "invalid SSH identification line",
+                ));
+            }
+        }
+    })
+    .await
+    .map_err(|_| std::io::Error::new(std::io::ErrorKind::TimedOut, "SSH identification timed out"))?
+    .map_err(Into::into)
 }
 
 struct LineProbe {
@@ -355,7 +407,22 @@ struct LineProbe {
     command: Option<&'static str>,
 }
 
+pub(crate) async fn passive_greeting(
+    connection: ProbeConnection,
+    context: ProbeContext<'_>,
+) -> Result<ProbeObservation> {
+    LineProbe::greeting().execute(connection, context).await
+}
+
 impl LineProbe {
+    fn greeting() -> Self {
+        Self {
+            id: "greeting",
+            ports: &[],
+            command: None,
+        }
+    }
+
     fn ftp() -> Self {
         Self {
             id: "ftp",
@@ -400,6 +467,7 @@ impl Probe for LineProbe {
     }
     fn summary(&self) -> &'static str {
         match self.id {
+            "greeting" => "Read a server-first greeting without sending application data",
             "ftp" => "Read FTP greeting banners",
             "smtp" => "Trigger SMTP greeting and capability banners",
             "pop3" => "Trigger POP3 greeting and capability banners",
@@ -420,23 +488,139 @@ impl Probe for LineProbe {
         context: ProbeContext<'_>,
     ) -> Result<ProbeObservation> {
         let payload = self.command.unwrap_or_default().as_bytes();
-        let raw = exchange_string(connection, payload, context.timeout).await?;
+        let (raw, starttls) = if self.id == "smtp" {
+            let ProbeConnection::Tcp(stream) = connection else {
+                return Err(std::io::Error::other("SMTP requires TCP").into());
+            };
+            smtp_exchange(stream, payload, context.timeout).await?
+        } else if self.id == "greeting" {
+            let ProbeConnection::Tcp(stream) = connection else {
+                return Err(std::io::Error::other("greeting requires TCP").into());
+            };
+            let mut reader = BufReader::new(stream.take(1024));
+            let mut first = Vec::new();
+            timeout(context.timeout, reader.read_until(b'\n', &mut first))
+                .await
+                .map_err(|_| {
+                    std::io::Error::new(std::io::ErrorKind::TimedOut, "greeting timed out")
+                })??;
+            if !first.ends_with(b"\n") {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "incomplete greeting",
+                )
+                .into());
+            }
+            (String::from_utf8_lossy(&first).into_owned(), None)
+        } else {
+            (
+                exchange_string(connection, payload, context.timeout).await?,
+                None,
+            )
+        };
+        let mut evidence = vec![Evidence {
+            key: "greeting".into(),
+            value: raw.lines().next().unwrap_or_default().to_string(),
+        }];
+        if starttls.is_some() {
+            evidence.push(Evidence {
+                key: "ehlo_reply".into(),
+                value: "250".into(),
+            });
+        }
+        if starttls == Some(true) {
+            evidence.push(Evidence {
+                key: "ehlo_starttls".into(),
+                value: "advertised".into(),
+            });
+        }
         Ok(ProbeObservation {
             probe_id: self.id().to_string(),
-            service_hint: Some(ServiceHint {
+            service_hint: (self.id != "greeting").then(|| ServiceHint {
                 name: self.id().to_string(),
                 confidence: Confidence::Medium,
             }),
             banner: (!raw.is_empty()).then(|| normalize_banner(raw.clone())),
             tls: None,
             tags: vec!["line-protocol".to_string()],
-            evidence: vec![Evidence {
-                key: "greeting".to_string(),
-                value: raw.lines().next().unwrap_or_default().to_string(),
-            }],
+            evidence,
             confidence: Confidence::Medium,
         })
     }
+}
+
+/// Read one complete SMTP reply, including continuation lines, within the shared byte budget.
+async fn smtp_reply<S: AsyncRead + Unpin>(
+    reader: &mut BufReader<S>,
+    remaining: usize,
+) -> std::io::Result<Vec<u8>> {
+    let mut raw = Vec::new();
+    loop {
+        let start = raw.len();
+        let limit = remaining.saturating_sub(start).min(512) as u64;
+        let count = (&mut *reader)
+            .take(limit)
+            .read_until(b'\n', &mut raw)
+            .await?;
+        let line = &raw[start..];
+        if count == 0
+            || !line.ends_with(b"\r\n")
+            || line.len() < 5
+            || !line[..3].iter().all(u8::is_ascii_digit)
+            || raw[..3] != line[..3]
+        {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "incomplete or malformed SMTP reply",
+            ));
+        }
+        match line[3] {
+            b' ' | b'\r' if line[3] == b' ' || line.len() == 5 => return Ok(raw),
+            b'-' => {}
+            _ => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "invalid SMTP reply separator",
+                ));
+            }
+        }
+    }
+}
+
+async fn smtp_exchange<S: AsyncRead + AsyncWrite + Unpin>(
+    stream: S,
+    ehlo: &[u8],
+    budget: Duration,
+) -> Result<(String, Option<bool>)> {
+    let deadline = Instant::now() + budget;
+    let mut reader = BufReader::new(stream);
+    let mut raw = timeout_at(deadline, smtp_reply(&mut reader, 4096))
+        .await
+        .map_err(|_| {
+            std::io::Error::new(std::io::ErrorKind::TimedOut, "SMTP greeting timed out")
+        })??;
+    let mut starttls = None;
+    if raw.starts_with(b"220") && raw.len() < 4096 && reader.buffer().is_empty() {
+        // Keep the greeting if the optional capability exchange stalls or fails.
+        let allowance = deadline.saturating_duration_since(Instant::now()) / 2;
+        let reply = timeout(allowance, async {
+            reader.get_mut().write_all(ehlo).await?;
+            smtp_reply(&mut reader, 4096 - raw.len()).await
+        })
+        .await;
+        if let Ok(Ok(reply)) = reply {
+            if reply.starts_with(b"250")
+                && let Ok(text) = std::str::from_utf8(&reply)
+            {
+                starttls = Some(text.lines().skip(1).any(|line| {
+                    line.get(4..)
+                        .is_some_and(|s| s.eq_ignore_ascii_case("STARTTLS"))
+                }));
+            }
+            raw.extend(reply);
+        }
+    }
+    Ok((String::from_utf8_lossy(&raw).into_owned(), starttls))
 }
 
 struct DnsTcpProbe;
@@ -460,13 +644,10 @@ impl Probe for DnsTcpProbe {
         connection: ProbeConnection,
         context: ProbeContext<'_>,
     ) -> Result<ProbeObservation> {
-        let raw = exchange_bytes(connection, &dns_version_query_tcp(), context.timeout).await?;
-        Ok(binary_observation(
-            self.id(),
-            "dns",
-            raw,
-            vec!["infrastructure".to_string()],
-        ))
+        let query = dns_version_query_tcp();
+        let frame =
+            read_negotiation_frame(connection, &query, context.timeout, FrameFormat::Dns).await?;
+        Ok(dns_observation(self.id(), &query[2..], frame, 2))
     }
 }
 
@@ -493,27 +674,64 @@ impl Probe for DnsUdpProbe {
     ) -> Result<ProbeObservation> {
         let query = dns_version_query_udp();
         let raw = exchange_bytes(connection, &query, context.timeout).await?;
-        let valid =
-            raw.len() >= 12 && raw[..2] == query[..2] && raw[2] & 0x80 != 0 && raw[2] & 0x78 == 0;
-        let mut details = Vec::new();
-        if valid {
+        Ok(dns_observation(self.id(), &query, raw, 0))
+    }
+}
+
+fn dns_observation(probe: &str, query: &[u8], frame: Vec<u8>, offset: usize) -> ProbeObservation {
+    let raw = &frame[offset..];
+    let valid = raw.len() >= 12 && raw[..2] == query[..2] && raw[2] & 0xf8 == 0x80;
+    let mut details = Vec::new();
+    if valid {
+        details.push(Evidence {
+            key: "dns_rcode".into(),
+            value: (raw[3] & 0x0f).to_string(),
+        });
+        details.push(Evidence {
+            key: "dns_answers".into(),
+            value: u16::from_be_bytes([raw[6], raw[7]]).to_string(),
+        });
+        if let Some(text) = dns_version_txt(raw, query) {
             details.push(Evidence {
-                key: "dns_rcode".into(),
-                value: (raw[3] & 0x0f).to_string(),
-            });
-            details.push(Evidence {
-                key: "dns_answers".into(),
-                value: u16::from_be_bytes([raw[6], raw[7]]).to_string(),
+                key: "dns_version_txt".into(),
+                value: text.to_owned(),
             });
         }
-        Ok(validated_udp_observation(
-            self.id(),
-            "dns",
-            raw,
-            valid,
-            details,
-        ))
     }
+    validated_binary_observation(probe, "dns", frame, valid, details)
+}
+
+// Accept a single TXT character-string in a successful version.bind CH reply.
+// The owner must repeat the question name or use a pointer to its start.
+fn dns_version_txt<'a>(raw: &'a [u8], query: &[u8]) -> Option<&'a str> {
+    if raw[2] & 2 != 0
+        || raw[3] & 15 != 0
+        || raw.get(4..8)? != [0, 1, 0, 1]
+        || !raw.get(12..query.len())?.eq_ignore_ascii_case(&query[12..])
+    {
+        return None;
+    }
+    let mut rr = raw.get(query.len()..)?;
+    let name = &query[12..query.len() - 4];
+    if let Some(rest) = rr.strip_prefix(&[0xc0, 12]) {
+        rr = rest;
+    } else if rr.get(..name.len())?.eq_ignore_ascii_case(name) {
+        rr = &rr[name.len()..];
+    } else {
+        return None;
+    }
+    if rr.get(..4)? != [0, 16, 0, 3] {
+        return None;
+    }
+    let length = usize::from(u16::from_be_bytes(rr.get(8..10)?.try_into().ok()?));
+    let (size, text) = rr.get(10..10 + length)?.split_first()?;
+    if *size as usize != text.len()
+        || text.is_empty()
+        || !text.iter().all(|b| (32..=126).contains(b))
+    {
+        return None;
+    }
+    std::str::from_utf8(text).ok()
 }
 
 struct NtpProbe;
@@ -557,7 +775,7 @@ impl Probe for NtpProbe {
                 value: raw[1].to_string(),
             });
         }
-        Ok(validated_udp_observation(
+        Ok(validated_binary_observation(
             self.id(),
             "ntp",
             raw,
@@ -680,13 +898,90 @@ impl Probe for MySqlProbe {
         connection: ProbeConnection,
         context: ProbeContext<'_>,
     ) -> Result<ProbeObservation> {
-        let raw = exchange_string(connection, &[], context.timeout).await?;
-        Ok(simple_observation(
+        let ProbeConnection::Tcp(stream) = connection else {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "MySQL requires TCP",
+            )
+            .into());
+        };
+        let raw = read_mysql_greeting(stream, context.timeout).await?;
+        let mut observation = simple_observation(
             "mysql",
-            raw,
-            vec!["database".to_string()],
-        ))
+            String::from_utf8_lossy(&raw).into_owned(),
+            vec!["database".into()],
+        );
+        if let Some(version) = mysql_handshake_version(&raw) {
+            observation.evidence.push(Evidence {
+                key: "handshake_version".into(),
+                value: version.into(),
+            });
+        }
+        Ok(observation)
     }
+}
+
+async fn read_mysql_greeting(
+    mut stream: impl AsyncRead + Unpin,
+    budget: Duration,
+) -> std::io::Result<Vec<u8>> {
+    let deadline = Instant::now() + budget;
+    let mut buf = [0u8; 4096];
+    let mut count = 0;
+    let mut end = buf.len();
+    while count < end {
+        let n = match timeout_at(deadline, stream.read(&mut buf[count..end])).await {
+            Ok(read) => read?,
+            Err(_) if count > 0 => break,
+            Err(_) => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::TimedOut,
+                    "MySQL greeting timed out",
+                ));
+            }
+        };
+        if n == 0 {
+            break;
+        }
+        count += n;
+        if count >= 4 {
+            let length = u32::from_le_bytes([buf[0], buf[1], buf[2], 0]) as usize;
+            if buf[3] != 0 || !(17..=buf.len() - 4).contains(&length) {
+                break;
+            }
+            end = length + 4;
+        }
+    }
+    if count == 0 {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::UnexpectedEof,
+            "empty MySQL greeting",
+        ));
+    }
+    Ok(buf[..count].to_vec())
+}
+
+// Accept the server_version only from a complete protocol-10 greeting packet.
+fn mysql_handshake_version(raw: &[u8]) -> Option<&str> {
+    let header: [u8; 4] = raw.get(..4)?.try_into().ok()?;
+    let length = u32::from_le_bytes([header[0], header[1], header[2], 0]) as usize;
+    let packet = raw.get(4..4 + length)?;
+    if header[3] != 0 || packet.first()? != &10 {
+        return None;
+    }
+    let nul = packet[1..].iter().position(|b| *b == 0)? + 1;
+    let version = packet.get(1..nul)?;
+    // connection ID, eight authentication bytes, filler and capability flags
+    let tail = packet.get(nul + 1..)?;
+    if tail.len() < 15
+        || tail[12] != 0
+        || version.is_empty()
+        || version.len() > 128
+        || !version.iter().all(|b| b.is_ascii_graphic())
+    {
+        return None;
+    }
+    std::str::from_utf8(version).ok()
 }
 
 struct MqttProbe;
@@ -744,16 +1039,13 @@ impl Probe for SmbProbe {
         connection: ProbeConnection,
         context: ProbeContext<'_>,
     ) -> Result<ProbeObservation> {
-        let negotiate = [
-            0x00, 0x00, 0x00, 0x54, 0xfe, b'S', b'M', b'B', 0x40, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-            0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x24, 0x00,
-            0x05, 0x00, 0x01, 0x00, 0x00, 0x00, 0x7f, 0x00, 0x00, 0x00, 0x9f, 0xe3, 0x51, 0xb3,
-            0x44, 0xc7, 0x41, 0x4a, 0x9f, 0x4f, 0x9d, 0x84, 0xca, 0x72, 0x00, 0x00, 0x00, 0x00,
-            0x02, 0x02, 0x10, 0x02, 0x22, 0x02, 0x24, 0x02, 0x00, 0x03, 0x02, 0x03, 0x10, 0x03,
-            0x11, 0x03,
-        ];
-        let raw = exchange_bytes(connection, &negotiate, context.timeout).await?;
+        let raw = read_negotiation_frame(
+            connection,
+            &smb_negotiate_request(),
+            context.timeout,
+            FrameFormat::DirectTcp,
+        )
+        .await?;
         Ok(smb_observation(raw))
     }
 }
@@ -783,7 +1075,8 @@ impl Probe for RdpProbe {
             0x03, 0x00, 0x00, 0x13, 0x0e, 0xe0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x00, 0x08,
             0x00, 0x03, 0x00, 0x00, 0x00,
         ];
-        let raw = exchange_bytes(connection, &request, context.timeout).await?;
+        let raw = read_negotiation_frame(connection, &request, context.timeout, FrameFormat::Tpkt)
+            .await?;
         Ok(rdp_observation(raw))
     }
 }
@@ -957,7 +1250,7 @@ fn simple_observation(service: &str, raw: String, tags: Vec<String>) -> ProbeObs
     }
 }
 
-fn validated_udp_observation(
+fn validated_binary_observation(
     probe: &str,
     service: &str,
     raw: Vec<u8>,
@@ -971,7 +1264,7 @@ fn validated_udp_observation(
     });
     observation.evidence.extend(details);
     if !valid {
-        // A datagram proves reachability, but not the service that produced it.
+        // Reachability alone does not identify the responding service.
         observation.service_hint = None;
         observation.confidence = Confidence::Low;
     }
@@ -1001,23 +1294,122 @@ fn binary_observation(
     }
 }
 
+enum FrameFormat {
+    Dns,
+    DirectTcp,
+    Tpkt,
+}
+
+async fn read_negotiation_frame(
+    connection: ProbeConnection,
+    request: &[u8],
+    budget: Duration,
+    format: FrameFormat,
+) -> Result<Vec<u8>> {
+    let ProbeConnection::Tcp(mut stream) = connection else {
+        return Err(std::io::Error::other("negotiation requires TCP").into());
+    };
+    timeout(budget, async {
+        stream.write_all(request).await?;
+        let mut header = [0; 4];
+        stream.read_exact(&mut header).await?;
+        let length = match format {
+            FrameFormat::Dns => {
+                let payload = usize::from(u16::from_be_bytes([header[0], header[1]]));
+                if (12..=4096).contains(&payload) {
+                    payload + 2
+                } else {
+                    0
+                }
+            }
+            FrameFormat::DirectTcp if header[0] == 0 => u32::from_be_bytes(header) as usize + 4,
+            FrameFormat::Tpkt if header[..2] == [3, 0] => {
+                usize::from(u16::from_be_bytes([header[2], header[3]]))
+            }
+            _ => 0,
+        };
+        if !(4..=65536).contains(&length) {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "invalid negotiation frame length",
+            ));
+        }
+        let mut frame = vec![0; length];
+        frame[..4].copy_from_slice(&header);
+        stream.read_exact(&mut frame[4..]).await?;
+        Ok(frame)
+    })
+    .await
+    .map_err(|_| std::io::Error::new(std::io::ErrorKind::TimedOut, "negotiation timed out"))?
+    .map_err(Into::into)
+}
+
+// SMB offsets are relative to the SMB2 header, following the four-byte transport prefix.
+fn smb_negotiate_request() -> Vec<u8> {
+    let dialects = [0x0202u16, 0x0210, 0x0300, 0x0302, 0x0311];
+    let context_offset = (64 + 36 + 2 * dialects.len()).next_multiple_of(8);
+    let mut frame = vec![0; 4 + context_offset + 8 + 6 + 32];
+    let length = (frame.len() - 4) as u32;
+    frame[..4].copy_from_slice(&length.to_be_bytes());
+    let smb = &mut frame[4..];
+    smb[..4].copy_from_slice(b"\xfeSMB");
+    smb[4..6].copy_from_slice(&64u16.to_le_bytes());
+    smb[14] = 1; // Credit request.
+    smb[64] = 36;
+    smb[66] = dialects.len() as u8;
+    smb[68] = 1; // Signing enabled.
+    smb[76..92].copy_from_slice(&rand::random::<[u8; 16]>());
+    smb[92..96].copy_from_slice(&(context_offset as u32).to_le_bytes());
+    smb[96] = 1;
+    for (chunk, dialect) in smb[100..].chunks_exact_mut(2).zip(dialects) {
+        chunk.copy_from_slice(&dialect.to_le_bytes());
+    }
+    let ctx = &mut smb[context_offset..];
+    ctx[0] = 1; // Preauthentication integrity capabilities.
+    ctx[2] = 38;
+    ctx[8] = 1;
+    ctx[10] = 32;
+    ctx[12] = 1; // SHA-512.
+    ctx[14..].copy_from_slice(&rand::random::<[u8; 32]>());
+    frame
+}
+
 fn smb_observation(raw: Vec<u8>) -> ProbeObservation {
-    let banner_text =
-        parse_smb_banner(&raw).unwrap_or_else(|| format!("SMB response {} bytes", raw.len()));
+    let negotiated = smb_negotiation(&raw);
+    let mut evidence = vec![Evidence {
+        key: "response_bytes".into(),
+        value: format!("{} bytes", raw.len()),
+    }];
+    let text = if let Some((dialect, signing)) = negotiated {
+        evidence.extend([
+            Evidence {
+                key: "smb_dialect".into(),
+                value: dialect.into(),
+            },
+            Evidence {
+                key: "smb_signing".into(),
+                value: signing.into(),
+            },
+        ]);
+        format!("SMB2 negotiate dialect={dialect} signing={signing}")
+    } else {
+        format!("SMB response {} bytes", raw.len())
+    };
     ProbeObservation {
-        probe_id: "smb".to_string(),
-        service_hint: Some(ServiceHint {
-            name: "smb".to_string(),
+        probe_id: "smb".into(),
+        service_hint: negotiated.map(|_| ServiceHint {
+            name: "smb".into(),
             confidence: Confidence::High,
         }),
-        banner: Some(normalize_banner(banner_text)),
+        banner: Some(normalize_banner(text)),
         tls: None,
-        tags: vec!["file-sharing".to_string(), "enterprise".to_string()],
-        evidence: vec![Evidence {
-            key: "response_bytes".to_string(),
-            value: format!("{} bytes", raw.len()),
-        }],
-        confidence: Confidence::Medium,
+        tags: vec!["file-sharing".into(), "enterprise".into()],
+        evidence,
+        confidence: if negotiated.is_some() {
+            Confidence::High
+        } else {
+            Confidence::Low
+        },
     }
 }
 
@@ -1044,6 +1436,24 @@ fn oracle_observation(raw: Vec<u8>) -> ProbeObservation {
 fn rdp_observation(raw: Vec<u8>) -> ProbeObservation {
     let banner_text =
         parse_rdp_banner(&raw).unwrap_or_else(|| format!("RDP response {} bytes", raw.len()));
+    let mut evidence = vec![Evidence {
+        key: "response_bytes".into(),
+        value: format!("{} bytes", raw.len()),
+    }];
+    if raw.len() == 19
+        && raw[..6] == [3, 0, 0, 19, 14, 0xd0]
+        && raw[10] == 0
+        && raw[11] == 2
+        && raw[13..15] == [8, 0]
+    {
+        let protocol = rdp_protocol_name(u32::from_le_bytes([raw[15], raw[16], raw[17], raw[18]]));
+        if matches!(protocol, "rdp" | "ssl" | "hybrid") {
+            evidence.push(Evidence {
+                key: "rdp_selected_protocol".into(),
+                value: protocol.into(),
+            });
+        }
+    }
     ProbeObservation {
         probe_id: "rdp".to_string(),
         service_hint: Some(ServiceHint {
@@ -1053,10 +1463,7 @@ fn rdp_observation(raw: Vec<u8>) -> ProbeObservation {
         banner: Some(normalize_banner(banner_text)),
         tls: None,
         tags: vec!["remote-access".to_string(), "enterprise".to_string()],
-        evidence: vec![Evidence {
-            key: "response_bytes".to_string(),
-            value: format!("{} bytes", raw.len()),
-        }],
+        evidence,
         confidence: Confidence::High,
     }
 }
@@ -1073,6 +1480,10 @@ fn mssql_observation(raw: Vec<u8>) -> ProbeObservation {
     }];
 
     if let Some(parsed) = &parsed {
+        evidence.push(Evidence {
+            key: "response_validated".into(),
+            value: parsed.framed.to_string(),
+        });
         if let Some(version) = &parsed.version {
             evidence.push(Evidence {
                 key: "version".to_string(),
@@ -1107,6 +1518,16 @@ fn mssql_observation(raw: Vec<u8>) -> ProbeObservation {
     }
 }
 
+pub(crate) fn http_status_parts(line: &str) -> Option<(&str, &str)> {
+    let mut fields = line.split(' ');
+    let protocol = fields.next()?;
+    let code = fields.next()?;
+    (code.len() == 3
+        && matches!(code.as_bytes()[0], b'1'..=b'5')
+        && code.bytes().all(|b| b.is_ascii_digit()))
+    .then_some((protocol, code))
+}
+
 fn extract_status_line(raw: &str) -> Vec<Evidence> {
     raw.lines()
         .next()
@@ -1130,6 +1551,7 @@ fn tds_prelogin_request() -> [u8; 47] {
 
 #[derive(Debug)]
 struct TdsPreloginResponse {
+    framed: bool,
     version: Option<String>,
     encryption: Option<String>,
     instance: Option<String>,
@@ -1160,6 +1582,12 @@ fn parse_tds_prelogin_response(raw: &[u8]) -> Option<TdsPreloginResponse> {
         return None;
     }
     let payload = &raw[8..];
+    let mut framed = raw[0] == 4
+        && raw[1] & 1 == 1
+        && usize::from(u16::from_be_bytes([raw[2], raw[3]])) == raw.len()
+        && payload.first() == Some(&0);
+    let mut seen = [false; 256];
+    let mut ranges = Vec::new();
     let mut index = 0usize;
     let mut version = None;
     let mut encryption = None;
@@ -1178,6 +1606,16 @@ fn parse_tds_prelogin_response(raw: &[u8]) -> Option<TdsPreloginResponse> {
         let start = offset;
         let end = start.checked_add(length)?;
         let value = payload.get(start..end)?;
+
+        framed &= !std::mem::replace(&mut seen[usize::from(token)], true);
+        framed &= match token {
+            0 => length == 6,
+            1 | 4 => length == 1,
+            _ => true,
+        };
+        if length > 0 {
+            ranges.push(start..end);
+        }
 
         match token {
             0x00 if value.len() >= 6 => {
@@ -1219,7 +1657,12 @@ fn parse_tds_prelogin_response(raw: &[u8]) -> Option<TdsPreloginResponse> {
         index += 5;
     }
 
+    framed &= payload.get(index) == Some(&0xff);
+    ranges.sort_unstable_by_key(|r| r.start);
+    framed &= ranges.first().is_some_and(|r| r.start > index)
+        && ranges.windows(2).all(|w| w[0].end <= w[1].start);
     Some(TdsPreloginResponse {
+        framed,
         version,
         encryption,
         instance,
@@ -1244,6 +1687,14 @@ impl Drop for AbortOnDrop {
     fn drop(&mut self) {
         self.0.abort();
     }
+}
+
+fn http_preview_request(context: &ProbeContext<'_>) -> String {
+    let authority = http_authority(context.host, context.port);
+    let end = context.http_body_preview_bytes.saturating_sub(1);
+    format!(
+        "GET / HTTP/1.1\r\nHost: {authority}\r\nUser-Agent: nrev\r\nAccept: */*\r\nRange: bytes=0-{end}\r\nConnection: close\r\n\r\n"
+    )
 }
 
 fn http_authority(host: &str, port: u16) -> String {
@@ -1274,12 +1725,70 @@ async fn read_http_response(
     read_http_response_stream(&mut stream, payload, timeout_window, body_limit).await
 }
 
+async fn read_http2_response(
+    stream: tokio_rustls::client::TlsStream<tokio::net::TcpStream>,
+    context: &ProbeContext<'_>,
+    budget: Duration,
+) -> Result<HttpResponsePreview> {
+    let deadline = Instant::now() + budget;
+    let authority = http_authority(context.host, context.port);
+    let request = Request::get(format!("https://{authority}/"))
+        .version(http::Version::HTTP_2)
+        .header("user-agent", "nrev")
+        .header("accept", "*/*")
+        .header(
+            "range",
+            format!(
+                "bytes=0-{}",
+                context.http_body_preview_bytes.saturating_sub(1)
+            ),
+        )
+        .body(())
+        .map_err(|e| NrevError::Tls(e.to_string()))?;
+    let (response, _driver) = timeout_at(deadline, async {
+        let (mut sender, connection) = h2::client::Builder::new()
+            .enable_push(false)
+            .max_header_list_size(16 * 1024)
+            .handshake::<_, bytes::Bytes>(stream)
+            .await?;
+        let driver = AbortOnDrop(tokio::spawn(async move {
+            let _ = connection.await;
+        }));
+        let (response, _) = sender.send_request(request, true)?;
+        Ok::<_, h2::Error>((response.await?, driver))
+    })
+    .await
+    .map_err(|_| NrevError::Tls("HTTP/2 response timed out".into()))?
+    .map_err(|e| NrevError::Tls(e.to_string()))?;
+    let header_text = format_http_headers("HTTP/2", response.status().as_u16(), response.headers());
+    let mut body = Vec::new();
+    let mut stream = response.into_body();
+    let body_deadline = Instant::now() + deadline.saturating_duration_since(Instant::now()) / 2;
+    while body.len() < context.http_body_preview_bytes {
+        let Ok(Some(Ok(chunk))) = timeout_at(body_deadline, stream.data()).await else {
+            break;
+        };
+        let count = chunk
+            .len()
+            .min(context.http_body_preview_bytes - body.len());
+        body.extend_from_slice(&chunk[..count]);
+        if stream.flow_control().release_capacity(chunk.len()).is_err() {
+            break;
+        }
+    }
+    Ok(HttpResponsePreview {
+        header_text,
+        body_preview: (!body.is_empty()).then(|| String::from_utf8_lossy(&body).into_owned()),
+    })
+}
+
 async fn read_http3_response(
     connection: quinn::Connection,
     host: &str,
     timeout_window: Duration,
     body_limit: usize,
 ) -> Result<HttpResponsePreview> {
+    let deadline = Instant::now() + timeout_window;
     let h3_connection = h3_quinn::Connection::new(connection);
     let (mut driver, mut send_request) = client::new(h3_connection)
         .await
@@ -1293,36 +1802,33 @@ async fn read_http3_response(
         .uri(format!("https://{host}/"))
         .header("Host", host)
         .header("User-Agent", "nrev")
+        .header("Range", format!("bytes=0-{}", body_limit.saturating_sub(1)))
         .body(())
         .map_err(|error| NrevError::Tls(error.to_string()))?;
 
-    let mut stream = timeout(timeout_window, send_request.send_request(request))
+    let mut stream = timeout_at(deadline, send_request.send_request(request))
         .await
         .map_err(|_| NrevError::Tls("HTTP/3 request timed out".to_string()))?
         .map_err(|error| NrevError::Tls(error.to_string()))?;
-    timeout(timeout_window, stream.finish())
+    timeout_at(deadline, stream.finish())
         .await
         .map_err(|_| NrevError::Tls("HTTP/3 stream finish timed out".to_string()))?
         .map_err(|error| NrevError::Tls(error.to_string()))?;
 
-    let response = timeout(timeout_window, stream.recv_response())
+    let response = timeout_at(deadline, stream.recv_response())
         .await
         .map_err(|_| NrevError::Tls("HTTP/3 response timed out".to_string()))?
         .map_err(|error| NrevError::Tls(error.to_string()))?;
 
-    let header_text = format_http_headers(response.status().as_u16(), response.headers());
+    let header_text = format_http_headers("HTTP/3", response.status().as_u16(), response.headers());
     let mut body = Vec::new();
+    let body_deadline = Instant::now() + deadline.saturating_duration_since(Instant::now()) / 2;
     while body.len() < body_limit {
-        let Some(chunk) = timeout(timeout_window, stream.recv_data())
-            .await
-            .map_err(|_| NrevError::Tls("HTTP/3 body read timed out".to_string()))?
-            .map_err(|error| NrevError::Tls(error.to_string()))?
-        else {
+        let Ok(Ok(Some(mut chunk))) = timeout_at(body_deadline, stream.recv_data()).await else {
             break;
         };
-        let remaining = body_limit.saturating_sub(body.len());
-        let slice = chunk.chunk();
-        body.extend_from_slice(&slice[..slice.len().min(remaining)]);
+        let count = chunk.remaining().min(body_limit - body.len());
+        body.extend_from_slice(&chunk.copy_to_bytes(count));
     }
 
     Ok(HttpResponsePreview {
@@ -1348,18 +1854,19 @@ where
 
     let mut buf = Vec::new();
     let mut chunk = [0_u8; 4096];
-    let mut header_end = None;
+    let mut header_end: Option<usize> = None;
     let mut expected_body = body_limit;
+    let mut read_deadline = deadline;
     loop {
-        let limit = header_end.map_or(HEADER_LIMIT, |end| end + expected_body);
+        let limit = header_end.map_or(HEADER_LIMIT, |end| end.saturating_add(expected_body));
         let remaining = limit.saturating_sub(buf.len());
         if remaining == 0 {
             break;
         }
         let read_len = remaining.min(chunk.len());
-        let size = match timeout_at(deadline, stream.read(&mut chunk[..read_len])).await {
+        let size = match timeout_at(read_deadline, stream.read(&mut chunk[..read_len])).await {
+            Ok(Err(_)) | Err(_) if header_end.is_some() => break,
             Ok(result) => result?,
-            Err(_) if header_end.is_some() => break,
             Err(_) => {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::TimedOut,
@@ -1371,11 +1878,29 @@ where
         if size == 0 {
             break;
         }
+        let search_from = buf.len().saturating_sub(3);
         buf.extend_from_slice(&chunk[..size]);
         if header_end.is_none() {
-            header_end = find_http_header_end(&buf);
+            let prefix_len = buf.len().min(b"HTTP/1.".len());
+            if buf[..prefix_len] != b"HTTP/1."[..prefix_len] {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    "unexpected HTTP response prefix",
+                )
+                .into());
+            }
+            header_end = find_http_header_end(&buf[search_from..]).map(|end| search_from + end);
             if let Some(end) = header_end {
                 let headers = String::from_utf8_lossy(&buf[..end]);
+                if !valid_http1_head(&headers) {
+                    return Err(std::io::Error::new(
+                        std::io::ErrorKind::InvalidData,
+                        "invalid HTTP response headers",
+                    )
+                    .into());
+                }
+                let now = Instant::now();
+                read_deadline = now + deadline.saturating_duration_since(now) / 2;
                 // Transfer-Encoding takes precedence over Content-Length.
                 let chunked = headers.lines().any(|line| {
                     line.split_once(':')
@@ -1401,15 +1926,49 @@ where
         )
     })?;
     let header_text = String::from_utf8_lossy(&buf[..end]).to_string();
-    let body = &buf[end..buf.len().min(end + expected_body)];
+    let body = &buf[end..buf.len().min(end.saturating_add(expected_body))];
     Ok(HttpResponsePreview {
         header_text,
         body_preview: (!body.is_empty()).then(|| String::from_utf8_lossy(body).into_owned()),
     })
 }
 
-fn format_http_headers(headers_status: u16, headers: &http::HeaderMap) -> String {
-    let mut lines = vec![format!("HTTP/3 {headers_status}")];
+fn valid_http1_head(headers: &str) -> bool {
+    let mut lines = headers.split("\r\n");
+    let Some(status) = lines.next() else {
+        return false;
+    };
+    if !matches!(
+        http_status_parts(status),
+        Some(("HTTP/1.0" | "HTTP/1.1", _))
+    ) || status.bytes().any(|b| b.is_ascii_control() && b != b'\t')
+    {
+        return false;
+    }
+    let mut previous_field = false;
+    for line in lines.take_while(|line| !line.is_empty()) {
+        if line.bytes().any(|b| b.is_ascii_control() && b != b'\t') {
+            return false;
+        }
+        if line.starts_with([' ', '\t']) {
+            if !previous_field {
+                return false;
+            }
+            continue;
+        }
+        let Some((name, _)) = line.split_once(':') else {
+            return false;
+        };
+        if http::HeaderName::from_bytes(name.as_bytes()).is_err() {
+            return false;
+        }
+        previous_field = true;
+    }
+    true
+}
+
+fn format_http_headers(protocol: &str, headers_status: u16, headers: &http::HeaderMap) -> String {
+    let mut lines = vec![format!("{protocol} {headers_status}")];
     for (name, value) in headers {
         lines.push(format!(
             "{}: {}",
@@ -1423,6 +1982,7 @@ fn format_http_headers(headers_status: u16, headers: &http::HeaderMap) -> String
 fn extract_http_evidence(response: &HttpResponsePreview) -> Vec<Evidence> {
     let mut evidence = extract_status_line(&response.header_text);
     push_header_evidence(&mut evidence, &response.header_text, "server", "server");
+    push_header_evidence(&mut evidence, &response.header_text, "location", "location");
     push_header_evidence(
         &mut evidence,
         &response.header_text,
@@ -1474,7 +2034,19 @@ fn extract_http_evidence(response: &HttpResponsePreview) -> Vec<Evidence> {
                 value: description,
             });
         }
-        if let Some(generator) = extract_meta_content(body_preview, "generator") {
+        let types = extract_header_values(&response.header_text, "content-type");
+        if let [content_type] = types.as_slice()
+            && content_type.split(';').next().is_some_and(|v| {
+                ["text/html", "application/xhtml+xml"]
+                    .iter()
+                    .any(|mime| v.trim().eq_ignore_ascii_case(mime))
+            })
+            && let Some(generator) = crate::technology::html::generator(body_preview)
+        {
+            evidence.push(Evidence {
+                key: "generator_validated".into(),
+                value: "true".into(),
+            });
             evidence.push(Evidence {
                 key: "generator".to_string(),
                 value: generator,
@@ -1560,18 +2132,26 @@ fn find_http_header_end(buf: &[u8]) -> Option<usize> {
         .map(|index| index + 4)
 }
 
-fn extract_header_values(headers: &str, name: &str) -> Vec<String> {
-    headers
+pub(crate) fn extract_header_values(headers: &str, name: &str) -> Vec<String> {
+    let mut lines = headers
         .lines()
-        .filter_map(|line| {
-            let (key, value) = line.split_once(':')?;
-            if key.trim().eq_ignore_ascii_case(name) {
-                Some(value.trim().to_string())
-            } else {
-                None
-            }
-        })
-        .collect()
+        .skip(1)
+        .take_while(|line| !line.is_empty())
+        .peekable();
+    let mut values = Vec::new();
+    while let Some(line) = lines.next() {
+        let Some((key, value)) = line.split_once(':') else {
+            continue;
+        };
+        if key.eq_ignore_ascii_case(name)
+            && !lines
+                .peek()
+                .is_some_and(|next| next.starts_with([' ', '\t']))
+        {
+            values.push(value.trim().to_owned());
+        }
+    }
+    values
 }
 
 fn extract_html_title(body: &str) -> Option<String> {
@@ -1598,25 +2178,66 @@ fn normalize_html_capture(value: &str) -> Option<String> {
     (!normalized.is_empty()).then_some(normalized)
 }
 
-fn parse_smb_banner(raw: &[u8]) -> Option<String> {
-    if raw.len() < 74 {
+fn smb_negotiation(raw: &[u8]) -> Option<(&'static str, &'static str)> {
+    let length = u32::from_be_bytes(raw.get(..4)?.try_into().ok()?) as usize;
+    let smb = &raw[4..];
+    if length != smb.len()
+        || smb.len() < 128
+        || smb[..4] != *b"\xfeSMB"
+        || smb[4..6] != [64, 0]
+        || smb[8..14] != [0; 6]
+        || smb[16] & 1 == 0
+        || smb[20..32] != [0; 12]
+        || smb[64..66] != [65, 0]
+    {
         return None;
     }
-    let offset = if raw.starts_with(&[0x00, 0x00]) || raw[0] == 0x00 {
-        4
-    } else {
-        0
-    };
-    if raw.get(offset..offset + 4)? != b"\xfeSMB" {
+    let mode = u16::from_le_bytes([smb[66], smb[67]]);
+    let dialect = smb_dialect_name(u16::from_le_bytes([smb[68], smb[69]]));
+    let security_offset = usize::from(u16::from_le_bytes([smb[120], smb[121]]));
+    let security_length = usize::from(u16::from_le_bytes([smb[122], smb[123]]));
+    if mode > 3
+        || dialect == "unknown"
+        || (security_length != 0
+            && (security_offset < 128 || security_offset + security_length > smb.len()))
+        || (dialect == "3.1.1"
+            && !smb_preauth_selected(smb, 128.max(security_offset + security_length)))
+    {
         return None;
     }
-    let security_mode = u16::from_le_bytes([*raw.get(offset + 70)?, *raw.get(offset + 71)?]);
-    let dialect = u16::from_le_bytes([*raw.get(offset + 72)?, *raw.get(offset + 73)?]);
-    Some(format!(
-        "SMB2 negotiate dialect={} signing={}",
-        smb_dialect_name(dialect),
-        smb_security_mode_label(security_mode)
-    ))
+    Some((dialect, smb_security_mode_label(mode)))
+}
+
+// The 3.1.1 request offers only SHA-512. The reply must select it exactly once.
+fn smb_preauth_selected(smb: &[u8], minimum_offset: usize) -> bool {
+    let count = u16::from_le_bytes([smb[70], smb[71]]);
+    let mut offset = u32::from_le_bytes(smb[124..128].try_into().unwrap()) as usize;
+    if offset < minimum_offset || !offset.is_multiple_of(8) {
+        return false;
+    }
+    let mut selected = false;
+    for _ in 0..count {
+        let Some(context) = smb.get(offset..).filter(|bytes| bytes.len() >= 8) else {
+            return false;
+        };
+        let kind = u16::from_le_bytes([context[0], context[1]]);
+        let length = usize::from(u16::from_le_bytes([context[2], context[3]]));
+        let Some(data) = context.get(8..8 + length) else {
+            return false;
+        };
+        if kind == 1 {
+            if selected || data.len() < 6 || data[..2] != [1, 0] || data[4..6] != [1, 0] {
+                return false;
+            }
+            let salt_length = usize::from(u16::from_le_bytes([data[2], data[3]]));
+            if 6 + salt_length != data.len() {
+                return false;
+            }
+            selected = true;
+        }
+        offset += (8 + length).next_multiple_of(8);
+    }
+    selected
 }
 
 fn smb_dialect_name(dialect: u16) -> &'static str {
@@ -1722,6 +2343,40 @@ fn dns_version_query_tcp() -> [u8; 32] {
 mod tests {
     use super::*;
 
+    #[tokio::test]
+    async fn smtp_collects_complete_ehlo_and_preserves_the_greeting() {
+        for (reply, expected) in [
+            (
+                "250-mail.test\r\n250-PIPELINING\r\n250 STARTTLS\r\n",
+                Some(true),
+            ),
+            ("250 STARTTLS\r\n", Some(false)),
+            ("250-mail.test\r\n250-STARTTLS\r\n", None),
+            ("250-mail.test\r\n550 STARTTLS\r\n", None),
+            ("250-mail.test\r\n250 STARTTLS-OTHER\r\n", Some(false)),
+        ] {
+            let (client, mut peer) = tokio::io::duplex(128);
+            let server = tokio::spawn(async move {
+                peer.write_all(b"220 mail.test ESMTP Postfix 3.2.2\r\n")
+                    .await
+                    .unwrap();
+                let mut command = [0; 11];
+                peer.read_exact(&mut command).await.unwrap();
+                assert_eq!(&command, b"EHLO test\r\n");
+                for chunk in reply.as_bytes().chunks(3) {
+                    peer.write_all(chunk).await.unwrap();
+                }
+            });
+            let (banner, advertised) =
+                smtp_exchange(client, b"EHLO test\r\n", Duration::from_secs(1))
+                    .await
+                    .unwrap();
+            assert!(banner.starts_with("220 mail.test ESMTP Postfix 3.2.2\r\n"));
+            assert_eq!(advertised, expected);
+            server.await.unwrap();
+        }
+    }
+
     #[test]
     fn selects_matching_builtin_probe() {
         let probes = select_builtin_probes(443, Transport::Tcp, &[]);
@@ -1761,6 +2416,12 @@ mod tests {
         assert_eq!(parsed.version.as_deref(), Some("15.160.0"));
         assert_eq!(parsed.encryption.as_deref(), Some("encrypt-required"));
         assert_eq!(parsed.instance.as_deref(), Some("MSSQL"));
+        assert!(!parsed.framed);
+        let mut complete = raw;
+        complete[3] = complete.len() as u8;
+        assert!(parse_tds_prelogin_response(&complete).unwrap().framed);
+        complete[0] = 0x12;
+        assert!(!parse_tds_prelogin_response(&complete).unwrap().framed);
     }
 
     #[test]
@@ -1775,6 +2436,58 @@ mod tests {
         assert_eq!(parsed.version.as_deref(), Some("16.0.1000"));
         assert_eq!(parsed.encryption.as_deref(), Some("encrypt-on"));
         assert_eq!(parsed.mars.as_deref(), Some("off"));
+    }
+
+    #[test]
+    fn smb_negotiation_uses_header_relative_offsets_and_checks_framing() {
+        let request = smb_negotiate_request();
+        assert_eq!(
+            u32::from_be_bytes(request[..4].try_into().unwrap()) as usize,
+            request.len() - 4
+        );
+        let smb = &request[4..];
+        assert_eq!(&smb[100..110], &[2, 2, 16, 2, 0, 3, 2, 3, 17, 3]);
+        let context = u32::from_le_bytes(smb[92..96].try_into().unwrap()) as usize;
+        assert_eq!(context % 8, 0);
+        assert_eq!(&smb[context..context + 4], &[1, 0, 38, 0]);
+        let mut frame = vec![0; 132];
+        frame[3] = 128;
+        let smb = &mut frame[4..];
+        smb[..4].copy_from_slice(b"\xfeSMB");
+        smb[4] = 64;
+        smb[16] = 1;
+        smb[64] = 65;
+        smb[66] = 3;
+        smb[68..70].copy_from_slice(&0x0302u16.to_le_bytes());
+        // These GUID bytes were previously mistaken for the signing mode and dialect.
+        smb[72..74].copy_from_slice(&0x0202u16.to_le_bytes());
+        assert_eq!(smb_negotiation(&frame), Some(("3.0.2", "enabled+required")));
+        for (offset, value) in [
+            (3, 127),
+            (4 + 8, 1),
+            (4 + 12, 1),
+            (4 + 16, 0),
+            (4 + 24, 1),
+            (4 + 64, 64),
+            (4 + 122, 8),
+        ] {
+            let mut invalid = frame.clone();
+            invalid[offset] = value;
+            assert!(smb_negotiation(&invalid).is_none());
+        }
+        assert!(smb_negotiation(&frame[..80]).is_none());
+        frame[4 + 68..4 + 70].copy_from_slice(&0x0311u16.to_le_bytes());
+        assert!(smb_negotiation(&frame).is_none());
+        frame[4 + 70] = 1;
+        frame[4 + 124] = 128;
+        frame.extend_from_slice(&[1, 0, 6, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0]);
+        frame[3] = 142;
+        assert_eq!(smb_negotiation(&frame), Some(("3.1.1", "enabled+required")));
+        for (offset, value) in [(70, 2), (124, 127), (130, 7), (138, 1), (140, 2)] {
+            let mut invalid = frame.clone();
+            invalid[4 + offset] = value;
+            assert!(smb_negotiation(&invalid).is_none());
+        }
     }
 
     #[test]
@@ -1846,10 +2559,30 @@ mod tests {
         assert_eq!(http_authority("::1", 8080), "[::1]:8080");
     }
 
+    #[test]
+    fn malformed_reply_headers_cannot_establish_http_identity() {
+        for reply in [
+            "HTTP/1.1 200 OK\r\nmissing-colon\r\n\r\n",
+            "HTTP/1.1 200 OK\r\n invalid continuation\r\n\r\n",
+            "HTTP/1.1 200 OK\r\nBad Name: value\r\n\r\n",
+            "HTTP/1.1 200 OK\r\nServer: name\0value\r\n\r\n",
+            "HTTP/1.1 200 OK\nServer: name\r\n\r\n",
+        ] {
+            assert!(!valid_http1_head(reply), "{reply:?}");
+        }
+        assert!(valid_http1_head(
+            "HTTP/1.1 404 Not Found\r\nServer: example\r\n\r\n"
+        ));
+    }
+
     #[tokio::test(start_paused = true)]
     async fn http_drip_feed_cannot_extend_deadline() {
         let (client, mut server) = tokio::io::duplex(65536);
         let sender = tokio::spawn(async move {
+            server
+                .write_all(b"HTTP/1.1 200 OK\r\nX-Drip: ")
+                .await
+                .unwrap();
             loop {
                 if server.write_all(b"H").await.is_err() {
                     break;
@@ -1916,5 +2649,60 @@ mod tests {
         drop(AbortOnDrop(handle));
         tokio::task::yield_now().await;
         assert!(abort.is_finished());
+    }
+}
+
+#[cfg(test)]
+mod greeting_tests {
+    use super::*;
+
+    #[test]
+    fn generator_evidence_requires_a_typed_html_response() {
+        for (media, expected) in [("text/plain", false), ("text/html; charset=utf-8", true)] {
+            let response = HttpResponsePreview {
+                header_text: format!("HTTP/1.1 200 OK\r\nContent-Type: {media}\r\n\r\n"),
+                body_preview: Some(
+                    "<head><meta content='WordPress 6.1.1' name=generator></head>".into(),
+                ),
+            };
+            let fields = extract_http_evidence(&response);
+            assert_eq!(
+                fields
+                    .iter()
+                    .any(|e| e.key == "generator" && e.value == "WordPress 6.1.1"),
+                expected
+            );
+            assert_eq!(
+                fields.iter().any(|e| e.key == "generator_validated"),
+                expected
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn fragmented_mysql_frame_requires_complete_payload_and_filler() {
+        let mut payload = vec![10];
+        payload.extend_from_slice(b"11.4.1-MariaDB\0");
+        payload.extend_from_slice(&[0; 15]);
+        let mut packet = vec![payload.len() as u8, 0, 0, 0];
+        packet.extend(payload);
+        for length in 0..packet.len() {
+            assert!(mysql_handshake_version(&packet[..length]).is_none());
+        }
+        let (client, mut server) = tokio::io::duplex(2);
+        let write = tokio::spawn({
+            let packet = packet.clone();
+            async move {
+                server.write_all(&packet).await.unwrap();
+            }
+        });
+        let greeting = read_mysql_greeting(client, Duration::from_secs(1))
+            .await
+            .unwrap();
+        write.await.unwrap();
+        assert_eq!(mysql_handshake_version(&greeting), Some("11.4.1-MariaDB"));
+        let filler = packet.len() - 3;
+        packet[filler] = 1;
+        assert!(mysql_handshake_version(&packet).is_none());
     }
 }
